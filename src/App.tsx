@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -37,6 +37,7 @@ export default function App() {
   const [carrierBias, setCarrierBias] = useState(0); // 0-100% modulation
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
 
@@ -122,6 +123,38 @@ export default function App() {
     
     setIsSyncing(false);
   }, [isSyncing, addLog]);
+
+  const handleTSPSolve = useCallback(() => {
+    if (isSolving) return;
+    if (statsRef.current.coherence < 0.4) {
+      addLog("SOLVE_REJECTED: Coherence insufficient for 250 nodal city optimization.", "error");
+      return;
+    }
+
+    setIsSolving(true);
+    addLog("TSP_INIT: Mapping 250 coordinates in virtual liquid space...", "info");
+    
+    let currentDist = 58200 + (Math.random() * 4000);
+    const targetDist = 14200 + (Math.random() * 1500) - (statsRef.current.intelligence * 8);
+
+    const runIteration = (step: number) => {
+      if (step >= 8) {
+        addLog(`TSP_FINAL: Optimal path locked at ${targetDist.toFixed(2)} [Δ: 250_NODE_SYNC]`, "success");
+        setStats(prev => ({ ...prev, intelligence: Math.min(999.9, prev.intelligence + 12.5) }));
+        setIsSolving(false);
+        return;
+      }
+
+      currentDist -= (currentDist - targetDist) * (0.25 + Math.random() * 0.2);
+      const type: LogEntry['type'] = step % 3 === 0 ? "warning" : "info";
+      addLog(`TSP_GEN_${step}: Distance ${currentDist.toFixed(2)} | Annealing nodes...`, type);
+      
+      const delay = Math.max(400, 1200 - (statsRef.current.coherence * 800));
+      setTimeout(() => runIteration(step + 1), delay);
+    };
+
+    setTimeout(() => runIteration(1), 1000);
+  }, [isSolving, addLog]);
 
   // --- HARDWARE BRIDGE (FULL-STACK SOCKET) ---
   useEffect(() => {
@@ -444,6 +477,16 @@ export default function App() {
                 <motion.div whileTap={{ x: 10 }}>
                   <Folder className="w-4 h-4" />
                 </motion.div>
+              </button>
+              <button 
+                onClick={handleTSPSolve}
+                disabled={isSolving}
+                className={`p-2 rounded border transition-all ${
+                  isSolving ? 'border-purple-500 text-purple-500 bg-purple-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
+                }`}
+                title="TSP Solve (250 City Optimization)"
+              >
+                <MapPin className={`w-4 h-4 ${isSolving ? 'animate-bounce' : ''}`} />
               </button>
               <button 
                 onClick={handleGitPull}
