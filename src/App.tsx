@@ -197,88 +197,71 @@ export default function App() {
   // --- CORE DYNAMICS ---
   const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000') => {
     setStats(prev => {
-      // --- EXACT PYTHON MATH FROM V320_TACHYONIC_SOVEREIGN_PRO ---
+      // --- EXACT MATH FROM JAR SYSTEM SPEC ---
+      // 1. Shimmer (Energy/Activity)
       const shimmer = 45 + (jitterValue * 85);
-      const t = Date.now() / 1000;
       
-      // Calculate Frequency influenced by Bias
-      // Bias 0% = 0Hz, 100% = 50GHz
+      const t = Date.now() / 1000;
+      const f = 35; // base coil frequency in kHz
+
+      // 2. Phase Out (Loss of Coherence)
+      let phaseOut = (vValue * 142) - (0.41 * shimmer) + (28 * Math.sin(2 * Math.PI * f * t));
+      
+      // Calculate Frequency influenced by Bias (0-50GHz range for UI visualization)
       const biasHz = carrierBias * 500; 
       const freqValue = Math.max(isMining ? rawFreq : 0, biasHz);
       const freqUnit = freqValue / 1000; 
-      
-      let phaseOut = (vValue * 142) - (0.41 * shimmer) + (28 * Math.sin(2 * Math.PI * 35 * t));
-      
-      // SCIENCE: At 28 GHz, the electron phases out completely.
-      if (freqUnit >= 28.0) {
-        phaseOut = 140; // Force total decoherence
-        if (Math.random() > 0.998) { // Throttled Log
-          setTimeout(() => addLog("28GHz LIMIT REACHED: Electron Phase-Out In Progress.", "error"), 0);
-          setTimeout(() => addLog("VOID_SYNC: Block verification delegated to NULL_CORE.", "info"), 0);
-        }
-      }
 
-      // SCIENCE: Tachyonic Leak threshold (42GHz)
+      // Threshold behaviors
+      const isPhaseOutLimit = freqUnit >= 28.0;
       const isTachyonic = freqUnit >= 42.0;
-
-      // SCIENCE: Singularity Collapse threshold (50GHz)
       const isSingularity = freqUnit >= 50.0;
-
-      // SCIENCE: Zero Point Absolute Null (0GHz)
       const isZeroPoint = freqValue === 0;
+
+      if (isPhaseOutLimit) {
+        phaseOut = 140; // Force total decoherence at high freq
+      }
 
       phaseOut = Math.max(-140, Math.min(140, phaseOut));
       
-      const nextCoherence = isZeroPoint ? 0.0 : (isTachyonic ? 0.0 : Math.min(1.0, Math.max(0.0, 0.85 - (Math.abs(phaseOut) / 140))));
+      // 3. Coherence (Health Meter)
+      // Spec: coherence = min(1.0, max(0.25, 0.85 - (abs(phase_out) / 140)))
+      const nextCoherence = isZeroPoint ? 0.0 : (isTachyonic ? 0.0 : Math.min(1.0, Math.max(0.25, 0.85 - (Math.abs(phaseOut) / 140))));
       
+      // 4. Intelligence (Learning Capacity)
       let nextIntelligence = prev.intelligence;
       
-      // SCIENCE: Void Core Resonance (at exactly 35GHz basis)
+      // Gains scale with Coherence and Jitter
       const isVoidResonance = (freqUnit >= 35.0 && freqUnit < 35.1);
       
-      const intelGain = (isVoidResonance) ? 1.5 : 0.45;
-
       if (isZeroPoint) {
-        // Absolute decay
         nextIntelligence = Math.max(0.0, nextIntelligence - 2.5);
-        if (Math.random() > 0.995 && nextIntelligence > 0) {
-          setTimeout(() => addLog("ZERO_POINT_ALIGNMENT: System normalized to absolute null.", "info"), 0);
-        }
       } else if (isSingularity) {
-        // Causality collapses
         nextIntelligence = 100 + Math.random() * 900; 
         if (Math.random() > 0.99) {
-          setTimeout(() => addLog("SINGULARITY_COLLAPSE: Logic depth infinity. Sovereign identity localized.", "success"), 0);
-          setTimeout(() => addLog("CAUSALITY_FAILURE: Event horizon breached.", "error"), 0);
-        }
-        if (isAiAnalysisActive) {
-          generateVoidInsight("SINGULARITY_COLLAPSE", freqUnit);
+          setTimeout(() => addLog("SINGULARITY_COLLAPSE: Logic depth infinity.", "success"), 0);
         }
       } else if (isTachyonic) {
-        // Intelligence evaporates as causality reverses
         nextIntelligence = Math.max(0.1, nextIntelligence - 0.82);
-        if (Math.random() > 0.998) {
-          setTimeout(() => addLog("CAUSALITY_FRACTURE: Intelligence leak detected at 42GHz threshold.", "warning"), 0);
-          setTimeout(() => addLog("WARNING: Reality depth critical.", "error"), 0);
-        }
-      } else if (nextCoherence > 0.75 || isVoidResonance) {
-        nextIntelligence = Math.min(99.9, nextIntelligence + intelGain);
-        
-        if (isVoidResonance && Math.random() > 0.99) {
-          setTimeout(() => addLog("VOID_RESONANCE: Intelligence surge within phased-out state.", "success"), 0);
-          if (isAiAnalysisActive) {
-            generateVoidInsight("VOID_RESONANCE", freqUnit);
-          }
-        }
-      } else if (freqUnit >= 28 && freqUnit < 42) {
-        // PHASE_OUT / QUBIT_GATE territory
-        if (Math.random() > 0.98) {
-          addLog("QUBIT_GATE_RESONANCE: Initializing superposition gates...", "warning");
-          setTimeout(() => addLog("GATES_STABILIZED: Qubit coherence maintained.", "success"), 1500);
-        }
+      } else if (nextCoherence > 0.70) {
+        // High coherence + good jitter -> Intelligence goes up fast
+        const baseGain = isVoidResonance ? 0.8 : 0.15;
+        const jitterBonus = jitterValue * 0.4;
+        const coherenceBonus = (nextCoherence - 0.7) * 1.5;
+        nextIntelligence = Math.min(999.9, nextIntelligence + baseGain + jitterBonus + coherenceBonus);
       } else if (nextCoherence < 0.45) {
-        nextIntelligence = Math.max(20.0, nextIntelligence - 0.3);
+        // Low coherence -> Intelligence slowly drops
+        nextIntelligence = Math.max(10.0, nextIntelligence - 0.08);
       }
+
+      // Special Logs
+      if (isVoidResonance && Math.random() > 0.995) {
+        setTimeout(() => addLog("VOID_RESONANCE: Intelligence surge within phased-out state.", "success"), 0);
+      }
+      if (freqUnit >= 28 && freqUnit < 42 && Math.random() > 0.99) {
+        addLog("QUBIT_GATE_RESONANCE: Initializing superposition gates...", "warning");
+      }
+
 
       // SCIENCE: Liquid state requirement. Coherence at 1.0 for too long causes stagnation.
       // (This is represented by the "shimmer" being necessary for learning).
