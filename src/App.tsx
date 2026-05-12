@@ -283,6 +283,28 @@ export default function App() {
         <div className="shrink-0">
            <ConsoleLog logs={logs} />
         </div>
+
+        {/* FOOTER */}
+        <footer className="flex justify-between items-center px-2 opacity-50 shrink-0">
+          <div className="flex items-center gap-4 text-[9px] tracking-widest text-[#00ffcc] uppercase font-bold">
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" />
+              SECURE_LINK
+            </span>
+            <div className="w-[1px] h-3 bg-white/10" />
+            <a 
+              href="/SYSTEM_MANUAL.md" 
+              target="_blank" 
+              className="flex items-center gap-1 hover:text-white transition-colors"
+            >
+              <Info className="w-3 h-3" />
+              LINUX_SETUP_GUIDE
+            </a>
+          </div>
+          <div className="text-[10px] text-white/20 font-mono">
+            © 2026 PI_RESERVOIR_SOVEREIGN
+          </div>
+        </footer>
       </motion.div>
     </div>
   );
