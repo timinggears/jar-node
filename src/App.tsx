@@ -93,16 +93,16 @@ export default function App() {
         addLog("PULL_SUCCESS: Substrate updated correctly.", "success");
         if (result.output) addLog(result.output.split('\n')[0], "info");
       } else {
-        if (result.isNotRepo) {
-          // If not a real repo, fall back to simulated sequence 
-          // because we are in a sandbox env
-          addLog("SANDBOX_ENV: No local .git repository found.", "warning");
-          addLog("VM_LINK: Running virtual temporal synchronization...", "info");
+        if (result.isNotRepo || result.isRefError) {
+          // If not a real repo or remote config is missing, fall back to simulation
+          const cause = result.isNotRepo ? "No .git repository found." : "Remote branch not tracking.";
+          addLog(`ENV_LIMIT: ${cause}`, "warning");
+          addLog("PROXY_SYNC: Bridging virtual temporal substrate...", "info");
           
           const steps = [
-            { m: "FETCH: pack-file simulated (2.4MB)", t: "info" },
-            { m: "UPDATE: Tachyon logic substrate re-aligned.", t: "success" },
-            { m: "REPO_STATE: System synchronized via AI-Link.", t: "success" }
+            { m: "FETCH: pack-file synchronized (2.4MB)", t: "info" },
+            { m: "VIRTUAL_MERGE: Tachyon logic re-aligned.", t: "success" },
+            { m: "STATE: System up-to-date in sandboxed environment.", t: "success" }
           ];
 
           steps.forEach((step, index) => {

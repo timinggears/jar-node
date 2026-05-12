@@ -149,16 +149,27 @@ async function startServer() {
       const { promisify } = await import('util');
       const execPromise = promisify(exec);
       
-      // We attempt a git pull. 
-      // If .git doesn't exist, this will fail gracefully.
-      const { stdout, stderr } = await execPromise('git pull origin main');
-      res.json({ success: true, output: stdout, stderr: stderr });
+      // We attempt a git pull on main.
+      let result;
+      try {
+        result = await execPromise('git pull origin main');
+      } catch (err: any) {
+        // If main fails with 'couldn't find remote ref', try master
+        if (err.message.includes("couldn't find remote ref main") || err.message.includes("does not appear to be a git repository")) {
+          result = await execPromise('git pull origin master');
+        } else {
+          throw err;
+        }
+      }
+      
+      res.json({ success: true, output: result.stdout, stderr: result.stderr });
     } catch (err: any) {
-      // If it's not a git repo, return a specific error that the frontend can handle
+      console.error('[GIT] Sync failed:', err.message);
       res.status(500).json({ 
         success: false, 
         error: err.message,
-        isNotRepo: err.message.includes('not a git repository') 
+        isNotRepo: err.message.includes('not a git repository'),
+        isRefError: err.message.includes("couldn't find remote ref")
       });
     }
   });
