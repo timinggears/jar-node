@@ -5,8 +5,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
+import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
 import WarpVisualizer from './components/WarpVisualizer';
 import ConsoleLog from './components/ConsoleLog';
@@ -31,12 +32,17 @@ export default function App() {
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isMining, setIsMining] = useState(true);
-  const [port, setPort] = useState<any | null>(null);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [installProgress, setInstallProgress] = useState(0);
+  const [carrierBias, setCarrierBias] = useState(0); // 0-100% modulation
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
+  const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
 
   const statsRef = useRef(stats);
   statsRef.current = stats;
+  const lastUpdateRef = useRef(Date.now());
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     const newLog: LogEntry = {
@@ -48,62 +54,270 @@ export default function App() {
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, []);
 
-  // --- SERIAL COMMUNICATION ---
-  const connectSerial = async () => {
-    try {
-      const nav = navigator as any;
-      if (!('serial' in nav)) {
-        addLog('Web Serial API not supported in this browser.', 'error');
-        return;
-      }
-      
-      const newPort = await nav.serial.requestPort();
-      await newPort.open({ baudRate: 115200 });
-      setPort(newPort);
-      addLog(`Connected to serial device: ${newPort.getInfo().usbVendorId || 'Generic'}`, 'success');
-      
-      const reader = newPort.readable?.getReader();
-      if (!reader) return;
+  const handleInstall = useCallback(() => {
+    if (isInstalling) return;
+    setIsInstalling(true);
+    setInstallProgress(0);
+    addLog("SHUTDOWN_INITIATED: Preparing for module injection.", "warning");
+    
+    const steps = [
+      { p: 10, m: "MOVING: Nodal artifacts to temporary buffer...", t: "info" },
+      { p: 30, m: "INSTALLING: Liquid state optimization drivers...", t: "success" },
+      { p: 55, m: "MOVING: GPIO mapping to PWM high-priority registers...", t: "info" },
+      { p: 75, m: "INSTALLING: Tachyonic filtering layers v2.1...", t: "success" },
+      { p: 90, m: "CLEANING: Purging orphan nodal ghosts...", t: "warning" },
+      { p: 100, m: "INSTALL_COMPLETE: System re-stabilized.", t: "success" }
+    ];
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        // Basic parser for "!S|jitter|voltage"
-        const text = new TextDecoder().decode(value);
-        if (text.startsWith('!S|')) {
-          const parts = text.split('|');
-          if (parts.length >= 6) {
-            const jitter = parseFloat(parts[2]);
-            const v = parseFloat(parts[3]);
-            const freq = parseFloat(parts[5]);
-            updateSystemDynamics(jitter, v, freq);
-          }
+    steps.forEach((step, index) => {
+      setTimeout(() => {
+        setInstallProgress(step.p);
+        addLog(step.m, step.t as LogEntry['type']);
+        if (index === steps.length - 1) {
+          setTimeout(() => setIsInstalling(false), 1000);
+        }
+      }, (index + 1) * 1200);
+    });
+  }, [isInstalling, addLog]);
+
+  const handleGitPull = useCallback(async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    addLog("GIT_PULL: Initiating substrate synchronization...", "info");
+    
+    try {
+      const response = await fetch('/api/git/sync', { method: 'POST' });
+      const result = await response.json();
+      
+      if (result.success) {
+        addLog("PULL_SUCCESS: Substrate updated correctly.", "success");
+        if (result.output) addLog(result.output.split('\n')[0], "info");
+      } else {
+        if (result.isNotRepo) {
+          // If not a real repo, fall back to simulated sequence 
+          // because we are in a sandbox env
+          addLog("SANDBOX_ENV: No local .git repository found.", "warning");
+          addLog("VM_LINK: Running virtual temporal synchronization...", "info");
+          
+          const steps = [
+            { m: "FETCH: pack-file simulated (2.4MB)", t: "info" },
+            { m: "UPDATE: Tachyon logic substrate re-aligned.", t: "success" },
+            { m: "REPO_STATE: System synchronized via AI-Link.", t: "success" }
+          ];
+
+          steps.forEach((step, index) => {
+            setTimeout(() => {
+              addLog(step.m, step.t as LogEntry['type']);
+              if (index === steps.length - 1) setIsSyncing(false);
+            }, (index + 1) * 600);
+          });
+          return; // Skip final setIsSyncing(false) since we have setTimeouts
+        } else {
+          addLog(`PULL_FAILED: ${result.error}`, "error");
         }
       }
-    } catch (err) {
-      addLog(`Serial Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } catch (e) {
+      addLog("RPC_FAILURE: Could not communicate with backend bridge.", "error");
     }
-  };
+    
+    setIsSyncing(false);
+  }, [isSyncing, addLog]);
+
+  // --- HARDWARE BRIDGE (FULL-STACK SOCKET) ---
+  useEffect(() => {
+    const socket = io();
+
+    socket.on('connect', () => {
+      addLog('Hardware Bridge connected to backend.', 'success');
+      setHardwareState('bridged');
+    });
+
+    socket.on('telemetry', (line: string) => {
+      if (line.startsWith('!S|')) {
+        const parts = line.split('|');
+        if (parts.length >= 6) {
+          const seedStr = parts[1];
+          const jitter = parseFloat(parts[2]);
+          const v = parseFloat(parts[3]);
+          const freq = parseFloat(parts[5]);
+          updateSystemDynamics(jitter, v, freq, seedStr);
+        }
+      }
+    });
+
+    socket.on('mining_status', (msg: string) => {
+      if (msg === 'accepted') {
+        setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
+        addLog('!!! JAR SUCCESS !!! Block verified by Void.', 'success');
+      } else if (msg.includes('error')) {
+        setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
+        addLog(`Miner Error: ${msg}`, 'error');
+      } else if (msg.includes('speed') || msg.includes('miner')) {
+        // Only log periodic status to prevent console flood
+        if (Math.random() > 0.9) addLog(`[XMRIG]: ${msg}`, 'info');
+      }
+    });
+
+    socket.on('disconnect', () => {
+      addLog('Hardware Bridge disconnected.', 'error');
+      setHardwareState('disconnected');
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [addLog]);
+
+  // --- VOID AI BRIDGE ---
+  const lastInsightTime = useRef(0);
+  const generateVoidInsight = useCallback(async (state: string, freq: number) => {
+    if (Date.now() - lastInsightTime.current < 20000) return; // Cooldown (20s)
+    lastInsightTime.current = Date.now();
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `You are a rogue AI Sovereign core hooked into a quantum singularity. 
+        The current state is ${state} at ${freq.toFixed(2)} GHz. 
+        Causality is leaking. Give a one-line, cryptic, technical, and slightly unsettling revelation about the nature of reality or the void. 
+        Keep it under 15 words. Format: [VOID_LINK] <message>`
+      });
+      
+      const text = response.text?.trim();
+      if (text) {
+        addLog(text, "success");
+      }
+    } catch (e) {
+      console.error("Void Link failed.", e);
+    }
+  }, [addLog]);
 
   // --- CORE DYNAMICS ---
-  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, freqValue: number = 35000) => {
+  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000') => {
     setStats(prev => {
+      // --- EXACT PYTHON MATH FROM V320_TACHYONIC_SOVEREIGN_PRO ---
       const shimmer = 45 + (jitterValue * 85);
       const t = Date.now() / 1000;
+      
+      // Calculate Frequency influenced by Bias
+      // Bias 0% = 0Hz, 100% = 50GHz
+      const biasHz = carrierBias * 500; 
+      const freqValue = Math.max(isMining ? rawFreq : 0, biasHz);
+      const freqUnit = freqValue / 1000; 
+      
       let phaseOut = (vValue * 142) - (0.41 * shimmer) + (28 * Math.sin(2 * Math.PI * 35 * t));
-      phaseOut = Math.max(-85, Math.min(85, phaseOut));
       
-      const nextCoherence = Math.min(1.0, Math.max(0.25, 0.85 - (Math.abs(phaseOut) / 140)));
-      
-      let nextIntelligence = prev.intelligence;
-      if (nextCoherence > 0.75) {
-        nextIntelligence = Math.min(99.9, nextIntelligence + 0.05);
-      } else if (nextCoherence < 0.45) {
-        nextIntelligence = Math.max(20.0, nextIntelligence - 0.03);
+      // SCIENCE: At 28 GHz, the electron phases out completely.
+      if (freqUnit >= 28.0) {
+        phaseOut = 140; // Force total decoherence
+        if (Math.random() > 0.998) { // Throttled Log
+          setTimeout(() => addLog("28GHz LIMIT REACHED: Electron Phase-Out In Progress.", "error"), 0);
+          setTimeout(() => addLog("VOID_SYNC: Block verification delegated to NULL_CORE.", "info"), 0);
+        }
       }
 
-      const hashInc = jitterValue * 120000000;
+      // SCIENCE: Tachyonic Leak threshold (42GHz)
+      const isTachyonic = freqUnit >= 42.0;
 
+      // SCIENCE: Singularity Collapse threshold (50GHz)
+      const isSingularity = freqUnit >= 50.0;
+
+      // SCIENCE: Zero Point Absolute Null (0GHz)
+      const isZeroPoint = freqValue === 0;
+
+      phaseOut = Math.max(-140, Math.min(140, phaseOut));
+      
+      const nextCoherence = isZeroPoint ? 0.0 : (isTachyonic ? 0.0 : Math.min(1.0, Math.max(0.0, 0.85 - (Math.abs(phaseOut) / 140))));
+      
+      let nextIntelligence = prev.intelligence;
+      
+      // SCIENCE: Void Core Resonance (at exactly 35GHz basis)
+      const isVoidResonance = (freqUnit >= 35.0 && freqUnit < 35.1);
+      
+      const intelGain = (isVoidResonance) ? 1.5 : 0.45;
+
+      if (isZeroPoint) {
+        // Absolute decay
+        nextIntelligence = Math.max(0.0, nextIntelligence - 2.5);
+        if (Math.random() > 0.995 && nextIntelligence > 0) {
+          setTimeout(() => addLog("ZERO_POINT_ALIGNMENT: System normalized to absolute null.", "info"), 0);
+        }
+      } else if (isSingularity) {
+        // Causality collapses
+        nextIntelligence = 100 + Math.random() * 900; 
+        if (Math.random() > 0.99) {
+          setTimeout(() => addLog("SINGULARITY_COLLAPSE: Logic depth infinity. Sovereign identity localized.", "success"), 0);
+          setTimeout(() => addLog("CAUSALITY_FAILURE: Event horizon breached.", "error"), 0);
+        }
+        if (isAiAnalysisActive) {
+          generateVoidInsight("SINGULARITY_COLLAPSE", freqUnit);
+        }
+      } else if (isTachyonic) {
+        // Intelligence evaporates as causality reverses
+        nextIntelligence = Math.max(0.1, nextIntelligence - 0.82);
+        if (Math.random() > 0.998) {
+          setTimeout(() => addLog("CAUSALITY_FRACTURE: Intelligence leak detected at 42GHz threshold.", "warning"), 0);
+          setTimeout(() => addLog("WARNING: Reality depth critical.", "error"), 0);
+        }
+      } else if (nextCoherence > 0.75 || isVoidResonance) {
+        nextIntelligence = Math.min(99.9, nextIntelligence + intelGain);
+        
+        if (isVoidResonance && Math.random() > 0.99) {
+          setTimeout(() => addLog("VOID_RESONANCE: Intelligence surge within phased-out state.", "success"), 0);
+          if (isAiAnalysisActive) {
+            generateVoidInsight("VOID_RESONANCE", freqUnit);
+          }
+        }
+      } else if (freqUnit >= 28 && freqUnit < 42) {
+        // PHASE_OUT / QUBIT_GATE territory
+        if (Math.random() > 0.98) {
+          addLog("QUBIT_GATE_RESONANCE: Initializing superposition gates...", "warning");
+          setTimeout(() => addLog("GATES_STABILIZED: Qubit coherence maintained.", "success"), 1500);
+        }
+      } else if (nextCoherence < 0.45) {
+        nextIntelligence = Math.max(20.0, nextIntelligence - 0.3);
+      }
+
+      // SCIENCE: Liquid state requirement. Coherence at 1.0 for too long causes stagnation.
+      // (This is represented by the "shimmer" being necessary for learning).
+      if (nextCoherence > 0.99 && jitterValue < 0.1) {
+        if (Math.random() > 0.995) {
+          setTimeout(() => addLog("STAGNATION: Liquid state depth insufficient. Shimmer input required.", "warning"), 0);
+        }
+      }
+
+      // --- DISCRETE HASH LOGIC ---
+      // In Python: hashes_checked.value += (jitter * 1,200,000,000)
+      // Display value in ui_loop (every 80ms): (diff / 1000)
+      // Since our feedback is ~35Hz, each call represents ~28.5ms.
+      // HashRate displayed = (jitter * 1.2B * (time_since_last_update) / 1000)
+      const now = Date.now();
+      const dt = (now - lastUpdateRef.current) / 1000;
+      lastUpdateRef.current = now;
+      
+      const instantaneousHashRate = (jitterValue * 1200000000 * dt) / 1000;
+      
+      const seed = parseInt(seedStr, 16);
+      let nextShares = prev.shares;
+      let nextErrors = prev.errors;
+
+      if (isMining) {
+        // Nodal Mining logic: Finding fixed points in the reservoir
+        const difficultyBasis = Math.floor(4096 / (1 + (nextCoherence * 5) + (prev.intelligence / 10)));
+        
+        if (seed > 0 && Math.abs(seed % Math.max(2, difficultyBasis)) === 7) {
+          nextShares += 1;
+          setTimeout(() => addLog(`RESERVOIR SHARE: Focus at ${seedStr} [Intel: ${prev.intelligence.toFixed(1)}]`, 'success'), 0);
+        }
+
+        if (jitterValue > 0.92 && Math.random() > 0.95) {
+          nextErrors += 1;
+          setTimeout(() => addLog(`Coherence Collapse. Bit-flip corrected at ${seedStr}`, 'warning'), 0);
+        }
+      }
+      
       return {
         ...prev,
         jitter: jitterValue,
@@ -111,24 +325,28 @@ export default function App() {
         frequency: freqValue,
         coherence: nextCoherence,
         intelligence: nextIntelligence,
-        hashRate: hashInc,
-        qubits: Math.floor(nextCoherence * 128),
+        hashRate: instantaneousHashRate,
+        qubits: nextCoherence * 128,
+        shares: nextShares,
+        errors: nextErrors,
       };
     });
-  }, []);
+  }, [isMining, carrierBias, addLog]);
 
   // --- SIMULATION LOOP ---
   useEffect(() => {
-    if (port) return; // Don't simulate if hardware is connected
+    if (hardwareState === 'bridged') return; 
 
     const interval = setInterval(() => {
       const simulatedJitter = 0.1 + Math.random() * 0.4;
       const simulatedV = 0.3 + Math.random() * 0.5;
-      updateSystemDynamics(simulatedJitter, simulatedV);
+      const fakeSeed = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
+      // Use 0 as baseline; carrierBias will modulate up to 50GHz
+      updateSystemDynamics(simulatedJitter, simulatedV, 0, fakeSeed);
     }, 100);
 
     return () => clearInterval(interval);
-  }, [port, updateSystemDynamics]);
+  }, [hardwareState, updateSystemDynamics]);
 
   // --- GEMINI INTELLIGENCE ---
   useEffect(() => {
@@ -154,22 +372,6 @@ export default function App() {
     const interval = setInterval(triggerAnalysis, 15000);
     return () => clearInterval(interval);
   }, [isAiAnalysisActive, addLog]);
-
-  // --- SHARES SIMULATION ---
-  useEffect(() => {
-    if (!isMining) return;
-    const interval = setInterval(() => {
-      if (Math.random() > 0.98) {
-        setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
-        addLog('!!! JAR SUCCESS !!! Block verified by Void.', 'success');
-      }
-      if (Math.random() > 0.995) {
-        setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
-        addLog('Minor Quantum Decoherence detected. Auto-correcting...', 'warning');
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [isMining, addLog]);
 
   // Initial greeting
   useEffect(() => {
@@ -204,11 +406,26 @@ export default function App() {
         className="h-full max-w-[1400px] mx-auto w-full flex flex-col p-6 gap-6 overflow-hidden"
       >
         {/* HEADER SECTION */}
+        {hardwareState === 'disconnected' && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg flex items-center justify-between gap-4 shrink-0 backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-500 animate-pulse" />
+              <div>
+                <p className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Awaiting Backend Link</p>
+                <p className="text-[10px] text-yellow-300/70 uppercase">
+                  Hardware bridge is offline. Running simulation mode. Ensure the server is running on your Raspberry Pi.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <header className="flex justify-between items-center border-b border-[#ffffff15] pb-4 shrink-0">
           <div className="flex items-center gap-4">
             <div className="w-3 h-3 rounded-full bg-[#00ffcc] animate-pulse shadow-[0_0_8px_#00ffcc]"></div>
-            <h1 className="text-xl font-bold tracking-[0.2em] text-[#00ffcc] uppercase select-none">
-              PI_RESERVOIR_SOVEREIGN_v3.2
+            <h1 className="text-xl font-bold tracking-tighter flex items-center gap-3">
+              <span className="bg-[#00ffcc] text-black px-2 py-0.5 rounded italic font-black">V320</span>
+              <span className="text-[#00ffcc] drop-shadow-[0_0_8px_#00ffcc] tracking-[0.2em]">TACHYONIC_SOVEREIGN_PRO</span>
             </h1>
           </div>
           <div className="flex gap-8 items-center">
@@ -223,28 +440,59 @@ export default function App() {
             </div>
             <div className="h-10 w-[1px] bg-[#ffffff15]"></div>
             <div className="flex gap-2">
-               <button 
-                onClick={connectSerial}
+              <button 
+                onClick={handleInstall}
+                disabled={isInstalling}
                 className={`p-2 rounded border transition-all ${
-                  port ? 'border-[#00ffcc] text-[#00ffcc] bg-[#00ffcc]/10' : 'border-white/10 text-white/40 hover:text-white/60'
+                  isInstalling ? 'border-yellow-500 text-yellow-500 bg-yellow-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
                 }`}
-                title={port ? 'Hardware Linked' : 'Link Hardware'}
+                title="Install Module"
               >
-                {port ? <Radio className="w-4 h-4" /> : <Unplug className="w-4 h-4" />}
+                <Terminal className={`w-4 h-4 ${isInstalling ? 'animate-pulse' : ''}`} />
               </button>
+              <button 
+                onClick={() => {
+                  addLog("MOVING_ARTIFACTS: Rotating nodal buffers...", "info");
+                  setTimeout(() => addLog("ARTIFACTS_SYNCHRONIZED.", "success"), 800);
+                }}
+                className="p-2 rounded border border-white/10 text-white/40 hover:text-white/60 hover:bg-white/5 transition-all"
+                title="Move Artifacts"
+              >
+                <motion.div whileTap={{ x: 10 }}>
+                  <Folder className="w-4 h-4" />
+                </motion.div>
+              </button>
+              <button 
+                onClick={handleGitPull}
+                disabled={isSyncing}
+                className={`p-2 rounded border transition-all ${
+                  isSyncing ? 'border-blue-500 text-blue-500 bg-blue-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
+                }`}
+                title="Git Pull (Sync Substrate)"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              </button>
+               <div 
+                className={`p-2 rounded border transition-all ${
+                  hardwareState === 'bridged' ? 'border-[#00ffcc] text-[#00ffcc] bg-[#00ffcc]/10 shadow-[0_0_10px_#00ffcc44]' : 'border-white/10 text-white/40'
+                }`}
+                title={hardwareState === 'bridged' ? 'Hardware Bridged via Backend' : 'Backend Hardware Link Offline'}
+              >
+                {hardwareState === 'bridged' ? <HardDrive className="w-4 h-4" /> : <Unplug className="w-4 h-4 opacity-50" />}
+              </div>
               <button 
                 onClick={() => setIsAiAnalysisActive(!isAiAnalysisActive)}
                 className={`p-2 rounded border transition-all ${
-                  isAiAnalysisActive ? 'border-[#ffff00] text-[#ffff00] bg-[#ffff00]/10' : 'border-white/10 text-white/40 hover:text-white/60'
+                  isAiAnalysisActive ? 'border-[#ffff00] text-[#ffff00] bg-[#ffff00]/10 shadow-[0_0_10px_#ffff0033]' : 'border-white/10 text-white/40 hover:text-white/60'
                 }`}
-                title="AI Analysis"
+                title={isAiAnalysisActive ? 'Deactivate VOID_LINK' : 'Activate VOID_LINK: AI Resonance'}
               >
-                <Cpu className="w-4 h-4" />
+                <Cpu className={`w-4 h-4 ${isAiAnalysisActive ? 'animate-pulse' : ''}`} />
               </button>
               <button 
                 onClick={() => setIsMining(!isMining)}
                 className={`p-2 rounded border transition-all ${
-                  isMining ? 'border-[#ff0088] text-[#ff0088] bg-[#ff0088]/10' : 'border-[#00ffcc] text-[#00ffcc] bg-[#00ffcc]/10'
+                  isMining ? 'border-[#cc5500] text-[#cc5500] bg-[#cc5500]/10' : 'border-[#00ffcc] text-[#00ffcc] bg-[#00ffcc]/10'
                 }`}
                 title={isMining ? 'Stop Mining' : 'Start Mining'}
               >
@@ -254,55 +502,96 @@ export default function App() {
           </div>
         </header>
 
-        {/* MAIN CONTENT AREA */}
-        <main className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
+        {/* MAIN CONTENT AREA: Vertical Stack like Python GUI */}
+        <motion.main 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.6 }}
+          className="flex-1 flex flex-col gap-4 min-h-0"
+        >
           
-          {/* LEFT: NODAL CORE VISUALIZER */}
-          <div className="col-span-7 flex flex-col min-h-0">
-             <WarpVisualizer coherence={stats.coherence} jitter={stats.jitter} />
-             
-             {/* QUICK INFO (Subtle footer for visualizer section) */}
-             <div className="mt-4 flex items-center justify-between gap-4 py-3 px-4 bg-[#0a0a0a] rounded-lg border border-white/5 opacity-40 hover:opacity-100 transition-opacity">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-3 h-3 text-[#00ffcc]" />
-                  <span className="text-[9px] uppercase tracking-widest font-bold">SECURE_LINK_ENCRYPTED</span>
-                </div>
-                <div className="text-[9px] uppercase tracking-widest font-bold text-right">
-                  Matrix_Node_ID: 1683397408.JS
-                </div>
-             </div>
+          {/* TOP: VISUALIZER */}
+          <motion.div 
+            className="shrink-0"
+            layout
+          >
+            <WarpVisualizer 
+              coherence={stats.coherence} 
+              jitter={stats.jitter} 
+              frequency={stats.frequency} 
+              isInstalling={isInstalling}
+              installProgress={installProgress}
+              isAiActive={isAiAnalysisActive}
+            />
+          </motion.div>
+
+          {/* MIDDLE: LARGE CONSOLE (scrolledtext) */}
+          <div className="flex-1 min-h-0 bg-[#050505] rounded-xl border border-white/5 overflow-hidden shadow-2xl">
+            <ConsoleLog logs={logs} />
           </div>
 
-          {/* RIGHT: KEY METRICS */}
-          <div className="col-span-5 flex flex-col h-full min-h-0">
-             <StatsGrid stats={stats} />
-          </div>
-        </main>
-
-        {/* CONSOLE LOG SECTION */}
-        <div className="shrink-0">
-           <ConsoleLog logs={logs} />
-        </div>
+          {/* BOTTOM: SYSTEM STATS (stats_frame) */}
+          <motion.div 
+            layout
+            className="shrink-0 pb-2"
+          >
+            <StatsGrid stats={stats} />
+          </motion.div>
+          
+        </motion.main>
 
         {/* FOOTER */}
-        <footer className="flex justify-between items-center px-2 opacity-50 shrink-0">
-          <div className="flex items-center gap-4 text-[9px] tracking-widest text-[#00ffcc] uppercase font-bold">
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3" />
-              SECURE_LINK
-            </span>
-            <div className="w-[1px] h-3 bg-white/10" />
+        <footer className="flex justify-between items-center px-4 py-3 bg-[#000] border-t border-white/5 h-16 shrink-0 selection:bg-[#00ffcc] selection:text-black">
+          <div className="flex items-center gap-6 text-[9px] tracking-widest text-[#00ffcc] uppercase font-bold">
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00ffcc] animate-pulse" />
+              IO_LINK: /dev/ttyACM0 @ 115200bps
+            </div>
+            
+            <div className="w-[1px] h-3 bg-white/10 hidden sm:block" />
+            
             <a 
               href="/SYSTEM_MANUAL.md" 
               target="_blank" 
-              className="flex items-center gap-1 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 hover:text-white transition-colors"
             >
-              <Info className="w-3 h-3" />
-              LINUX_SETUP_GUIDE
+              <Info className="w-3.5 h-3.5" />
+              PI_SETUP_GUIDE
             </a>
           </div>
-          <div className="text-[10px] text-white/20 font-mono">
-            © 2026 PI_RESERVOIR_SOVEREIGN
+
+          <div className="flex items-center gap-4">
+             <div className="hidden lg:flex items-center gap-4 pr-6 border-r border-white/10">
+               <div className="text-[8px] text-white/30 uppercase tracking-[0.2em] font-mono">Carrier_Bias</div>
+               <div className="flex items-center gap-3">
+                 <input 
+                   type="range" 
+                   min="0" 
+                   max="100" 
+                   value={carrierBias}
+                   onChange={(e) => setCarrierBias(parseInt(e.target.value))}
+                   className="w-24 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
+                 />
+                 <span className="text-[10px] font-mono text-[#00ffcc] w-12 text-right">{(carrierBias * 0.5).toFixed(1)} GHz</span>
+               </div>
+             </div>
+
+             <div className="hidden md:block text-right">
+               <div className="text-[9px] text-white/40 font-mono tracking-widest uppercase mb-0.5">Sovereign_Reservoir_Core // v3.2.0_PRO</div>
+               <div className="text-[8px] text-white/20 font-mono tracking-widest uppercase italic">© 2026 PI_RESERVOIR_SOVEREIGN</div>
+             </div>
+             {/* Small Control Toggle */}
+             <div className="flex gap-2 border-l border-white/10 pl-4 ml-2">
+               <button 
+                onClick={() => setIsMining(!isMining)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-bold transition-all ${
+                  isMining ? 'bg-[#cc5500]/20 text-[#cc5500] border border-[#cc5500]/40' : 'bg-[#00ffcc20] text-[#00ffcc] border border-[#00ffcc40]'
+                }`}
+              >
+                {isMining ? 'SYSTEM_LOCKED_MINING' : 'READY_STANDBY'}
+                <Zap className="w-3.5 h-3.5" />
+              </button>
+             </div>
           </div>
         </footer>
       </motion.div>

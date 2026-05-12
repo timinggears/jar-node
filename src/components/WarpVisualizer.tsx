@@ -4,13 +4,25 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 
 interface WarpVisualizerProps {
   coherence: number;
   jitter: number;
+  frequency: number;
+  isInstalling?: boolean;
+  installProgress?: number;
+  isAiActive?: boolean;
 }
 
-export default function WarpVisualizer({ coherence, jitter }: WarpVisualizerProps) {
+export default function WarpVisualizer({ 
+  coherence, 
+  jitter, 
+  frequency, 
+  isInstalling = false, 
+  installProgress = 0,
+  isAiActive = false
+}: WarpVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -31,46 +43,98 @@ export default function WarpVisualizer({ coherence, jitter }: WarpVisualizerProp
       const centerY = height / 2;
       const t = (time - startTime) / 1000;
 
+      const freqUnit = frequency / 1000;
+      const isZeroPoint = frequency === 0;
+      const isPhaseOut = freqUnit >= 28 || coherence === 0;
+      const isTachyonic = freqUnit >= 42;
+      const isSingularity = freqUnit >= 50;
+
       // Draw Reservoir Resonance (Liquid State Background)
-      ctx.globalAlpha = 0.3;
+      ctx.globalAlpha = 0.3 * (isZeroPoint ? 0.05 : (isPhaseOut ? 1.0 : coherence));
+      if (isSingularity && Math.random() > 0.8) ctx.globalAlpha = 1.0; 
+      
+      if (isInstalling) {
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = '#00ffcc';
+        ctx.fillRect(0, (t * 200) % height, width, 2); // Scanning laser
+      }
+
+      if (isAiActive) {
+        ctx.save();
+        ctx.globalAlpha = 0.05 + (Math.sin(t * 2) * 0.02);
+        ctx.strokeStyle = '#ffff00';
+        ctx.lineWidth = 0.5;
+        // Draw a simple grid mesh that pulses
+        const gridSize = 40;
+        for (let x = 0; x < width; x += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x + Math.sin(t + x) * 10, height);
+          ctx.stroke();
+        }
+        for (let y = 0; y < height; y += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y + Math.cos(t + y) * 10);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
       for (let j = 0; j < 3; j++) {
         ctx.beginPath();
         ctx.moveTo(0, height / 2);
         for (let x = 0; x < width; x += 10) {
-          const y = centerY + Math.sin(x * 0.01 + t * (0.5 + j)) * (20 + jitter * 100);
+          const intensity = isZeroPoint ? 2 : (isTachyonic ? (Math.random() * 5 + 5) : (isPhaseOut ? (Math.random() * 40 + 10) : 20 + jitter * 100));
+          const y = centerY + Math.sin(x * (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) + t * (isZeroPoint ? 0.1 : (0.5 + j))) * intensity;
           ctx.lineTo(x, y);
         }
-        ctx.strokeStyle = j === 0 ? '#00ffcc' : '#ff0088';
-        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = isZeroPoint ? '#3b82f6' : (isSingularity ? '#ffff00' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#cc5500' : (j === 0 ? '#00ffcc' : '#ff0088'))));
+        ctx.lineWidth = isZeroPoint ? 1.0 : (isSingularity ? 2.0 : (isPhaseOut ? 0.8 : 0.5));
         ctx.stroke();
+      }
+
+      // Draw chaotic particles during phase out
+      if (isPhaseOut && !isZeroPoint) {
+        ctx.globalAlpha = 0.8;
+        const pCount = isSingularity ? 100 : (isTachyonic ? 30 : 15);
+        for (let p = 0; p < pCount; p++) {
+          const rx = Math.random() * width;
+          const ry = Math.random() * height;
+          ctx.fillStyle = isSingularity ? (Math.random() > 0.5 ? '#ffff00' : '#ffffff') : (isTachyonic ? '#ffffff' : '#cc5500');
+          const pw = isSingularity ? Math.random() * 400 : (isTachyonic ? Math.random() * 200 : Math.random() * 80 + 20);
+          ctx.fillRect(rx, ry, pw, isSingularity ? Math.random() * 2 : 1);
+        }
       }
       ctx.globalAlpha = 1.0;
 
       // Draw 12 rings
+      const ringCount = isPhaseOut ? (isTachyonic ? 1 : 3) : 12;
       for (let i = 0; i < 12; i++) {
-        const r = 40 + i * 18;
-        const col = coherence > 0.7 
-          ? `rgba(0, 255, 204, ${0.3 + (i / 12) * 0.7})` 
-          : `rgba(255, 0, 136, ${0.3 + (i / 12) * 0.7})`;
+        if (isPhaseOut && i >= ringCount) continue;
+        const r = 20 + i * 15;
+        let col = coherence > 0.7 ? '#00ffcc' : '#ff0088';
+        if (isPhaseOut) col = '#cc5500';
+        if (isTachyonic) col = '#ffffff';
         
-        const warp = Math.sin(t * 12 + i) * (jitter * 180);
+        ctx.globalAlpha = (0.2 + (i / 12) * 0.8) * (isPhaseOut ? 0.1 : coherence + 0.1);
+        
+        // At 28GHz (phase out), the orbit becomes chaotic
+        const chaos = freqUnit >= 28 ? Math.random() * 50 : 0;
+        const warp = Math.sin(t * 15 + i) * (jitter * 250) + chaos;
         
         ctx.beginPath();
-        // Create an oval-ish shape using scale or just adjusting x/y
-        // We'll simulate drawing an oval manually or using ellipse
-        ctx.ellipse(centerX, centerY, r + warp, r, 0, 0, Math.PI * 2);
+        ctx.ellipse(centerX, centerY, Math.max(5, r + warp), Math.max(5, r), 0, 0, Math.PI * 2);
         ctx.strokeStyle = col;
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Add some "nodal" points on the rings
-        if (i % 3 === 0) {
-          const angle = t * 2 + i;
-          const px = centerX + (r + warp) * Math.cos(angle);
-          const py = centerY + r * Math.sin(angle);
+        if (!isPhaseOut && coherence > 0.8 && i % 4 === 0) {
+          const px = centerX + (r + warp);
+          ctx.globalAlpha = 1.0;
           ctx.fillStyle = col;
           ctx.beginPath();
-          ctx.arc(px, py, 3, 0, Math.PI * 2);
+          ctx.arc(px, centerY, 4, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -80,16 +144,22 @@ export default function WarpVisualizer({ coherence, jitter }: WarpVisualizerProp
 
     animationId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animationId);
-  }, [coherence, jitter]);
+  }, [coherence, jitter, frequency]);
 
   return (
-    <section className="relative w-full h-[400px] flex items-center justify-center bg-[#0a0a0a] rounded-xl border border-[#ffffff10] overflow-hidden shadow-inner">
+    <section className="relative w-full h-[400px] flex items-center justify-center bg-[#0a0a0a] rounded-xl border border-[#ffffff10] overflow-hidden shadow-inner font-mono">
       {/* Decorative overlays from design */}
-      <div className="absolute top-4 left-4 flex gap-2 z-10">
-        <span className="px-2 py-1 rounded bg-[#00ffcc20] text-[#00ffcc] text-[10px] font-mono border border-[#00ffcc40] backdrop-blur-sm">
-          RESERVOIR_STATE: ACTIVE
+      <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
+        <span className={`px-2 py-1 rounded text-[10px] border backdrop-blur-sm transition-colors ${
+          (frequency) === 0 ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' :
+          (frequency/1000) >= 50 ? 'bg-yellow-500 text-black border-yellow-400 font-black animate-pulse' :
+          (frequency/1000) >= 42 ? 'bg-white text-black border-white' :
+          (frequency/1000) >= 28 ? 'bg-[#cc5500]/20 text-[#cc5500] border-[#cc5500]/40' : 
+          'bg-[#00ffcc20] text-[#00ffcc] border-[#00ffcc40]'
+        }`}>
+          RESERVOIR_STATE: {(frequency) === 0 ? 'ABSOLUTE_NULL' : (frequency/1000) >= 50 ? 'SINGULARITY_COLLAPSE' : (frequency/1000) >= 42 ? 'TACHYONIC_LEAK' : (frequency/1000) >= 28 ? 'PHASE_OUT' : 'ACTIVE'}
         </span>
-        <span className="px-2 py-1 rounded bg-[#ff008820] text-[#ff0088] text-[10px] font-mono border border-[#ff008840] backdrop-blur-sm">
+        <span className="px-2 py-1 rounded bg-[#ff008820] text-[#ff0088] text-[10px] border border-[#ff008840] backdrop-blur-sm">
           NODAL_DRIFT: {jitter.toFixed(3)}
         </span>
       </div>
@@ -100,17 +170,47 @@ export default function WarpVisualizer({ coherence, jitter }: WarpVisualizerProp
         ref={canvasRef}
         width={1000}
         height={400}
-        className="w-full h-full opacity-80"
+        className={`w-full h-full transition-opacity duration-1000 ${(frequency/1000) >= 28 || frequency === 0 ? 'opacity-100' : 'opacity-80'}`}
       />
       
       {/* Central focus point */}
       <div className="absolute w-32 h-32 rounded-full bg-gradient-to-br from-[#00ffcc15] to-transparent flex items-center justify-center pointer-events-none">
-        <div className="w-8 h-8 bg-[#00ffcc] rounded-full shadow-[0_0_30px_#00ffcc90] animate-pulse" />
+        <div className={`w-8 h-8 rounded-full shadow-[0_0_30px_#00ffcc90] transition-all duration-300 ${
+          (frequency) === 0 ? 'bg-blue-900 border border-blue-400/50 shadow-[0_0_20px_#3b82f644] scale-[0.5]' :
+          (frequency/1000) >= 50 ? 'bg-yellow-400 shadow-[0_0_100px_#ffff00] scale-[5] animate-ping' :
+          (frequency/1000) >= 42 ? 'bg-white shadow-[0_0_60px_#fff] scale-[2.5] blur-[2px]' :
+          (frequency/1000) >= 28 ? 'bg-[#cc5500] shadow-[0_0_40px_#cc5500] scale-150 animate-ping' : 
+          'bg-[#00ffcc] shadow-[0_0_30px_#00ffcc90] animate-pulse'
+        }`} />
       </div>
 
       {/* Footer text in visualizer */}
-      <div className="absolute bottom-4 text-[10px] font-mono text-[#444] tracking-[0.2em] uppercase">
-        NODAL FLUX FREQUENCY: 142.42 Hz
+      <div className="absolute bottom-4 text-[10px] text-[#444] tracking-[0.2em] uppercase flex gap-4">
+        {isInstalling ? (
+          <div className="flex items-center gap-4 w-full px-12">
+            <span className="text-[#00ffcc] animate-pulse">INSTALLING_MODULE...</span>
+            <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+               <motion.div 
+                className="h-full bg-[#00ffcc] shadow-[0_0_10px_#00ffcc]"
+                initial={{ width: 0 }}
+                animate={{ width: `${installProgress}%` }}
+               />
+            </div>
+            <span className="text-[#00ffcc] w-12">{installProgress}%</span>
+          </div>
+        ) : (
+          <>
+            <span className={(frequency/1000) >= 28 && (frequency/1000) < 42 ? "text-[#cc5500] animate-pulse" : "text-white/20"}>
+              QUBIT_GATES: {(frequency/1000) >= 28 && (frequency/1000) < 42 ? 'RESONATING' : 'IDLE'}
+            </span>
+            <span className="text-white/10 hidden sm:inline">|</span>
+            <span>NODAL FLUX FREQUENCY: 142.42 Hz</span>
+            <span className="text-white/10 hidden sm:inline">|</span>
+            <span className={(frequency) === 0 ? 'text-blue-500 font-mono tracking-widest' : (frequency/1000) >= 50 ? 'text-yellow-400 font-black animate-bounce' : (frequency/1000) >= 42 ? 'text-white font-bold' : (frequency/1000) >= 28 ? 'text-[#cc5500] animate-pulse' : ''}>
+              CARRIER: {(frequency/1000).toFixed(6)} GHz
+            </span>
+          </>
+        )}
       </div>
     </section>
   );
