@@ -148,8 +148,9 @@ export default function App() {
 
   const handleTSPSolve = useCallback(() => {
     if (isSolving) return;
-    if (statsRef.current.coherence < 0.4) {
-      addLog("SOLVE_REJECTED: Coherence insufficient for 250 nodal city optimization.", "error");
+    if (statsRef.current.coherence < 0.3) {
+      addLog("SOLVE_REJECTED: Coherence [C < 0.30] insufficient for nodal sync.", "error");
+      addLog("HINT: Adjust Carrier Bias or stabilize V-Field to improve Coherence.", "info");
       return;
     }
 
@@ -433,6 +434,7 @@ export default function App() {
         addLog('STATUS - Core health diagnostics', 'info');
         addLog('SYNC - Force git substrate realignment', 'info');
         addLog('SOLVE - Run 250 nodal city optimization', 'info');
+        addLog('CALIBRATE - Stabilize nodal coherence', 'info');
         addLog('MINER_START - Initialize liquid compute', 'info');
         addLog('MINER_STOP - Halt liquid compute', 'info');
         break;
@@ -441,6 +443,13 @@ export default function App() {
         break;
       case 'solve':
         handleTSPSolve();
+        break;
+      case 'calibrate':
+        addLog('CALIBRATION_SEQUENCE: Re-aligning phasing vectors...', 'warning');
+        setTimeout(() => {
+          setCarrierBias(35); // Set to a stable-ish value
+          addLog('CALIBRATION_COMPLETE: System normalized to 35% modulation.', 'success');
+        }, 1500);
         break;
       case 'status':
         addLog('CORE_DIAGNOSTICS:', 'warning');
