@@ -38,7 +38,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
     const saved = localStorage.getItem('jar_system_version_v3');
-    return saved ? parseFloat(saved) : 321.05;
+    return saved ? parseFloat(saved) : 321.14;
   });
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
