@@ -13,6 +13,7 @@ interface WarpVisualizerProps {
   isInstalling?: boolean;
   installProgress?: number;
   isAiActive?: boolean;
+  isSolving?: boolean;
 }
 
 export default function WarpVisualizer({ 
@@ -21,9 +22,19 @@ export default function WarpVisualizer({
   frequency, 
   isInstalling = false, 
   installProgress = 0,
-  isAiActive = false
+  isAiActive = false,
+  isSolving = false
 }: WarpVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nodesRef = useRef<{x: number, y: number}[]>([]);
+
+  useEffect(() => {
+    // Generate 250 random nodes for TSP visualization
+    nodesRef.current = Array.from({ length: 250 }, () => ({
+      x: Math.random() * 1000,
+      y: Math.random() * 400
+    }));
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -77,6 +88,39 @@ export default function WarpVisualizer({
           ctx.moveTo(0, y);
           ctx.lineTo(width, y + Math.cos(t + y) * 10);
           ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 250 City Solve Mesh
+      if (isSolving) {
+        ctx.save();
+        ctx.strokeStyle = '#a855f7'; // Purple
+        ctx.lineWidth = 0.3;
+        ctx.globalAlpha = 0.4 + (Math.sin(t * 10) * 0.1);
+        
+        // Draw partial connections to simulate optimization
+        const step = Math.floor(t * 10) % 250;
+        ctx.beginPath();
+        for (let i = 0; i < nodesRef.current.length; i++) {
+          const node = nodesRef.current[i];
+          const nextIndex = (i + 1) % nodesRef.current.length;
+          const nextNode = nodesRef.current[nextIndex];
+          
+          if (i < step) {
+            ctx.moveTo(node.x, node.y);
+            ctx.lineTo(nextNode.x, nextNode.y);
+          }
+        }
+        ctx.stroke();
+
+        // Draw nodes
+        ctx.fillStyle = '#a855f7';
+        for (let i = 0; i < nodesRef.current.length; i++) {
+          const node = nodesRef.current[i];
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, 1, 0, Math.PI * 2);
+          ctx.fill();
         }
         ctx.restore();
       }
@@ -186,7 +230,19 @@ export default function WarpVisualizer({
 
       {/* Footer text in visualizer */}
       <div className="absolute bottom-4 text-[10px] text-[#444] tracking-[0.2em] uppercase flex gap-4">
-        {isInstalling ? (
+        {isSolving ? (
+          <div className="flex items-center gap-4 w-full px-12 animate-pulse">
+            <span className="text-purple-500 font-bold">OPTIMIZING_250_NODE_PATH...</span>
+            <div className="flex-1 h-0.5 bg-purple-500/10 rounded-full overflow-hidden">
+               <motion.div 
+                className="h-full bg-purple-500 shadow-[0_0_10px_#a855f7]"
+                animate={{ x: [-1000, 1000] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+               />
+            </div>
+            <span className="text-purple-400">NODAL_ANNEALING</span>
+          </div>
+        ) : isInstalling ? (
           <div className="flex items-center gap-4 w-full px-12">
             <span className="text-[#00ffcc] animate-pulse">INSTALLING_MODULE...</span>
             <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">

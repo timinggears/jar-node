@@ -37,7 +37,10 @@ export default function App() {
   const [carrierBias, setCarrierBias] = useState(0); // 0-100% modulation
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [systemVersion, setSystemVersion] = useState(320.14);
+  const [systemVersion, setSystemVersion] = useState(() => {
+    const saved = localStorage.getItem('jar_system_version');
+    return saved ? parseFloat(saved) : 320.14;
+  });
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
@@ -55,6 +58,10 @@ export default function App() {
     };
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('jar_system_version', systemVersion.toString());
+  }, [systemVersion]);
 
   const handleInstall = useCallback(() => {
     if (isInstalling) return;
@@ -425,11 +432,15 @@ export default function App() {
         addLog('CLEAR - Flush temporal buffers', 'info');
         addLog('STATUS - Core health diagnostics', 'info');
         addLog('SYNC - Force git substrate realignment', 'info');
+        addLog('SOLVE - Run 250 nodal city optimization', 'info');
         addLog('MINER_START - Initialize liquid compute', 'info');
         addLog('MINER_STOP - Halt liquid compute', 'info');
         break;
       case 'clear':
         setLogs([]);
+        break;
+      case 'solve':
+        handleTSPSolve();
         break;
       case 'status':
         addLog('CORE_DIAGNOSTICS:', 'warning');
@@ -605,6 +616,7 @@ export default function App() {
               isInstalling={isInstalling}
               installProgress={installProgress}
               isAiActive={isAiAnalysisActive}
+              isSolving={isSolving}
             />
           </motion.div>
 
