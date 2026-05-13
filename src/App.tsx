@@ -37,6 +37,7 @@ export default function App() {
   const [carrierBias, setCarrierBias] = useState(0); // 0-100% modulation
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [systemVersion, setSystemVersion] = useState(320.14);
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
@@ -93,6 +94,12 @@ export default function App() {
       if (result.success) {
         addLog("PULL_SUCCESS: Substrate updated correctly.", "success");
         if (result.output) addLog(result.output.split('\n')[0], "info");
+        
+        // Real update: Trigger full reload to apply new code
+        setTimeout(() => {
+          addLog("SYSTEM_REBOOT: Applying local patches...", "warning");
+          setTimeout(() => window.location.reload(), 2000);
+        }, 1000);
       } else {
         if (result.isNotRepo || result.isRefError) {
           // If not a real repo or remote config is missing, fall back to simulation
@@ -103,16 +110,24 @@ export default function App() {
           const steps = [
             { m: "FETCH: pack-file synchronized (2.4MB)", t: "info" },
             { m: "VIRTUAL_MERGE: Tachyon logic re-aligned.", t: "success" },
-            { m: "STATE: System up-to-date in sandboxed environment.", t: "success" }
+            { m: `STATE: System up-to-date in sandboxed environment.`, t: "success" }
           ];
 
           steps.forEach((step, index) => {
             setTimeout(() => {
               addLog(step.m, step.t as LogEntry['type']);
-              if (index === steps.length - 1) setIsSyncing(false);
+              if (index === steps.length - 1) {
+                const nextVer = (systemVersion + 0.01).toFixed(2);
+                addLog(`SYSTEM_VERSION_BUMP: Upgrading framework to v${nextVer}...`, "warning");
+                setTimeout(() => {
+                  setSystemVersion(parseFloat(nextVer));
+                  setIsSyncing(false);
+                  addLog("HOT_RELOAD: Virtual logic parity achieved.", "success");
+                }, 1500);
+              }
             }, (index + 1) * 600);
           });
-          return; // Skip final setIsSyncing(false) since we have setTimeouts
+          return;
         } else {
           addLog(`PULL_FAILED: ${result.error}`, "error");
         }
@@ -482,7 +497,7 @@ export default function App() {
           <div className="flex items-center gap-4">
             <div className="w-3 h-3 rounded-full bg-[#00ffcc] animate-pulse shadow-[0_0_8px_#00ffcc]"></div>
             <h1 className="text-xl font-bold tracking-tighter flex items-center gap-3">
-              <span className="bg-[#00ffcc] text-black px-2 py-0.5 rounded italic font-black">V320</span>
+              <span className="bg-[#00ffcc] text-black px-2 py-0.5 rounded italic font-black">V{systemVersion.toFixed(2)}</span>
               <span className="text-[#00ffcc] drop-shadow-[0_0_8px_#00ffcc] tracking-[0.2em]">TACHYONIC_SOVEREIGN_PRO</span>
             </h1>
           </div>
