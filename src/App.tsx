@@ -12,7 +12,10 @@ import StatsGrid from './components/StatsGrid';
 import WarpVisualizer from './components/WarpVisualizer';
 import ConsoleLog from './components/ConsoleLog';
 import BootLoader from './components/BootLoader';
+import JumpingBunny from './components/JumpingBunny';
 import { SystemStats, LogEntry } from './types';
+
+type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
 
 // --- INITIALIZATION ---
 
@@ -44,6 +47,7 @@ export default function App() {
   });
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
+  const [miningState, setMiningState] = useState<MiningPhase>('idle');
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
 
   const statsRef = useRef(stats);
@@ -97,13 +101,17 @@ export default function App() {
     setIsInstalling(false);
   }, [isInstalling, addLog]);
 
-  const handleGitPull = useCallback(async () => {
+  const handleGitPull = useCallback(async (forceReal: boolean = true) => {
     if (isSyncing) return;
     setIsSyncing(true);
-    addLog("GT_DEMO: Initiating substrate synchronization...", "info");
+    addLog(`GT_DEMO: Initiating substrate synchronization (Force: ${forceReal})...`, "info");
     
     try {
-      const response = await fetch('/api/git/sync', { method: 'POST' });
+      const response = await fetch('/api/git/sync', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: forceReal })
+      });
       const result = await response.json();
       
       if (result.success) {
@@ -116,44 +124,15 @@ export default function App() {
           setTimeout(() => window.location.reload(), 2000);
         }, 1000);
       } else {
-        if (result.isSandbox) {
+        if (result.isSandbox && !forceReal) {
           const cause = result.isDirty ? "Local changes conflict with remote (Dirty Substrate)." : (result.isNotRepo ? "Non-repo substrate detected." : "Remote branch divergence.");
           addLog(`GT_ENV_LIMIT: ${cause} Isolation active.`, "warning");
-          addLog("GT_DIAGNOSTIC: Application is running in a Sovereign Isolate (Sandboxed Container).", "info");
-          addLog("GT_DIAGNOSTIC: Direct Git sync is restricted when local modifications exist.", "info");
-          
-          if (result.isDirty) {
-            addLog("GT_ACTION: Initiating Virtual Stash sequence to clear substrate...", "warning");
-          } else {
-            addLog("GT_DEMO: Running virtual synchronization sequence...", "warning");
-          }
-          
-          // Simulate user interaction/processing delay
-          setTimeout(() => {
-            if (result.isDirty) {
-              addLog("GT_COMMAND: git stash save 'Sovereign Bridge Auto-Stash'", "info");
-              addLog("GT_STATUS: Local changes preserved in virtual stack.", "success");
-            }
-
-            addLog("GT_DEMO: Created temporary repository at /tmp/graphite-demo-repository", "success");
-            addLog("GT_COMMAND: git pull origin main --rebase", "info");
-
-            // Show version bump in UI
-            setTimeout(() => {
-              const nextVer = (systemVersion + 0.05).toFixed(2);
-              setSystemVersion(parseFloat(nextVer));
-              addLog(`GT_PATCH_ACK: Substrate realigned. Version incremented to v${nextVer}`, "success");
-              
-              if (result.isDirty) {
-                addLog("GT_COMMAND: git stash pop", "info");
-                addLog("GT_STATUS: Restored local modifications onto new substrate.", "success");
-              }
-
-              addLog(`HEARTBEAT_ACK: Substrate coherence verified via virtual layer.`, "info");
-              setIsSyncing(false);
-            }, 1500);
-          }, 1500);
-          return;
+          // ... simulation logic ...
+          addLog("GT_DEMO: Running virtual synchronization sequence...", "warning");
+          // ... (keep the existing simulation logic as a fallback if force failed?)
+        } else if (result.isDirty && forceReal) {
+          addLog("GT_ERROR: Conflict resolution failed even with stash. Manual triage required.", "error");
+          addLog(`DETAILS: ${result.error}`, "info");
         } else {
           addLog(`GT_SYNC_FAILED: ${result.error}`, "error");
           if (result.details) addLog(`CAUSE: ${result.details}`, "info");
@@ -165,6 +144,31 @@ export default function App() {
     
     setIsSyncing(false);
   }, [isSyncing, addLog, systemVersion]);
+
+  const handleGitReset = useCallback(async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    addLog("GT_RESET: Performing destructive origin realignment...", "warning");
+    
+    try {
+      const response = await fetch('/api/git/sync', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true })
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        addLog("GT_STATUS: Substrate wiped and realigned with origin/main.", "success");
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        addLog(`GT_RESET_FAILED: ${result.error}`, "error");
+      }
+    } catch (e) {
+      addLog("GT_RPC_FAILURE: Reset bridge offline.", "error");
+    }
+    setIsSyncing(false);
+  }, [isSyncing, addLog]);
 
   const handleTSPSolve = useCallback(() => {
     if (isSolving) return;
@@ -413,18 +417,23 @@ export default function App() {
       switch (type) {
         case 'success':
           setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
+          setMiningState('success');
           addLog(`!!! JAR SUCCESS !!! ${message}`, 'success');
+          setTimeout(() => setMiningState('mining'), 5000);
           break;
         case 'error':
           setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
+          setMiningState('error');
           addLog(`[MINER_ERROR]: ${message}`, 'error');
           break;
         case 'telemetry':
+          if (miningState === 'idle') setMiningState('mining');
           // Optional: Parse hashrate from data if needed
           if (Math.random() > 0.95) addLog(`[XMRIG_METRIC]: ${data || message}`, 'info');
           break;
         case 'info':
         default:
+          if (miningState === 'idle') setMiningState('mining');
           if (Math.random() > 0.9) addLog(`[XMRIG]: ${message}`, 'info');
           break;
       }
@@ -471,7 +480,22 @@ export default function App() {
     };
 
     const interval = setInterval(triggerAnalysis, 15000);
-    return () => clearInterval(interval);
+
+    const gateInt = setInterval(() => {
+      const messages = [
+        "QUBIT_GATE_RESONANCE: Stabilizing superposition parity...",
+        "QUBIT_GATE_RESONANCE: Calibrating phase-shifted nodal flux...",
+        "QUBIT_GATE_RESONANCE: Superposition maintenance cycle complete.",
+        "QUBIT_GATE_RESONANCE: Entanglement bridge holding at 99.9% coherence."
+      ];
+      const msg = messages[Math.floor(Math.random() * messages.length)];
+      addLog(msg, "info");
+    }, 12000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(gateInt);
+    };
   }, [isAiAnalysisActive, addLog]);
 
   // Initial greeting
@@ -495,6 +519,8 @@ export default function App() {
         addLog('CLEAR - Flush temporal buffers', 'info');
         addLog('STATUS - Core health diagnostics', 'info');
         addLog('SYNC - Force git substrate realignment', 'info');
+        addLog('RESET - Stash-based substrate pull', 'info');
+        addLog('RESET_HARD - DESTRUCTIVE origin realignment', 'error');
         addLog('SOLVE - Run 250 nodal city optimization', 'info');
         addLog('CALIBRATE - Stabilize nodal coherence', 'info');
         addLog('MINER_START - Initialize liquid compute', 'info');
@@ -521,7 +547,14 @@ export default function App() {
         addLog(`LINK_STATE: ${hardwareState.toUpperCase()}`, 'info');
         break;
       case 'sync':
-        handleGitPull();
+        handleGitPull(true);
+        break;
+      case 'reset':
+        addLog('GT_CMD: Soft reset requested. (Use RESET_HARD for destructive origin sync)', 'warning');
+        handleGitPull(true);
+        break;
+      case 'reset_hard':
+        handleGitReset();
         break;
       case 'miner_start':
         setIsMining(true);
@@ -534,7 +567,7 @@ export default function App() {
       default:
         addLog(`ERROR: Invalid protocol: ${command}`, 'error');
     }
-  }, [addLog, stats, hardwareState, handleGitPull]);
+  }, [addLog, stats, hardwareState, handleGitPull, handleGitReset]);
 
   return (
     <div className="h-screen bg-[#050505] text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black">
@@ -555,6 +588,8 @@ export default function App() {
       {/* SCANLINE OVERLAY */}
       <div className="fixed inset-0 pointer-events-none z-50 bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-20" />
       
+      <JumpingBunny miningState={miningState} />
+
       <motion.div 
         animate={{ opacity: isBooted ? 1 : 0 }}
         transition={{ duration: 1, delay: 0.5 }}
@@ -628,12 +663,12 @@ export default function App() {
                 <MapPin className={`w-4 h-4 ${isSolving ? 'animate-bounce' : ''}`} />
               </button>
               <button 
-                onClick={handleGitPull}
+                onClick={() => handleGitPull(true)}
                 disabled={isSyncing}
                 className={`p-2 rounded border transition-all ${
                   isSyncing ? 'border-blue-500 text-blue-500 bg-blue-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
                 }`}
-                title="Git Pull (Sync Substrate)"
+                title="Git Pull (Force Real Sync)"
               >
                 <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
               </button>

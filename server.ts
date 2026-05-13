@@ -272,30 +272,50 @@ async function startServer() {
   // --- GIT SYNC BRIDGE ---
   app.post('/api/git/sync', async (req, res) => {
     try {
+      const { force, reset } = req.body || {};
       const { exec } = await import('child_process');
       const { promisify } = await import('util');
       const execPromise = promisify(exec);
       
+      console.log(`[GIT] Sync requested. Force: ${force}, Reset: ${reset}`);
+
+      if (reset) {
+        console.log('[GIT] Performing hard reset to origin/main...');
+        await execPromise('git fetch origin');
+        await execPromise('git reset --hard origin/main').catch(() => execPromise('git reset --hard origin/master'));
+        return res.json({ success: true, output: "System hard-reset to origin state." });
+      }
+
       // We attempt a git pull.
       let result;
       try {
+        if (force) {
+          console.log('[GIT] Force sync: Stashing local changes...');
+          await execPromise('git stash save "Sovereign_Bridge_Auto_Stash"').catch(() => {});
+        }
+
         try {
-          result = await execPromise('git pull origin main');
+          result = await execPromise('git pull origin main --rebase');
         } catch (pullErr: any) {
           // If main branch doesn't exist, try master
-          if (pullErr.message.includes('main') || pullErr.message.includes('branch')) {
-             result = await execPromise('git pull origin master');
+          if (pullErr.message.includes('main') || pullErr.message.includes('branch') || pullErr.message.includes('upstream')) {
+             result = await execPromise('git pull origin master --rebase');
           } else {
              throw pullErr;
           }
         }
+
+        if (force) {
+          console.log('[GIT] Restoring local changes (stash pop)...');
+          await execPromise('git stash pop').catch(e => console.warn('[GIT] Stash pop had conflicts or failed:', e.message));
+        }
+
         res.json({ success: true, output: result.stdout, stderr: result.stderr });
       } catch (err: any) {
         // Broadly handle any git failure in the sandbox as a "simulation bypass"
-        // Suppress loud logs if it's just a sandbox environment limitation
         const isNotRepo = err.message.includes("not a git repository");
         const isRefError = err.message.includes("couldn't find remote ref");
-        const isDirty = err.message.includes("overwritten by merge") || err.message.includes("uncommitted files");
+        const isDirty = err.message.includes("overwritten by merge") || err.message.includes("uncommitted files") || err.message.includes("stash");
         
         if (!isNotRepo && !isRefError && !isDirty) {
           console.warn('[GIT] Sync using local substrate:', err.message);
