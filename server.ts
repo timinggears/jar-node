@@ -295,19 +295,21 @@ async function startServer() {
         // Suppress loud logs if it's just a sandbox environment limitation
         const isNotRepo = err.message.includes("not a git repository");
         const isRefError = err.message.includes("couldn't find remote ref");
+        const isDirty = err.message.includes("overwritten by merge") || err.message.includes("uncommitted files");
         
-        if (!isNotRepo && !isRefError) {
+        if (!isNotRepo && !isRefError && !isDirty) {
           console.warn('[GIT] Sync using local substrate:', err.message);
         }
 
         // Return a simulation-friendly response
-        const isSandbox = isNotRepo || isRefError || err.message.includes("not found");
+        const isSandbox = isNotRepo || isRefError || isDirty || err.message.includes("not found");
         res.json({ 
           success: false, 
-          error: isSandbox ? "Sovereign isolate detected. Direct filesystem sync requires bridge elevation." : err.message,
-          isNotRepo: isNotRepo,
-          isRefError: isRefError,
-          isSandbox: isSandbox,
+          error: isDirty ? "Dirty substrate detected. Local changes conflict with remote pulse. Virtual stash required." : (isSandbox ? "Sovereign isolate detected. Direct filesystem sync requires bridge elevation." : err.message),
+          isNotRepo,
+          isRefError,
+          isDirty,
+          isSandbox,
           details: err.message,
           output: "GT_SIMULATION: Created temporary repository at /tmp/graphite-demo-repository. Local substrate synchronized."
         });

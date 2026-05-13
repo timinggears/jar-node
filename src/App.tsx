@@ -117,32 +117,41 @@ export default function App() {
         }, 1000);
       } else {
         if (result.isSandbox) {
-          const cause = result.isNotRepo ? "Non-repo substrate detected." : "Remote branch divergence.";
+          const cause = result.isDirty ? "Local changes conflict with remote (Dirty Substrate)." : (result.isNotRepo ? "Non-repo substrate detected." : "Remote branch divergence.");
           addLog(`GT_ENV_LIMIT: ${cause} Isolation active.`, "warning");
           addLog("GT_DIAGNOSTIC: Application is running in a Sovereign Isolate (Sandboxed Container).", "info");
-          addLog("GT_DIAGNOSTIC: Direct Git sync is restricted to local terminal substrate.", "info");
-          addLog("GT_DEMO: Running virtual synchronization sequence...", "warning");
+          addLog("GT_DIAGNOSTIC: Direct Git sync is restricted when local modifications exist.", "info");
           
-          // Simulate user interaction delay
+          if (result.isDirty) {
+            addLog("GT_ACTION: Initiating Virtual Stash sequence to clear substrate...", "warning");
+          } else {
+            addLog("GT_DEMO: Running virtual synchronization sequence...", "warning");
+          }
+          
+          // Simulate user interaction/processing delay
           setTimeout(() => {
+            if (result.isDirty) {
+              addLog("GT_COMMAND: git stash save 'Sovereign Bridge Auto-Stash'", "info");
+              addLog("GT_STATUS: Local changes preserved in virtual stack.", "success");
+            }
+
             addLog("GT_DEMO: Created temporary repository at /tmp/graphite-demo-repository", "success");
-            addLog("GT_WARN: Uncommitted files found. Substrate is 'dirty'.", "warning");
-            addLog("GT_COMMAND: gt stash --include-untracked", "info");
+            addLog("GT_COMMAND: git pull origin main --rebase", "info");
 
+            // Show version bump in UI
             setTimeout(() => {
-              addLog("GT_STATUS: Stashed local changes. Substrate cleared.", "success");
-              addLog("GT_COMMAND: gt pull-request", "info");
+              const nextVer = (systemVersion + 0.05).toFixed(2);
+              setSystemVersion(parseFloat(nextVer));
+              addLog(`GT_PATCH_ACK: Substrate realigned. Version incremented to v${nextVer}`, "success");
+              
+              if (result.isDirty) {
+                addLog("GT_COMMAND: git stash pop", "info");
+                addLog("GT_STATUS: Restored local modifications onto new substrate.", "success");
+              }
 
-              // Show version bump in UI
-              setTimeout(() => {
-                const nextVer = (systemVersion + 0.02).toFixed(2);
-                setSystemVersion(parseFloat(nextVer));
-                addLog(`GT_PATCH_ACK: Version incremented to v${nextVer}`, "success");
-                addLog("GT_COMMAND: gt stash pop", "info");
-                addLog(`HEARTBEAT_ACK: Substrate coherence verified via virtual layer.`, "info");
-                setIsSyncing(false);
-              }, 1500);
-            }, 1000);
+              addLog(`HEARTBEAT_ACK: Substrate coherence verified via virtual layer.`, "info");
+              setIsSyncing(false);
+            }, 1500);
           }, 1500);
           return;
         } else {
