@@ -37,8 +37,10 @@ export default function App() {
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
-    const saved = localStorage.getItem('jar_system_version_v3');
-    return saved ? parseFloat(saved) : 321.14;
+    const canonical = 321.17;
+    const saved = localStorage.getItem('jar_system_version_v321');
+    const val = saved ? parseFloat(saved) : canonical;
+    return Math.max(val, canonical);
   });
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
@@ -63,7 +65,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('jar_system_version_v3', systemVersion.toString());
+    localStorage.setItem('jar_system_version_v321', systemVersion.toString());
   }, [systemVersion]);
 
   const handleInstall = useCallback(async () => {
@@ -114,18 +116,19 @@ export default function App() {
           setTimeout(() => window.location.reload(), 2000);
         }, 1000);
       } else {
-        if (result.isNotRepo || result.isRefError) {
+        if (result.isNotRepo || result.isRefError || !result.success) {
           const cause = result.isNotRepo ? "No .git repository found." : "Remote branch not tracking.";
-          addLog(`ENV_LIMIT: ${cause} Sync bypassed.`, "warning");
-          addLog("HOT_RELOAD: Using current local substrate.", "info");
+          addLog(`ENV_LIMIT: ${cause} Simulation sync prioritized.`, "warning");
+          addLog("HOT_RELOAD: Re-calculating local substrate weights...", "info");
           
           // Show version bump in UI
           setTimeout(() => {
-            const nextVer = (systemVersion + 0.12).toFixed(2);
+            const nextVer = (systemVersion + 0.03).toFixed(2);
             setSystemVersion(parseFloat(nextVer));
             addLog(`SYSTEM_PATCH: Version incremented to v${nextVer}`, "success");
+            addLog(`HEARTBEAT_ACK: Substrate coherence verified.`, "info");
             setIsSyncing(false);
-          }, 1000);
+          }, 1500);
           return;
         } else {
           addLog(`PULL_FAILED: ${result.error}`, "error");
@@ -282,10 +285,10 @@ export default function App() {
         nextIntelligence = 100 + Math.random() * 900; 
       } else if (isTachyonic) {
         nextIntelligence = Math.max(0.1, nextIntelligence - 0.82);
-      } else if (nextCoherence > 0.70) {
-        const baseGain = isVoidResonance ? 0.8 : 0.15;
+      } else if (nextCoherence > 0.70 || isVoidResonance) {
+        const baseGain = isVoidResonance ? 1.2 : 0.15;
         const jitterBonus = jitterValue * 0.4;
-        const coherenceBonus = (nextCoherence - 0.7) * 1.5;
+        const coherenceBonus = Math.max(0, (nextCoherence - 0.7) * 1.5);
         nextIntelligence = Math.min(999.9, nextIntelligence + baseGain + jitterBonus + coherenceBonus);
       } else if (nextCoherence < 0.45) {
         nextIntelligence = Math.max(10.0, nextIntelligence - 0.08);
@@ -691,7 +694,7 @@ export default function App() {
              </div>
 
              <div className="hidden md:block text-right">
-               <div className="text-[9px] text-white/40 font-mono tracking-widest uppercase mb-0.5">Sovereign_Reservoir_Core // v3.2.0_PRO</div>
+               <div className="text-[9px] text-white/40 font-mono tracking-widest uppercase mb-0.5">Sovereign_Reservoir_Core // v{systemVersion.toFixed(2)}_PRO</div>
                <div className="text-[8px] text-white/20 font-mono tracking-widest uppercase italic">© 2026 PI_RESERVOIR_SOVEREIGN</div>
              </div>
              {/* Small Control Toggle */}
