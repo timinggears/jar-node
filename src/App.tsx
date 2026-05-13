@@ -39,7 +39,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
     const saved = localStorage.getItem('jar_system_version');
-    return saved ? parseFloat(saved) : 320.14;
+    return saved ? parseFloat(saved) : 321.05;
   });
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
@@ -115,7 +115,14 @@ export default function App() {
           const cause = result.isNotRepo ? "No .git repository found." : "Remote branch not tracking.";
           addLog(`ENV_LIMIT: ${cause} Sync bypassed.`, "warning");
           addLog("HOT_RELOAD: Using current local substrate.", "info");
-          setIsSyncing(false);
+          
+          // Show version bump in UI
+          setTimeout(() => {
+            const nextVer = (systemVersion + 0.12).toFixed(2);
+            setSystemVersion(parseFloat(nextVer));
+            addLog(`SYSTEM_PATCH: Version incremented to v${nextVer}`, "success");
+            setIsSyncing(false);
+          }, 1000);
           return;
         } else {
           addLog(`PULL_FAILED: ${result.error}`, "error");
