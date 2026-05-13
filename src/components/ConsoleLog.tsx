@@ -4,20 +4,30 @@
  */
 
 import { LogEntry } from '../types';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface ConsoleLogProps {
   logs: LogEntry[];
+  onCommand?: (cmd: string) => void;
 }
 
-export default function ConsoleLog({ logs }: ConsoleLogProps) {
+export default function ConsoleLog({ logs, onCommand }: ConsoleLogProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [inputValue, setInputValue] = useState('');
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [logs]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputValue.trim() && onCommand) {
+      onCommand(inputValue);
+      setInputValue('');
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-black font-mono">
@@ -41,6 +51,21 @@ export default function ConsoleLog({ logs }: ConsoleLogProps) {
           </div>
         ))}
       </div>
+
+      <form 
+        onSubmit={handleSubmit}
+        className="bg-[#050505] p-3 border-t border-white/5 flex items-center gap-3"
+      >
+        <span className="text-[#00ffcc] text-xs font-bold animate-pulse">{`>>`}</span>
+        <input 
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder="ENTER SYSTEM PROTOCOL..."
+          className="flex-1 bg-transparent border-none outline-none text-[#00ffcc] text-xs placeholder:text-[#00ffcc40] tracking-widest"
+          autoFocus
+        />
+      </form>
     </div>
   );
 }

@@ -397,6 +397,48 @@ export default function App() {
     addLog('Reservoir Sync: fundamental.nodal.core established.', 'success');
   }, [addLog]);
 
+  const handleCommand = useCallback((cmd: string) => {
+    const command = cmd.trim().toLowerCase();
+    if (!command) return;
+
+    addLog(`> ${cmd}`, 'info');
+
+    switch (command) {
+      case 'help':
+        addLog('AVAILABLE COMMANDS:', 'warning');
+        addLog('HELP - List system protocols', 'info');
+        addLog('CLEAR - Flush temporal buffers', 'info');
+        addLog('STATUS - Core health diagnostics', 'info');
+        addLog('SYNC - Force git substrate realignment', 'info');
+        addLog('MINER_START - Initialize liquid compute', 'info');
+        addLog('MINER_STOP - Halt liquid compute', 'info');
+        break;
+      case 'clear':
+        setLogs([]);
+        break;
+      case 'status':
+        addLog('CORE_DIAGNOSTICS:', 'warning');
+        addLog(`INTELLIGENCE: ${stats.intelligence.toFixed(2)} EPS`, 'info');
+        addLog(`COHERENCE: ${(stats.coherence * 100).toFixed(1)}%`, 'info');
+        addLog(`PHASE_OUT: ${stats.phaseOut.toFixed(2)} Φ`, 'info');
+        addLog(`LINK_STATE: ${hardwareState.toUpperCase()}`, 'info');
+        break;
+      case 'sync':
+        handleGitPull();
+        break;
+      case 'miner_start':
+        setIsMining(true);
+        addLog('SUBSTRATE_MINER: Initialized.', 'success');
+        break;
+      case 'miner_stop':
+        setIsMining(false);
+        addLog('SUBSTRATE_MINER: Deactivated.', 'warning');
+        break;
+      default:
+        addLog(`ERROR: Invalid protocol: ${command}`, 'error');
+    }
+  }, [addLog, stats, hardwareState, handleGitPull]);
+
   return (
     <div className="h-screen bg-[#050505] text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black">
       <AnimatePresence>
@@ -553,7 +595,7 @@ export default function App() {
 
           {/* MIDDLE: LARGE CONSOLE (scrolledtext) */}
           <div className="flex-1 min-h-0 bg-[#050505] rounded-xl border border-white/5 overflow-hidden shadow-2xl">
-            <ConsoleLog logs={logs} />
+            <ConsoleLog logs={logs} onCommand={handleCommand} />
           </div>
 
           {/* BOTTOM: SYSTEM STATS (stats_frame) */}
