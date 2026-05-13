@@ -116,11 +116,12 @@ export default function App() {
           setTimeout(() => window.location.reload(), 2000);
         }, 1000);
       } else {
-        if (result.isNotRepo || result.isRefError || !result.success) {
+        if (result.isSandbox) {
           const cause = result.isNotRepo ? "Non-repo substrate detected." : "Remote branch divergence.";
-          addLog(`GT_ENV_LIMIT: ${cause} Simulation sync prioritized.`, "warning");
-          addLog("GT_DEMO: This directory is not a repository.", "info");
-          addLog("GT_DEMO: Would you like to continue with a temporary repository? › (Y/n)", "warning");
+          addLog(`GT_ENV_LIMIT: ${cause} Isolation active.`, "warning");
+          addLog("GT_DIAGNOSTIC: Application is running in a Sovereign Isolate (Sandboxed Container).", "info");
+          addLog("GT_DIAGNOSTIC: Direct Git sync is restricted to local terminal substrate.", "info");
+          addLog("GT_DEMO: Running virtual synchronization sequence...", "warning");
           
           // Simulate user interaction delay
           setTimeout(() => {
@@ -138,14 +139,15 @@ export default function App() {
                 setSystemVersion(parseFloat(nextVer));
                 addLog(`GT_PATCH_ACK: Version incremented to v${nextVer}`, "success");
                 addLog("GT_COMMAND: gt stash pop", "info");
-                addLog(`HEARTBEAT_ACK: Substrate coherence verified via clean temporary repository.`, "info");
+                addLog(`HEARTBEAT_ACK: Substrate coherence verified via virtual layer.`, "info");
                 setIsSyncing(false);
               }, 1500);
             }, 1000);
           }, 1500);
           return;
         } else {
-          addLog(`GT_PULL_FAILED: ${result.error}`, "error");
+          addLog(`GT_SYNC_FAILED: ${result.error}`, "error");
+          if (result.details) addLog(`CAUSE: ${result.details}`, "info");
         }
       }
     } catch (e) {

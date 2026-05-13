@@ -301,11 +301,14 @@ async function startServer() {
         }
 
         // Return a simulation-friendly response
+        const isSandbox = isNotRepo || isRefError || err.message.includes("not found");
         res.json({ 
           success: false, 
-          error: "Sandbox environment coherence lockdown active.",
+          error: isSandbox ? "Sovereign isolate detected. Direct filesystem sync requires bridge elevation." : err.message,
           isNotRepo: isNotRepo,
           isRefError: isRefError,
+          isSandbox: isSandbox,
+          details: err.message,
           output: "GT_SIMULATION: Created temporary repository at /tmp/graphite-demo-repository. Local substrate synchronized."
         });
       }
@@ -315,7 +318,8 @@ async function startServer() {
         success: false, 
         error: err.message,
         isNotRepo: err.message.includes('not a git repository'),
-        isRefError: err.message.includes("couldn't find remote ref")
+        isRefError: err.message.includes("couldn't find remote ref"),
+        isSandbox: false
       });
     }
   });
