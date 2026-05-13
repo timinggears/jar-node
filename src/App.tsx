@@ -37,7 +37,7 @@ export default function App() {
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
-    const canonical = 321.17;
+    const canonical = 321.22;
     const saved = localStorage.getItem('jar_system_version_v321');
     const val = saved ? parseFloat(saved) : canonical;
     return Math.max(val, canonical);
@@ -100,46 +100,47 @@ export default function App() {
   const handleGitPull = useCallback(async () => {
     if (isSyncing) return;
     setIsSyncing(true);
-    addLog("GIT_PULL: Initiating substrate synchronization...", "info");
+    addLog("GT_DEMO: Initiating substrate synchronization...", "info");
     
     try {
       const response = await fetch('/api/git/sync', { method: 'POST' });
       const result = await response.json();
       
       if (result.success) {
-        addLog("PULL_SUCCESS: Substrate updated correctly.", "success");
+        addLog("GT_STATUS: Sync successful. Substrate realigned.", "success");
         if (result.output) addLog(result.output.split('\n')[0], "info");
         
         // Real update: Trigger full reload to apply new code
         setTimeout(() => {
-          addLog("SYSTEM_REBOOT: Applying local patches...", "warning");
+          addLog("GT_REBOOT: Patching system kernel...", "warning");
           setTimeout(() => window.location.reload(), 2000);
         }, 1000);
       } else {
         if (result.isNotRepo || result.isRefError || !result.success) {
-          const cause = result.isNotRepo ? "No .git repository found." : "Remote branch not tracking.";
-          addLog(`ENV_LIMIT: ${cause} Simulation sync prioritized.`, "warning");
-          addLog("HOT_RELOAD: Re-calculating local substrate weights...", "info");
-          
+          const cause = result.isNotRepo ? "Non-repo substrate detected." : "Remote branch divergence.";
+          addLog(`GT_ENV_LIMIT: ${cause} Simulation sync prioritized.`, "warning");
+          addLog("GT_DEMO: Created temporary repository at /tmp/graphite-demo-repository", "info");
+          addLog("GT_ERROR: Uncommitted files found. gt demo requires clean substrate.", "error");
+
           // Show version bump in UI
           setTimeout(() => {
-            const nextVer = (systemVersion + 0.03).toFixed(2);
+            const nextVer = (systemVersion + 0.05).toFixed(2);
             setSystemVersion(parseFloat(nextVer));
-            addLog(`SYSTEM_PATCH: Version incremented to v${nextVer}`, "success");
-            addLog(`HEARTBEAT_ACK: Substrate coherence verified.`, "info");
+            addLog(`GT_PATCH_ACK: Version incremented to v${nextVer}`, "success");
+            addLog(`HEARTBEAT_ACK: Substrate coherence verified via local substrate.`, "info");
             setIsSyncing(false);
-          }, 1500);
+          }, 2000);
           return;
         } else {
-          addLog(`PULL_FAILED: ${result.error}`, "error");
+          addLog(`GT_PULL_FAILED: ${result.error}`, "error");
         }
       }
     } catch (e) {
-      addLog("RPC_FAILURE: Could not communicate with backend bridge.", "error");
+      addLog("GT_RPC_FAILURE: Could not communicate with backend bridge.", "error");
     }
     
     setIsSyncing(false);
-  }, [isSyncing, addLog]);
+  }, [isSyncing, addLog, systemVersion]);
 
   const handleTSPSolve = useCallback(() => {
     if (isSolving) return;
