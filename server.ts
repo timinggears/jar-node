@@ -75,33 +75,34 @@ async function startServer() {
 
   // --- HARDWARE / SIMULATION TELEMETRY ---
   setInterval(async () => {
-    if (hardwarePort && hardwarePort.isOpen) return;
+    try {
+      if (hardwarePort && hardwarePort.isOpen) return;
 
-    // Generate telemetry based on REAL system load when hardware is missing
-    const load = os.loadavg()[0]; // 1 min load
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const memUsage = 1 - (freeMem / totalMem);
-    
-    // Map system metrics to "Tachyonic" terms
-    // jitter -> system load (scaled)
-    // vNodal -> memory usage (scaled)
-    const jitter = Math.min(1.0, load / (os.cpus().length || 1));
-    const vNodal = memUsage;
-    const freq = 35000 + (load * 1000); // Frequency modulated by load
-    
-    const fakeSeed = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
-    const telemetryLine = `!S|${fakeSeed}|${jitter.toFixed(4)}|${vNodal.toFixed(4)}|0.00|${freq.toFixed(2)}`;
-    
-    io.emit('telemetry', telemetryLine);
-    
-    // Also emit raw system stats for more "real" feel
-    io.emit('system_stats', {
-      load: os.loadavg(),
-      mem: { total: totalMem, free: freeMem, usage: memUsage },
-      uptime: os.uptime(),
-      cpus: os.cpus().length
-    });
+      // Generate telemetry based on REAL system load when hardware is missing
+      const load = os.loadavg()[0]; // 1 min load
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const memUsage = 1 - (freeMem / totalMem);
+      
+      const jitter = Math.min(1.0, load / (os.cpus().length || 1));
+      const vNodal = memUsage;
+      const freq = 35000 + (load * 1000); // Frequency modulated by load
+      
+      const fakeSeed = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
+      const telemetryLine = `!S|${fakeSeed}|${jitter.toFixed(4)}|${vNodal.toFixed(4)}|0.00|${freq.toFixed(2)}`;
+      
+      io.emit('telemetry', telemetryLine);
+      
+      // Also emit raw system stats for more "real" feel
+      io.emit('system_stats', {
+        load: os.loadavg(),
+        mem: { total: totalMem, free: freeMem, usage: memUsage },
+        uptime: os.uptime(),
+        cpus: os.cpus().length
+      });
+    } catch (err) {
+      console.error('[SERVER] Telemetry error:', err);
+    }
   }, 100);
 
   findAndOpenPort();

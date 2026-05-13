@@ -15,7 +15,6 @@ import BootLoader from './components/BootLoader';
 import { SystemStats, LogEntry } from './types';
 
 // --- INITIALIZATION ---
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -47,6 +46,10 @@ export default function App() {
 
   const statsRef = useRef(stats);
   statsRef.current = stats;
+  const carrierBiasRef = useRef(carrierBias);
+  carrierBiasRef.current = carrierBias;
+  const isMiningRef = useRef(isMining);
+  isMiningRef.current = isMining;
   const lastUpdateRef = useRef(Date.now());
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
@@ -216,15 +219,16 @@ export default function App() {
     lastInsightTime.current = Date.now();
 
     try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: `You are a rogue AI Sovereign core hooked into a quantum singularity. 
         The current state is ${state} at ${freq.toFixed(2)} GHz. 
         Causality is leaking. Give a one-line, cryptic, technical, and slightly unsettling revelation about the nature of reality or the void. 
         Keep it under 15 words. Format: [VOID_LINK] <message>`
       });
       
-      const text = response.response.text()?.trim();
+      const text = response.text?.trim();
       if (text) {
         addLog(text, "success");
       }
@@ -247,8 +251,8 @@ export default function App() {
       let phaseOut = (vValue * 142) - (0.41 * shimmer) + (28 * Math.sin(2 * Math.PI * f * t));
       
       // Calculate Frequency influenced by Bias (0-50GHz range for UI visualization)
-      const biasHz = carrierBias * 500; 
-      const freqValue = Math.max(isMining ? rawFreq : 0, biasHz);
+      const biasHz = carrierBiasRef.current * 500; 
+      const freqValue = Math.max(isMiningRef.current ? rawFreq : 0, biasHz);
       const freqUnit = freqValue / 1000; 
 
       // Threshold behaviors
@@ -276,9 +280,6 @@ export default function App() {
         nextIntelligence = Math.max(0.0, nextIntelligence - 2.5);
       } else if (isSingularity) {
         nextIntelligence = 100 + Math.random() * 900; 
-        if (Math.random() > 0.99) {
-          setTimeout(() => addLog("SINGULARITY_COLLAPSE: Logic depth infinity.", "success"), 0);
-        }
       } else if (isTachyonic) {
         nextIntelligence = Math.max(0.1, nextIntelligence - 0.82);
       } else if (nextCoherence > 0.70) {
@@ -290,13 +291,7 @@ export default function App() {
         nextIntelligence = Math.max(10.0, nextIntelligence - 0.08);
       }
 
-      // Special Logs
-      if (isVoidResonance && Math.random() > 0.995) {
-        setTimeout(() => addLog("VOID_RESONANCE: Intelligence surge within phased-out state.", "success"), 0);
-      }
-      if (freqUnit >= 28 && freqUnit < 42 && Math.random() > 0.99) {
-        addLog("QUBIT_GATE_RESONANCE: Initializing superposition gates...", "warning");
-      }
+      // Special Logs (moved out of setStats in the next version of code)
 
       const now = Date.now();
       const dt = (now - lastUpdateRef.current) / 1000;
@@ -308,7 +303,7 @@ export default function App() {
       let nextShares = prev.shares;
       let nextErrors = prev.errors;
 
-      if (isMining) {
+      if (isMiningRef.current) {
         const difficultyBasis = Math.floor(4096 / (1 + (nextCoherence * 5) + (prev.intelligence / 10)));
         if (seed > 0 && Math.abs(seed % Math.max(2, difficultyBasis)) === 7) {
           nextShares += 1;
@@ -334,7 +329,7 @@ export default function App() {
         phaseOut: phaseOut
       };
     });
-  }, [isMining, carrierBias, addLog]);
+  }, [addLog]); // Removed dependencies that change frequently
 
   // --- HARDWARE BRIDGE (FULL-STACK SOCKET) ---
   useEffect(() => {
@@ -358,7 +353,18 @@ export default function App() {
           const jitter = parseFloat(parts[2]);
           const v = parseFloat(parts[3]);
           const freq = parseFloat(parts[5]);
+          
           updateSystemDynamics(jitter, v, freq, seedStr);
+
+          // Handle special logs here where it's safe to call addLog
+          const freqUnit = (Math.max(isMiningRef.current ? freq : 0, carrierBiasRef.current * 500)) / 1000;
+          if (freqUnit >= 50.0 && Math.random() > 0.99) {
+            addLog("SINGULARITY_COLLAPSE: Logic depth infinity.", "success");
+          } else if (freqUnit >= 35.0 && freqUnit < 35.1 && Math.random() > 0.998) {
+            addLog("VOID_RESONANCE: Intelligence surge within phased-out state.", "success");
+          } else if (freqUnit >= 28 && freqUnit < 42 && Math.random() > 0.995) {
+             addLog("QUBIT_GATE_RESONANCE: Initializing superposition gates...", "warning");
+          }
         }
       }
     });
@@ -400,7 +406,8 @@ export default function App() {
         The Raspberry Pi Nodal Reservoir is active (GPIO 14/26). Generate a cryptic, futuristic nodal system update message (max 15 words) for the console log. 
         Focus on words like: Reservoir, Liquid State, Nodal, Resonance, Raspberry Pi, GPIO, Singularity, Sovereignty, Phase Drift.`;
         
-        const result = await ai.models.generateContent({
+        const geminiAi = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+        const result = await geminiAi.models.generateContent({
           model: 'gemini-3-flash-preview',
           contents: prompt
         });
