@@ -376,16 +376,27 @@ export default function App() {
       }
     });
 
-    socket.on('mining_status', (msg: string) => {
-      if (msg === 'accepted') {
-        setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
-        addLog('!!! JAR SUCCESS !!! Block verified by Void.', 'success');
-      } else if (msg.includes('error')) {
-        setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
-        addLog(`Miner Error: ${msg}`, 'error');
-      } else if (msg.includes('speed') || msg.includes('miner')) {
-        // Only log periodic status to prevent console flood
-        if (Math.random() > 0.9) addLog(`[XMRIG]: ${msg}`, 'info');
+    socket.on('mining_status', (payload: any) => {
+      // Handle structured payload or legacy string
+      const { type, message, data } = typeof payload === 'string' ? { type: 'info', message: payload, data: null } : payload;
+      
+      switch (type) {
+        case 'success':
+          setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
+          addLog(`!!! JAR SUCCESS !!! ${message}`, 'success');
+          break;
+        case 'error':
+          setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
+          addLog(`[MINER_ERROR]: ${message}`, 'error');
+          break;
+        case 'telemetry':
+          // Optional: Parse hashrate from data if needed
+          if (Math.random() > 0.95) addLog(`[XMRIG_METRIC]: ${data || message}`, 'info');
+          break;
+        case 'info':
+        default:
+          if (Math.random() > 0.9) addLog(`[XMRIG]: ${message}`, 'info');
+          break;
       }
     });
 

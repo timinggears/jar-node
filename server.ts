@@ -109,58 +109,114 @@ async function startServer() {
 
   // --- XMRIG INTEGRATION ---
   let xmrigProcess: ChildProcess | null = null;
+  let miningEnabled = true; // Default to on as per original intent
+  let restartCount = 0;
+  const MAX_RESTARTS = 3;
+  let lastRestartTime = 0;
 
-  function startMining() {
+  async function startMining() {
+    if (!miningEnabled) return;
+
     const xmrigPath = path.join(process.cwd(), 'xmrig');
+    const fs = await import('fs');
     
     // Check if binary exists
-    import('fs').then(fs => {
-      if (!fs.existsSync(xmrigPath)) {
-        console.log('[MINER] XMRig binary not found at ' + xmrigPath);
-        io.emit('mining_status', 'No XMRig binary found. Running Reservoir-only mode.');
+    if (!fs.existsSync(xmrigPath)) {
+      console.log('[MINER] XMRig binary not found at ' + xmrigPath);
+      io.emit('mining_status', { type: 'error', message: 'Binary not found. Reservoir-only mode.', code: 'ENOENT' });
+      return;
+    }
+
+    // Check for execution permissions
+    try {
+      await fs.promises.access(xmrigPath, fs.constants.X_OK);
+    } catch (err) {
+      console.warn('[MINER] No execution permission. Attempting chmod +x...');
+      try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        await promisify(exec)(`chmod +x ${xmrigPath}`);
+      } catch (chmodErr) {
+        console.error('[MINER] Failed to set permissions:', chmodErr);
+        io.emit('mining_status', { type: 'error', message: 'Execution permission denied.', code: 'EACCES' });
         return;
       }
+    }
 
-      try {
-        xmrigProcess = spawn(xmrigPath, ["-o", POOL_URL, "-u", USER, "-p", PASS, "--http-enabled", "--http-port", "6000"]);
-        console.log('[MINER] XMRig started.');
+    // Rate limit restarts
+    const now = Date.now();
+    if (now - lastRestartTime < 10000) {
+      restartCount++;
+    } else {
+      restartCount = 0;
+    }
+    lastRestartTime = now;
 
-        xmrigProcess.stdout?.on('data', (data) => {
-          const line = data.toString().toLowerCase();
-          if (line.includes('accepted')) {
-            io.emit('mining_status', 'accepted');
-          }
-          // Mirror Python log("!!! JAR SUCCESS !!! Block verified by Void.")
-          if (line.includes('accepted')) {
-             console.log('!!! JAR SUCCESS !!! Block verified by Void.');
-          }
-          
-          if (line.includes('speed') || line.includes('error') || line.includes('miner')) {
-            io.emit('mining_status', line.trim());
-          }
-        });
+    if (restartCount >= MAX_RESTARTS) {
+      console.error('[MINER] Too many crashes. Disabling auto-restart.');
+      io.emit('mining_status', { type: 'error', message: 'Mining halted: Too many crash loops.', code: 'CRASH_LOOP' });
+      return;
+    }
 
-        xmrigProcess.on('error', (err) => {
-          console.error('[MINER] Error:', err.message);
-          io.emit('mining_status', `error: ${err.message}`);
-        });
+    try {
+      console.log('[MINER] Spawning XMRig...');
+      xmrigProcess = spawn(xmrigPath, ["-o", POOL_URL, "-u", USER, "-p", PASS, "--http-enabled", "--http-port", "6000"]);
+      
+      io.emit('mining_status', { type: 'info', message: 'Process spawned.' });
 
-        xmrigProcess.on('close', (code) => {
-          console.log(`[MINER] Process exited with code ${code}`);
-          io.emit('mining_status', 'Miner stopped.');
-        });
-      } catch (err) {
-        console.error('[MINER] Spawn error:', err);
-      }
-    });
+      xmrigProcess.stdout?.on('data', (data) => {
+        const line = data.toString().trim();
+        const lowerLine = line.toLowerCase();
+        
+        // Structure the output
+        if (lowerLine.includes('accepted')) {
+          io.emit('mining_status', { type: 'success', message: 'Block accepted by pool.', data: line });
+          console.log('!!! JAR SUCCESS !!! Block verified by Void.');
+        } else if (lowerLine.includes('speed')) {
+          io.emit('mining_status', { type: 'telemetry', message: 'Hashrate update', data: line });
+        } else if (lowerLine.includes('error')) {
+          io.emit('mining_status', { type: 'error', message: line });
+        } else if (lowerLine.includes('miner') || lowerLine.includes('ready')) {
+          io.emit('mining_status', { type: 'info', message: line });
+        }
+      });
+
+      xmrigProcess.stderr?.on('data', (data) => {
+        const errStr = data.toString().trim();
+        console.error('[MINER] STDERR:', errStr);
+        io.emit('mining_status', { type: 'error', message: `STDERR: ${errStr}` });
+      });
+
+      xmrigProcess.on('error', (err) => {
+        console.error('[MINER] Process error:', err.message);
+        io.emit('mining_status', { type: 'error', message: `Execution error: ${err.message}` });
+      });
+
+      xmrigProcess.on('close', (code) => {
+        console.log(`[MINER] Process exited with code ${code}`);
+        xmrigProcess = null;
+        
+        if (code !== 0 && code !== null) {
+          io.emit('mining_status', { type: 'error', message: `Miner exited unexpectedly (code ${code}).`, code: 'EXIT_FAILURE' });
+          // Attempt restart
+          setTimeout(startMining, 5000);
+        } else {
+          io.emit('mining_status', { type: 'info', message: 'Miner stopped.' });
+        }
+      });
+    } catch (err: any) {
+      console.error('[MINER] Unexpected error:', err);
+      io.emit('mining_status', { type: 'error', message: `Critical fault: ${err.message}` });
+    }
   }
 
   // Handle process cleanup
   const cleanup = () => {
     console.log('[SERVER] Shutting down...');
+    miningEnabled = false;
     if (xmrigProcess) {
       console.log('[MINER] Terminating XMRig...');
-      xmrigProcess.kill();
+      xmrigProcess.kill('SIGTERM');
     }
     if (hardwarePort && hardwarePort.isOpen) {
       hardwarePort.close();
