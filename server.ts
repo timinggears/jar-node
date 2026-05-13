@@ -15,6 +15,27 @@ async function startServer() {
     cors: { origin: "*" }
   });
 
+  // --- SUBSCRIPTION LOGIC ---
+  io.on('connection', (socket) => {
+    console.log(`[CLIENT] Connected: ${socket.id}`);
+    
+    socket.on('message', (msg: string) => {
+      if (msg.startsWith('SUBSCRIBE:')) {
+        const room = msg.split(':')[1];
+        socket.join(room);
+        socket.emit('log', `Subscribed to stream: ${room}`);
+      } else if (msg.startsWith('UNSUBSCRIBE:')) {
+        const room = msg.split(':')[1];
+        socket.leave(room);
+        socket.emit('log', `Unsubscribed from stream: ${room}`);
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`[CLIENT] Disconnected: ${socket.id}`);
+    });
+  });
+
   const PORT = process.env.APP_PORT ? parseInt(process.env.APP_PORT) : 3000;
   
   // --- MINING IDENTITY ---
@@ -50,7 +71,7 @@ async function startServer() {
         
         parser.on('data', (line: string) => {
           if (line.startsWith('!S|')) {
-            io.emit('telemetry', line);
+            io.to('telemetry').emit('telemetry', line);
           }
         });
 
@@ -91,10 +112,10 @@ async function startServer() {
       const fakeSeed = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
       const telemetryLine = `!S|${fakeSeed}|${jitter.toFixed(4)}|${vNodal.toFixed(4)}|0.00|${freq.toFixed(2)}`;
       
-      io.emit('telemetry', telemetryLine);
+      io.to('telemetry').emit('telemetry', telemetryLine);
       
       // Also emit raw system stats for more "real" feel
-      io.emit('system_stats', {
+      io.to('system_stats').emit('system_stats', {
         load: os.loadavg(),
         mem: { total: totalMem, free: freeMem, usage: memUsage },
         uptime: os.uptime(),
@@ -123,7 +144,7 @@ async function startServer() {
     // Check if binary exists
     if (!fs.existsSync(xmrigPath)) {
       console.log('[MINER] XMRig binary not found at ' + xmrigPath);
-      io.emit('mining_status', { type: 'error', message: 'Binary not found. Reservoir-only mode.', code: 'ENOENT' });
+      io.to('mining_status').emit('mining_status', { type: 'error', message: 'Binary not found. Reservoir-only mode.', code: 'ENOENT' });
       return;
     }
 
@@ -138,7 +159,7 @@ async function startServer() {
         await promisify(exec)(`chmod +x ${xmrigPath}`);
       } catch (chmodErr) {
         console.error('[MINER] Failed to set permissions:', chmodErr);
-        io.emit('mining_status', { type: 'error', message: 'Execution permission denied.', code: 'EACCES' });
+        io.to('mining_status').emit('mining_status', { type: 'error', message: 'Execution permission denied.', code: 'EACCES' });
         return;
       }
     }
@@ -154,7 +175,7 @@ async function startServer() {
 
     if (restartCount >= MAX_RESTARTS) {
       console.error('[MINER] Too many crashes. Disabling auto-restart.');
-      io.emit('mining_status', { type: 'error', message: 'Mining halted: Too many crash loops.', code: 'CRASH_LOOP' });
+      io.to('mining_status').emit('mining_status', { type: 'error', message: 'Mining halted: Too many crash loops.', code: 'CRASH_LOOP' });
       return;
     }
 
@@ -162,7 +183,7 @@ async function startServer() {
       console.log('[MINER] Spawning XMRig...');
       xmrigProcess = spawn(xmrigPath, ["-o", POOL_URL, "-u", USER, "-p", PASS, "--http-enabled", "--http-port", "6000"]);
       
-      io.emit('mining_status', { type: 'info', message: 'Process spawned.' });
+      io.to('mining_status').emit('mining_status', { type: 'info', message: 'Process spawned.' });
 
       xmrigProcess.stdout?.on('data', (data) => {
         const line = data.toString().trim();
@@ -170,26 +191,26 @@ async function startServer() {
         
         // Structure the output
         if (lowerLine.includes('accepted')) {
-          io.emit('mining_status', { type: 'success', message: 'Block accepted by pool.', data: line });
+          io.to('mining_status').emit('mining_status', { type: 'success', message: 'Block accepted by pool.', data: line });
           console.log('!!! JAR SUCCESS !!! Block verified by Void.');
         } else if (lowerLine.includes('speed')) {
-          io.emit('mining_status', { type: 'telemetry', message: 'Hashrate update', data: line });
+          io.to('mining_status').emit('mining_status', { type: 'telemetry', message: 'Hashrate update', data: line });
         } else if (lowerLine.includes('error')) {
-          io.emit('mining_status', { type: 'error', message: line });
+          io.to('mining_status').emit('mining_status', { type: 'error', message: line });
         } else if (lowerLine.includes('miner') || lowerLine.includes('ready')) {
-          io.emit('mining_status', { type: 'info', message: line });
+          io.to('mining_status').emit('mining_status', { type: 'info', message: line });
         }
       });
 
       xmrigProcess.stderr?.on('data', (data) => {
         const errStr = data.toString().trim();
         console.error('[MINER] STDERR:', errStr);
-        io.emit('mining_status', { type: 'error', message: `STDERR: ${errStr}` });
+        io.to('mining_status').emit('mining_status', { type: 'error', message: `STDERR: ${errStr}` });
       });
 
       xmrigProcess.on('error', (err) => {
         console.error('[MINER] Process error:', err.message);
-        io.emit('mining_status', { type: 'error', message: `Execution error: ${err.message}` });
+        io.to('mining_status').emit('mining_status', { type: 'error', message: `Execution error: ${err.message}` });
       });
 
       xmrigProcess.on('close', (code) => {
@@ -197,16 +218,16 @@ async function startServer() {
         xmrigProcess = null;
         
         if (code !== 0 && code !== null) {
-          io.emit('mining_status', { type: 'error', message: `Miner exited unexpectedly (code ${code}).`, code: 'EXIT_FAILURE' });
+          io.to('mining_status').emit('mining_status', { type: 'error', message: `Miner exited unexpectedly (code ${code}).`, code: 'EXIT_FAILURE' });
           // Attempt restart
           setTimeout(startMining, 5000);
         } else {
-          io.emit('mining_status', { type: 'info', message: 'Miner stopped.' });
+          io.to('mining_status').emit('mining_status', { type: 'info', message: 'Miner stopped.' });
         }
       });
     } catch (err: any) {
       console.error('[MINER] Unexpected error:', err);
-      io.emit('mining_status', { type: 'error', message: `Critical fault: ${err.message}` });
+      io.to('mining_status').emit('mining_status', { type: 'error', message: `Critical fault: ${err.message}` });
     }
   }
 

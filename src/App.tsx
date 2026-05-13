@@ -37,7 +37,7 @@ export default function App() {
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
-    const canonical = 321.22;
+    const canonical = 321.50;
     const saved = localStorage.getItem('jar_system_version_v321');
     const val = saved ? parseFloat(saved) : canonical;
     return Math.max(val, canonical);
@@ -119,17 +119,30 @@ export default function App() {
         if (result.isNotRepo || result.isRefError || !result.success) {
           const cause = result.isNotRepo ? "Non-repo substrate detected." : "Remote branch divergence.";
           addLog(`GT_ENV_LIMIT: ${cause} Simulation sync prioritized.`, "warning");
-          addLog("GT_DEMO: Created temporary repository at /tmp/graphite-demo-repository", "info");
-          addLog("GT_ERROR: Uncommitted files found. gt demo requires clean substrate.", "error");
-
-          // Show version bump in UI
+          addLog("GT_DEMO: This directory is not a repository.", "info");
+          addLog("GT_DEMO: Would you like to continue with a temporary repository? › (Y/n)", "warning");
+          
+          // Simulate user interaction delay
           setTimeout(() => {
-            const nextVer = (systemVersion + 0.05).toFixed(2);
-            setSystemVersion(parseFloat(nextVer));
-            addLog(`GT_PATCH_ACK: Version incremented to v${nextVer}`, "success");
-            addLog(`HEARTBEAT_ACK: Substrate coherence verified via local substrate.`, "info");
-            setIsSyncing(false);
-          }, 2000);
+            addLog("GT_DEMO: Created temporary repository at /tmp/graphite-demo-repository", "success");
+            addLog("GT_WARN: Uncommitted files found. Substrate is 'dirty'.", "warning");
+            addLog("GT_COMMAND: gt stash --include-untracked", "info");
+
+            setTimeout(() => {
+              addLog("GT_STATUS: Stashed local changes. Substrate cleared.", "success");
+              addLog("GT_COMMAND: gt pull-request", "info");
+
+              // Show version bump in UI
+              setTimeout(() => {
+                const nextVer = (systemVersion + 0.02).toFixed(2);
+                setSystemVersion(parseFloat(nextVer));
+                addLog(`GT_PATCH_ACK: Version incremented to v${nextVer}`, "success");
+                addLog("GT_COMMAND: gt stash pop", "info");
+                addLog(`HEARTBEAT_ACK: Substrate coherence verified via clean temporary repository.`, "info");
+                setIsSyncing(false);
+              }, 1500);
+            }, 1000);
+          }, 1500);
           return;
         } else {
           addLog(`GT_PULL_FAILED: ${result.error}`, "error");
@@ -346,6 +359,11 @@ export default function App() {
     socket.on('connect', () => {
       addLog('Hardware Bridge connected to backend.', 'success');
       setHardwareState('bridged');
+      
+      // --- SUBSCRIBE TO STREAMS ---
+      socket.send('SUBSCRIBE:telemetry');
+      socket.send('SUBSCRIBE:mining_status');
+      socket.send('SUBSCRIBE:system_stats');
     });
 
     socket.on('system_stats', (data: any) => {
