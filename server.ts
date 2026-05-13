@@ -73,6 +73,37 @@ async function startServer() {
     }
   }
 
+  // --- HARDWARE / SIMULATION TELEMETRY ---
+  setInterval(async () => {
+    if (hardwarePort && hardwarePort.isOpen) return;
+
+    // Generate telemetry based on REAL system load when hardware is missing
+    const load = os.loadavg()[0]; // 1 min load
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const memUsage = 1 - (freeMem / totalMem);
+    
+    // Map system metrics to "Tachyonic" terms
+    // jitter -> system load (scaled)
+    // vNodal -> memory usage (scaled)
+    const jitter = Math.min(1.0, load / (os.cpus().length || 1));
+    const vNodal = memUsage;
+    const freq = 35000 + (load * 1000); // Frequency modulated by load
+    
+    const fakeSeed = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
+    const telemetryLine = `!S|${fakeSeed}|${jitter.toFixed(4)}|${vNodal.toFixed(4)}|0.00|${freq.toFixed(2)}`;
+    
+    io.emit('telemetry', telemetryLine);
+    
+    // Also emit raw system stats for more "real" feel
+    io.emit('system_stats', {
+      load: os.loadavg(),
+      mem: { total: totalMem, free: freeMem, usage: memUsage },
+      uptime: os.uptime(),
+      cpus: os.cpus().length
+    });
+  }, 100);
+
   findAndOpenPort();
 
   // --- XMRIG INTEGRATION ---
@@ -141,6 +172,24 @@ async function startServer() {
 
   // Start miner
   startMining();
+
+  // --- SYSTEM SCAN ENDPOINT ---
+  app.get('/api/system/scan', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const glob = await import('glob');
+      const files = await glob.glob('**/*', { ignore: ['node_modules/**', 'dist/**', '.git/**'], nodir: true });
+      let totalSize = 0;
+      files.forEach(f => {
+        try {
+          totalSize += fs.statSync(f).size;
+        } catch (e) {}
+      });
+      res.json({ success: true, files: files.length, size: totalSize });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
 
   // --- GIT SYNC BRIDGE ---
   app.post('/api/git/sync', async (req, res) => {

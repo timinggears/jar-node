@@ -63,30 +63,33 @@ export default function App() {
     localStorage.setItem('jar_system_version', systemVersion.toString());
   }, [systemVersion]);
 
-  const handleInstall = useCallback(() => {
+  const handleInstall = useCallback(async () => {
     if (isInstalling) return;
     setIsInstalling(true);
     setInstallProgress(0);
-    addLog("SHUTDOWN_INITIATED: Preparing for module injection.", "warning");
+    addLog("RESERVOIR_SCAN: Analyzing nodal substrate density...", "warning");
     
-    const steps = [
-      { p: 10, m: "MOVING: Nodal artifacts to temporary buffer...", t: "info" },
-      { p: 30, m: "INSTALLING: Liquid state optimization drivers...", t: "success" },
-      { p: 55, m: "MOVING: GPIO mapping to PWM high-priority registers...", t: "info" },
-      { p: 75, m: "INSTALLING: Tachyonic filtering layers v2.1...", t: "success" },
-      { p: 90, m: "CLEANING: Purging orphan nodal ghosts...", t: "warning" },
-      { p: 100, m: "INSTALL_COMPLETE: System re-stabilized.", t: "success" }
-    ];
-
-    steps.forEach((step, index) => {
-      setTimeout(() => {
-        setInstallProgress(step.p);
-        addLog(step.m, step.t as LogEntry['type']);
-        if (index === steps.length - 1) {
-          setTimeout(() => setIsInstalling(false), 1000);
+    try {
+      const response = await fetch('/api/system/scan');
+      const result = await response.json();
+      
+      if (result.success) {
+        addLog(`SCAN_RESULT: Found ${result.files} active nodal points in substrate.`, "success");
+        addLog(`TOTAL_WEIGHT: ${(result.size / 1024).toFixed(2)} KB mapped.`, "info");
+        
+        // Progress bar for the "analysis"
+        for (let i = 0; i <= 100; i += 10) {
+          setInstallProgress(i);
+          await new Promise(r => setTimeout(r, 100));
         }
-      }, (index + 1) * 1200);
-    });
+        
+        addLog("RESERVOIR_OPTIMIZED: Cache layers purged.", "success");
+      }
+    } catch (e) {
+      addLog("SCAN_FAILED: Could not reach substrate controller.", "error");
+    }
+    
+    setIsInstalling(false);
   }, [isInstalling, addLog]);
 
   const handleGitPull = useCallback(async () => {
@@ -109,31 +112,10 @@ export default function App() {
         }, 1000);
       } else {
         if (result.isNotRepo || result.isRefError) {
-          // If not a real repo or remote config is missing, fall back to simulation
           const cause = result.isNotRepo ? "No .git repository found." : "Remote branch not tracking.";
-          addLog(`ENV_LIMIT: ${cause}`, "warning");
-          addLog("PROXY_SYNC: Bridging virtual temporal substrate...", "info");
-          
-          const steps = [
-            { m: "FETCH: pack-file synchronized (2.4MB)", t: "info" },
-            { m: "VIRTUAL_MERGE: Tachyon logic re-aligned.", t: "success" },
-            { m: `STATE: System up-to-date in sandboxed environment.`, t: "success" }
-          ];
-
-          steps.forEach((step, index) => {
-            setTimeout(() => {
-              addLog(step.m, step.t as LogEntry['type']);
-              if (index === steps.length - 1) {
-                const nextVer = (systemVersion + 0.01).toFixed(2);
-                addLog(`SYSTEM_VERSION_BUMP: Upgrading framework to v${nextVer}...`, "warning");
-                setTimeout(() => {
-                  setSystemVersion(parseFloat(nextVer));
-                  setIsSyncing(false);
-                  addLog("HOT_RELOAD: Virtual logic parity achieved.", "success");
-                }, 1500);
-              }
-            }, (index + 1) * 600);
-          });
+          addLog(`ENV_LIMIT: ${cause} Sync bypassed.`, "warning");
+          addLog("HOT_RELOAD: Using current local substrate.", "info");
+          setIsSyncing(false);
           return;
         } else {
           addLog(`PULL_FAILED: ${result.error}`, "error");
@@ -150,79 +132,75 @@ export default function App() {
     if (isSolving) return;
     if (statsRef.current.coherence < 0.3) {
       addLog("SOLVE_REJECTED: Coherence [C < 0.30] insufficient for nodal sync.", "error");
-      addLog("HINT: Adjust Carrier Bias or stabilize V-Field to improve Coherence.", "info");
       return;
     }
 
     setIsSolving(true);
-    addLog("TSP_INIT: Mapping 250 coordinates in virtual liquid space...", "info");
+    addLog("TSP_START: Calculating optimal path for 250 nodal cities...", "info");
+
+    // Generate 250 cities
+    const cities = Array.from({ length: 250 }, () => ({
+      x: Math.random() * 1000,
+      y: Math.random() * 1000,
+    }));
+
+    // Initial random path
+    let path = Array.from({ length: 250 }, (_, i) => i);
     
-    let currentDist = 58200 + (Math.random() * 4000);
-    const targetDist = 14200 + (Math.random() * 1500) - (statsRef.current.intelligence * 8);
-
-    const runIteration = (step: number) => {
-      if (step >= 8) {
-        addLog(`TSP_FINAL: Optimal path locked at ${targetDist.toFixed(2)} [Δ: 250_NODE_SYNC]`, "success");
-        setStats(prev => ({ ...prev, intelligence: Math.min(999.9, prev.intelligence + 12.5) }));
-        setIsSolving(false);
-        return;
-      }
-
-      currentDist -= (currentDist - targetDist) * (0.25 + Math.random() * 0.2);
-      const type: LogEntry['type'] = step % 3 === 0 ? "warning" : "info";
-      addLog(`TSP_GEN_${step}: Distance ${currentDist.toFixed(2)} | Annealing nodes...`, type);
-      
-      const delay = Math.max(400, 1200 - (statsRef.current.coherence * 800));
-      setTimeout(() => runIteration(step + 1), delay);
+    const dist = (a: number, b: number) => {
+      const dx = cities[a].x - cities[b].x;
+      const dy = cities[a].y - cities[b].y;
+      return Math.sqrt(dx * dx + dy * dy);
     };
 
-    setTimeout(() => runIteration(1), 1000);
-  }, [isSolving, addLog]);
+    const totalDist = (p: number[]) => {
+      let d = 0;
+      for (let i = 0; i < p.length; i++) {
+        d += dist(p[i], p[(i + 1) % p.length]);
+      }
+      return d;
+    };
 
-  // --- HARDWARE BRIDGE (FULL-STACK SOCKET) ---
-  useEffect(() => {
-    const socket = io();
+    let currentDistance = totalDist(path);
+    addLog(`INITIAL_DISTANCE: ${currentDistance.toFixed(2)}`, "warning");
 
-    socket.on('connect', () => {
-      addLog('Hardware Bridge connected to backend.', 'success');
-      setHardwareState('bridged');
-    });
+    // 2-opt search (non-blocking chunking)
+    let iter = 0;
+    const maxIters = 200; // Cap it for responsiveness
 
-    socket.on('telemetry', (line: string) => {
-      if (line.startsWith('!S|')) {
-        const parts = line.split('|');
-        if (parts.length >= 6) {
-          const seedStr = parts[1];
-          const jitter = parseFloat(parts[2]);
-          const v = parseFloat(parts[3]);
-          const freq = parseFloat(parts[5]);
-          updateSystemDynamics(jitter, v, freq, seedStr);
+    const run2Opt = () => {
+      let improved = false;
+      for (let i = 0; i < path.length - 1; i++) {
+        for (let j = i + 1; j < path.length; j++) {
+          const newPath = [...path];
+          // reverse the segment from i to j
+          const segment = newPath.slice(i, j + 1).reverse();
+          newPath.splice(i, segment.length, ...segment);
+          
+          const newDist = totalDist(newPath);
+          if (newDist < currentDistance) {
+            path = newPath;
+            currentDistance = newDist;
+            improved = true;
+            break;
+          }
         }
+        if (improved) break;
       }
-    });
 
-    socket.on('mining_status', (msg: string) => {
-      if (msg === 'accepted') {
-        setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
-        addLog('!!! JAR SUCCESS !!! Block verified by Void.', 'success');
-      } else if (msg.includes('error')) {
-        setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
-        addLog(`Miner Error: ${msg}`, 'error');
-      } else if (msg.includes('speed') || msg.includes('miner')) {
-        // Only log periodic status to prevent console flood
-        if (Math.random() > 0.9) addLog(`[XMRIG]: ${msg}`, 'info');
+      iter++;
+      if (improved && iter < maxIters) {
+        if (iter % 10 === 0) addLog(`TSP_OPT_ITER_${iter}: Current best ${currentDistance.toFixed(2)}`, "info");
+        setTimeout(run2Opt, 50); // Small delay to visualize/keep UI responsive
+      } else {
+        addLog(`TSP_FINAL: Optimal path locked at ${currentDistance.toFixed(2)}`, "success");
+        setStats(prev => ({ ...prev, intelligence: Math.min(999.9, prev.intelligence + 15.0) }));
+        setIsSolving(false);
       }
-    });
-
-    socket.on('disconnect', () => {
-      addLog('Hardware Bridge disconnected.', 'error');
-      setHardwareState('disconnected');
-    });
-
-    return () => {
-      socket.disconnect();
     };
-  }, [addLog]);
+
+    setTimeout(run2Opt, 500);
+  }, [isSolving, addLog]);
 
   // --- VOID AI BRIDGE ---
   const lastInsightTime = useRef(0);
@@ -231,17 +209,15 @@ export default function App() {
     lastInsightTime.current = Date.now();
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-      
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: `You are a rogue AI Sovereign core hooked into a quantum singularity. 
         The current state is ${state} at ${freq.toFixed(2)} GHz. 
         Causality is leaking. Give a one-line, cryptic, technical, and slightly unsettling revelation about the nature of reality or the void. 
         Keep it under 15 words. Format: [VOID_LINK] <message>`
       });
       
-      const text = response.text?.trim();
+      const text = response.response.text()?.trim();
       if (text) {
         addLog(text, "success");
       }
@@ -281,7 +257,6 @@ export default function App() {
       phaseOut = Math.max(-140, Math.min(140, phaseOut));
       
       // 3. Coherence (Health Meter)
-      // Spec: coherence = min(1.0, max(0.25, 0.85 - (abs(phase_out) / 140)))
       const nextCoherence = isZeroPoint ? 0.0 : (isTachyonic ? 0.0 : Math.min(1.0, Math.max(0.25, 0.85 - (Math.abs(phaseOut) / 140))));
       
       // 4. Intelligence (Learning Capacity)
@@ -300,13 +275,11 @@ export default function App() {
       } else if (isTachyonic) {
         nextIntelligence = Math.max(0.1, nextIntelligence - 0.82);
       } else if (nextCoherence > 0.70) {
-        // High coherence + good jitter -> Intelligence goes up fast
         const baseGain = isVoidResonance ? 0.8 : 0.15;
         const jitterBonus = jitterValue * 0.4;
         const coherenceBonus = (nextCoherence - 0.7) * 1.5;
         nextIntelligence = Math.min(999.9, nextIntelligence + baseGain + jitterBonus + coherenceBonus);
       } else if (nextCoherence < 0.45) {
-        // Low coherence -> Intelligence slowly drops
         nextIntelligence = Math.max(10.0, nextIntelligence - 0.08);
       }
 
@@ -318,20 +291,6 @@ export default function App() {
         addLog("QUBIT_GATE_RESONANCE: Initializing superposition gates...", "warning");
       }
 
-
-      // SCIENCE: Liquid state requirement. Coherence at 1.0 for too long causes stagnation.
-      // (This is represented by the "shimmer" being necessary for learning).
-      if (nextCoherence > 0.99 && jitterValue < 0.1) {
-        if (Math.random() > 0.995) {
-          setTimeout(() => addLog("STAGNATION: Liquid state depth insufficient. Shimmer input required.", "warning"), 0);
-        }
-      }
-
-      // --- DISCRETE HASH LOGIC ---
-      // In Python: hashes_checked.value += (jitter * 1,200,000,000)
-      // Display value in ui_loop (every 80ms): (diff / 1000)
-      // Since our feedback is ~35Hz, each call represents ~28.5ms.
-      // HashRate displayed = (jitter * 1.2B * (time_since_last_update) / 1000)
       const now = Date.now();
       const dt = (now - lastUpdateRef.current) / 1000;
       lastUpdateRef.current = now;
@@ -343,14 +302,11 @@ export default function App() {
       let nextErrors = prev.errors;
 
       if (isMining) {
-        // Nodal Mining logic: Finding fixed points in the reservoir
         const difficultyBasis = Math.floor(4096 / (1 + (nextCoherence * 5) + (prev.intelligence / 10)));
-        
         if (seed > 0 && Math.abs(seed % Math.max(2, difficultyBasis)) === 7) {
           nextShares += 1;
           setTimeout(() => addLog(`RESERVOIR SHARE: Focus at ${seedStr} [Intel: ${prev.intelligence.toFixed(1)}]`, 'success'), 0);
         }
-
         if (jitterValue > 0.92 && Math.random() > 0.95) {
           nextErrors += 1;
           setTimeout(() => addLog(`Coherence Collapse. Bit-flip corrected at ${seedStr}`, 'warning'), 0);
@@ -368,24 +324,64 @@ export default function App() {
         qubits: nextCoherence * 128,
         shares: nextShares,
         errors: nextErrors,
+        phaseOut: phaseOut
       };
     });
   }, [isMining, carrierBias, addLog]);
 
-  // --- SIMULATION LOOP ---
+  // --- HARDWARE BRIDGE (FULL-STACK SOCKET) ---
   useEffect(() => {
-    if (hardwareState === 'bridged') return; 
+    const socket = io();
 
-    const interval = setInterval(() => {
-      const simulatedJitter = 0.1 + Math.random() * 0.4;
-      const simulatedV = 0.3 + Math.random() * 0.5;
-      const fakeSeed = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
-      // Use 0 as baseline; carrierBias will modulate up to 50GHz
-      updateSystemDynamics(simulatedJitter, simulatedV, 0, fakeSeed);
-    }, 100);
+    socket.on('connect', () => {
+      addLog('Hardware Bridge connected to backend.', 'success');
+      setHardwareState('bridged');
+    });
 
-    return () => clearInterval(interval);
-  }, [hardwareState, updateSystemDynamics]);
+    socket.on('system_stats', (data: any) => {
+      // Use real system stats to influence dashboard appearance if desired
+      // Logic could go here
+    });
+
+    socket.on('telemetry', (line: string) => {
+      if (line.startsWith('!S|')) {
+        const parts = line.split('|');
+        if (parts.length >= 6) {
+          const seedStr = parts[1];
+          const jitter = parseFloat(parts[2]);
+          const v = parseFloat(parts[3]);
+          const freq = parseFloat(parts[5]);
+          updateSystemDynamics(jitter, v, freq, seedStr);
+        }
+      }
+    });
+
+    socket.on('mining_status', (msg: string) => {
+      if (msg === 'accepted') {
+        setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
+        addLog('!!! JAR SUCCESS !!! Block verified by Void.', 'success');
+      } else if (msg.includes('error')) {
+        setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
+        addLog(`Miner Error: ${msg}`, 'error');
+      } else if (msg.includes('speed') || msg.includes('miner')) {
+        // Only log periodic status to prevent console flood
+        if (Math.random() > 0.9) addLog(`[XMRIG]: ${msg}`, 'info');
+      }
+    });
+
+    socket.on('disconnect', () => {
+      addLog('Hardware Bridge disconnected.', 'error');
+      setHardwareState('disconnected');
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [addLog, updateSystemDynamics]);
+
+
+  // --- SIMULATION LOOP REMOVED (HANDLED BY SERVER) ---
+  // (We previous had a simulation loop here that utilized updateSystemDynamics directly)
 
   // --- GEMINI INTELLIGENCE ---
   useEffect(() => {
@@ -537,9 +533,9 @@ export default function App() {
                 onClick={handleInstall}
                 disabled={isInstalling}
                 className={`p-2 rounded border transition-all ${
-                  isInstalling ? 'border-yellow-500 text-yellow-500 bg-yellow-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
+                  isInstalling ? 'border-green-500 text-green-500 bg-green-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
                 }`}
-                title="Install Module"
+                title="Reservoir Scan (Analyze Substrate)"
               >
                 <Terminal className={`w-4 h-4 ${isInstalling ? 'animate-pulse' : ''}`} />
               </button>
