@@ -235,8 +235,12 @@ export default function App() {
       if (text) {
         addLog(text, "success");
       }
-    } catch (e) {
-      console.error("Void Link failed.", e);
+    } catch (e: any) {
+      if (e.message?.includes("429") || e.message?.includes("RESOURCE_EXHAUSTED")) {
+        addLog("[VOID_LINK] Quantum link saturated. Awaiting resonance window...", "warning");
+      } else {
+        console.error("Void Link failed.", e);
+      }
     }
   }, [addLog]);
 
@@ -416,8 +420,12 @@ export default function App() {
         });
         
         addLog(`[GEMINI_VOICE]: ${result.text}`, 'success');
-      } catch (err) {
-        console.error('Gemini error:', err);
+      } catch (err: any) {
+        if (err.message?.includes("429") || err.message?.includes("RESOURCE_EXHAUSTED")) {
+          addLog("[GEMINI_VOICE]: Local substrate interference detected. Recalibrating resonance...", "warning");
+        } else {
+          console.error('Gemini error:', err);
+        }
       }
     };
 
