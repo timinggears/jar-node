@@ -38,7 +38,7 @@ export default function App() {
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
-    const saved = localStorage.getItem('jar_system_version');
+    const saved = localStorage.getItem('jar_system_version_v3');
     return saved ? parseFloat(saved) : 321.05;
   });
   const [isSolving, setIsSolving] = useState(false);
@@ -60,7 +60,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('jar_system_version', systemVersion.toString());
+    localStorage.setItem('jar_system_version_v3', systemVersion.toString());
   }, [systemVersion]);
 
   const handleInstall = useCallback(async () => {
