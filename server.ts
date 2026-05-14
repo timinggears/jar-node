@@ -112,14 +112,18 @@ async function startServer() {
       const freeMem = os.freemem();
       const memUsage = 1 - (freeMem / totalMem);
       
-      const jitter = Math.min(1.0, load / (os.cpus().length || 1));
-      const vNodal = memUsage;
-      const freq = 35000 + (load * 1000); // Frequency modulated by load
+      const jitter = Math.min(1.0, (load * 1.5) / (os.cpus().length || 1));
+      const vNodal = Math.min(1.0, memUsage * 1.2);
+      const freq = 35000 + (load * 2000); // Frequency modulated by load
       
       const fakeSeed = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
       const telemetryLine = `!S|${fakeSeed}|${jitter.toFixed(4)}|${vNodal.toFixed(4)}|0.00|${freq.toFixed(2)}`;
       
       io.to('telemetry').emit('telemetry', telemetryLine);
+
+      if (Math.random() > 0.98) {
+        io.to('mining_status').emit('mining_status', { type: 'info', message: 'VMR_CORE: Syncing huge pages to local JAR substrate...' });
+      }
       
       // Also emit raw system stats for more "real" feel
       io.to('system_stats').emit('system_stats', {

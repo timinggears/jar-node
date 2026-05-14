@@ -35,6 +35,8 @@ export default function App() {
     jitter: 0.0,
     vNodal: 0.0,
     frequency: 35000,
+    hugePages: 0,
+    loadAvg: 0.0,
   });
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -391,16 +393,31 @@ export default function App() {
       let nextShares = prev.shares;
       let nextErrors = prev.errors;
 
+      // XMRig-VMR Optimization Logic
+      const isOverdrive = isOverdriveRef.current;
+      const overdriveMulti = isOverdrive ? 4.5 : 1.0;
+      const nextHugePages = isMiningRef.current ? Math.min(2048, prev.hugePages + (isOverdrive ? 64 : 16)) : Math.max(0, prev.hugePages - 32);
+      
+      if (isMiningRef.current && prev.hugePages < 1024 && nextHugePages >= 1024) {
+        setTimeout(() => addLog("XMRIG_VMR: Huge pages optimized. JIT-Compiler acceleration enabled.", "success"), 0);
+      }
+
       if (isMiningRef.current) {
-        const difficultyBasis = Math.floor(4096 / (1 + (nextCoherence * 5) + (prev.intelligence / 10)));
-        if (seed > 0 && Math.abs(seed % Math.max(2, difficultyBasis)) === 7) {
+        // Significantly decreased difficulty basis to "amp up" shares as requested
+        const baseDifficulty = 1024; // Was 4096
+        const difficultyBasis = Math.floor(baseDifficulty / (overdriveMulti * (1 + (nextCoherence * 8) + (prev.intelligence / 5))));
+        
+        // Use a more aggressive share detection logic
+        const shareThreshold = isOverdrive ? 15 : 7;
+        if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold || (isOverdrive && Math.random() > 0.96))) {
           nextShares += 1;
           const currentCount = nextShares;
-          setTimeout(() => addLog(`RESERVOIR SHARE #${String(currentCount).padStart(4, '0')}: Focus at ${seedStr} [Intel: ${prev.intelligence.toFixed(1)}]`, 'success'), 0);
+          setTimeout(() => addLog(`RESERVOIR SHARE #${String(currentCount).padStart(4, '0')}: Focus at ${seedStr} [Intel: ${prev.intelligence.toFixed(1)}] [VMR_AMP: ${overdriveMulti}x]`, 'success'), 0);
         }
-        if (jitterValue > 0.92 && Math.random() > 0.95) {
+        
+        if (jitterValue > 0.95 && Math.random() > 0.98) {
           nextErrors += 1;
-          setTimeout(() => addLog(`Coherence Collapse. Bit-flip corrected at ${seedStr}`, 'warning'), 0);
+          setTimeout(() => addLog(`COHERENCE_CRITICAL: Bit-flip corrected by VMR substrate at ${seedStr}`, 'warning'), 0);
         }
       }
       
@@ -415,7 +432,9 @@ export default function App() {
         qubits: nextCoherence * 128,
         shares: nextShares,
         errors: nextErrors,
-        phaseOut: phaseOut
+        phaseOut: phaseOut,
+        hugePages: nextHugePages,
+        loadAvg: jitterValue * 8 // Mock loadAvg proportional to jitter
       };
     });
   }, [addLog]); // Removed dependencies that change frequently

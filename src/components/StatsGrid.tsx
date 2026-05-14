@@ -19,6 +19,8 @@ export default function StatsGrid({ stats }: StatsGridProps) {
         <StatItem label="PH/s" value={stats.hashRate.toFixed(4)} color="text-[#ffff00]" />
         <StatItem label="QUBITS" value={stats.qubits.toFixed(4)} color="text-[#00ff00]" />
         <StatItem label="SHARES" value={stats.shares.toString().padStart(6, '0')} color="text-[#00ffff]" />
+        <StatItem label="HUGE_PAGES" value={stats.hugePages.toString().padStart(4, '0')} color="text-orange-400" />
+        <StatItem label="LOAD_AVG" value={stats.loadAvg.toFixed(2)} color="text-red-400" />
         <StatItem label="ERR_CORRECT" value={stats.errors.toString().padStart(6, '0')} color="text-[#ff00ff]" />
         
         <div className="w-[1px] h-8 bg-white/10 mx-2" />

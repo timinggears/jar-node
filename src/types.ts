@@ -13,6 +13,8 @@ export interface SystemStats {
   jitter: number;
   vNodal: number;
   frequency: number;
+  hugePages: number;
+  loadAvg: number;
 }
 
 export interface LogEntry {
