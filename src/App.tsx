@@ -697,7 +697,7 @@ export default function App() {
   return (
     <div className={`h-screen text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black transition-colors duration-700 relative ${isOverdrive ? 'bg-[#0a0000]' : 'bg-[#050505]'}`}>
       {/* Background Live Wallpaper */}
-      <div className="fixed inset-0 z-0 overflow-hidden">
+      <div className="fixed top-32 inset-x-0 bottom-0 z-0 overflow-hidden">
         <WarpVisualizer 
           coherence={stats.coherence} 
           jitter={stats.jitter} 
@@ -743,7 +743,7 @@ export default function App() {
       <div className="fixed inset-0 pointer-events-none z-[150] bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-10" />
       
       {/* SINGULARITY HEADER */}
-      <div className="fixed top-28 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
+      <div className="fixed top-12 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
