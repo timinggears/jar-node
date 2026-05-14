@@ -17,6 +17,8 @@ export interface SystemStats {
   loadAvg: number;
   neuralLoad: number;
   cognitiveDepth: number;
+  isOverdrive: boolean;
+  isQec: boolean;
 }
 
 export interface LogEntry {

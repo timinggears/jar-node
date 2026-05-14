@@ -9,6 +9,7 @@ interface SystemSettingsProps {
   isAiActive: boolean;
   setIsAiActive: (val: boolean) => void;
   systemVersion: number;
+  currentFreq: number;
 }
 
 export default function SystemSettings({
@@ -18,8 +19,11 @@ export default function SystemSettings({
   setIsOverdrive,
   isAiActive,
   setIsAiActive,
-  systemVersion
+  systemVersion,
+  currentFreq
 }: SystemSettingsProps) {
+  const freqKHz = currentFreq / 1000;
+  
   return (
     <div className="p-6 h-full overflow-y-auto space-y-8 custom-scrollbar">
       <div className="space-y-4">
@@ -42,7 +46,27 @@ export default function SystemSettings({
               onChange={(e) => setCarrierBias(parseInt(e.target.value))}
               className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic">Adjusts the fundamental frequency offset for the nodal reservoir.</p>
+            <p className="text-[9px] text-zinc-600 italic">Adjusts the fundamental frequency (BASE_FREQ) for the nodal anchor.</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] text-blue-500 uppercase font-bold">Harmonic Resonance</label>
+              <span className="text-xs font-mono text-blue-400">v1.46_LIVE: {freqKHz.toFixed(1)} KHz</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 2, 3].map(h => {
+                const base = 35000 + (carrierBias * 500);
+                const target = base * h;
+                const isActive = Math.abs(currentFreq - target) < 5000;
+                return (
+                  <div key={h} className={`border p-2 rounded text-center transition-colors ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5'}`}>
+                    <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300' : 'text-zinc-600'}`}>H_{h}</p>
+                    <p className={`text-[9px] font-mono ${isActive ? 'text-blue-400' : 'text-zinc-400'}`}>{(target / 1000).toFixed(1)}K</p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-lg">
@@ -51,7 +75,7 @@ export default function SystemSettings({
                 <Zap size={14} className={isOverdrive ? "text-yellow-400" : "text-zinc-600"} />
                 <span className="text-[10px] font-bold uppercase tracking-tight">Tachyonic Overdrive</span>
               </div>
-              <p className="text-[9px] text-zinc-500">Forces high-frequency excitations. [+350% Hashrate / -40% Coherence]</p>
+              <p className="text-[9px] text-zinc-500">Forces high-frequency excitations. Shift spectrum to 3rd/4th harmonics.</p>
             </div>
             <button 
               onClick={() => setIsOverdrive(!isOverdrive)}

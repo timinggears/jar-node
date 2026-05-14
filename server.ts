@@ -15,6 +15,10 @@ async function startServer() {
     cors: { origin: "*" }
   });
 
+  // --- TELEMETRY PARAMS ---
+  let systemBias = 0;
+  let isOverdrive = false;
+
   // --- SUBSCRIPTION LOGIC ---
   io.on('connection', (socket) => {
     console.log(`[CLIENT] Connected: ${socket.id}`);
@@ -29,6 +33,12 @@ async function startServer() {
         socket.leave(room);
         socket.emit('log', `Unsubscribed from stream: ${room}`);
       }
+    });
+
+    socket.on('hardware:params', (params: { bias: number, overdrive: boolean }) => {
+      systemBias = params.bias;
+      isOverdrive = params.overdrive;
+      console.log(`[HARDWARE] Params updated: Bias=${systemBias}, Overdrive=${isOverdrive}`);
     });
 
     socket.on('hardware:command', (cmd: string) => {
@@ -109,11 +119,11 @@ async function startServer() {
       // Generate telemetry based on REAL system load when hardware is missing
       // --- HARMONIC ANCHOR v146 PHYSICS ---
       const load = os.loadavg()[0];
-      const BASE_FREQ = 35000;
+      const BASE_FREQ = 35000 + (systemBias * 500); // Bias shifts base up to 85KHz
       
-      // Simulated voltage drift + jitter base
-      const v = 1.65 + (Math.sin(Date.now() / 2500) * 0.4) + (Math.random() * 0.05);
-      const jitter = Math.abs(v - 1.65) * (1.1 + load * 0.5);
+      const overdriveExcitation = isOverdrive ? 0.6 : 0;
+      const v = 1.65 + (Math.sin(Date.now() / 1500) * (0.4 + overdriveExcitation)) + (Math.random() * 0.1);
+      const jitter = Math.abs(v - 1.65) * (1.2 + load + (isOverdrive ? 1.5 : 0));
       
       const seedNum = (Math.floor(v * 10000000) >>> 0);
       const seedStr = seedNum.toString(16).padStart(8, '0').toUpperCase();
@@ -121,15 +131,15 @@ async function startServer() {
 
       // Harmonic Drive Modulation
       let currentFreq = BASE_FREQ + (jitter * 45000);
-      if (jitter > 0.4) {
-        // High excitation harmonic jumps
+      if (jitter > 0.4 || isOverdrive) {
         const roll = Math.random();
-        if (roll > 0.7) currentFreq = 2 * BASE_FREQ;
-        else if (roll > 0.45) currentFreq = 3 * BASE_FREQ;
+        if (roll > 0.5) currentFreq = 2 * BASE_FREQ;
+        else if (roll > 0.2) currentFreq = 3 * BASE_FREQ;
+        else if (isOverdrive && roll > 0.05) currentFreq = 4 * BASE_FREQ; 
       }
       
-      // Format: !S|seed|jitter|v|parity|freq
-      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(0)}`;
+      // Pin to 1.46 physics (always at least fundamental)
+      currentFreq = Math.max(BASE_FREQ, currentFreq);
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 

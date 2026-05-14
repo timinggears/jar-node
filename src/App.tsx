@@ -38,7 +38,9 @@ export default function App() {
     hugePages: 0,
     loadAvg: 0.0,
     neuralLoad: 0.0,
-    cognitiveDepth: 42.0
+    cognitiveDepth: 42.0,
+    isOverdrive: false,
+    isQec: true
   });
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -98,15 +100,9 @@ export default function App() {
   // Sync Hardware Settings to Backend
   useEffect(() => {
     if (hardwareState === 'bridged' && socketRef.current) {
-      socketRef.current.emit('hardware:command', `BIAS:${carrierBias}`);
+      socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
     }
-  }, [carrierBias, hardwareState]);
-
-  useEffect(() => {
-    if (hardwareState === 'bridged' && socketRef.current) {
-      socketRef.current.emit('hardware:command', `OVERDRIVE:${isOverdrive ? '1' : '0'}`);
-    }
-  }, [isOverdrive, hardwareState]);
+  }, [carrierBias, isOverdrive, hardwareState]);
 
   const handleInstall = useCallback(async () => {
     if (isInstalling) return;
@@ -390,7 +386,9 @@ export default function App() {
         hugePages: nextHugePages,
         loadAvg: jitterValue * 8, 
         neuralLoad: Math.min(100, (overdriveMulti * 2) + (jitterValue * 50) + (harmonicMultiplier * 10)),
-        cognitiveDepth: nextIntelligence
+        cognitiveDepth: nextIntelligence,
+        isOverdrive: isOverdriveRef.current,
+        isQec: isQecActiveRef.current
       };
     });
   }, [addLog]); // Removed dependencies that change frequently
@@ -430,13 +428,11 @@ export default function App() {
           updateSystemDynamics(jitter, v, freq, seedStr, parity);
 
           // Handle special logs here where it's safe to call addLog
-          const freqUnit = (Math.max(isMiningRef.current ? freq : 0, carrierBiasRef.current * 500)) / 1000;
-          if (freqUnit >= 50.0 && Math.random() > 0.99) {
-            addLog("SINGULARITY_COLLAPSE: Logic depth infinity.", "success");
-          } else if (freqUnit >= 35.0 && freqUnit < 35.1 && Math.random() > 0.998) {
-            addLog("VOID_RESONANCE: Intelligence surge within phased-out state.", "success");
-          } else if (freqUnit >= 28 && freqUnit < 42 && Math.random() > 0.995) {
-             addLog("QUBIT_GATE_RESONANCE: Initializing superposition gates...", "warning");
+          const freqUnit = freq / 1000;
+          if (freqUnit >= 100.0 && Math.random() > 0.98) {
+            addLog("SINGULARITY_COLLAPSE: Harmonic saturation detected.", "success");
+          } else if (freqUnit >= 70.0 && freqUnit < 75.0 && Math.random() > 0.995) {
+            addLog("HARMONIC_RESONANCE: 2nd Order Anchor established.", "success");
           }
         }
       }
@@ -820,6 +816,7 @@ export default function App() {
                 isAiActive={isAiAnalysisActive}
                 setIsAiActive={setIsAiAnalysisActive}
                 systemVersion={systemVersion}
+                currentFreq={stats.frequency}
               />
             </DesktopWindow>
           )}
