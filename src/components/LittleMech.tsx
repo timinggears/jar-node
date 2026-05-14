@@ -2,138 +2,108 @@ import { motion } from 'motion/react';
 
 export default function LittleMech({ miningState, isBoosted }: { miningState: 'idle' | 'mining' | 'success' | 'error', isBoosted?: boolean }) {
   const isExcited = miningState === 'success' || miningState === 'mining' || isBoosted;
-  const isError = miningState === 'error';
   const isOverdrive = isBoosted;
   
+  // FF6 Magitek Palette - Muted teals and industrial colors
+  const colors = {
+    armor: "#5A6A64",         // Muted teal armor
+    armorLight: "#8A9A94",    // Highlight
+    armorDark: "#2A3A34",     // Shadow
+    mechanical: "#3E3E3E",    // Dark joints
+    bronze: "#B08D57",        // Pipes/Accents
+    core: isOverdrive ? "#FF0044" : "#00FFCC", // Visor glow
+  };
+
   return (
     <motion.div
-      className="fixed top-48 right-4 z-[60] pointer-events-none"
-      initial={{ opacity: 0, x: 50, scale: 0.8 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      transition={{ delay: 3, duration: 1.2, ease: "easeOut" }}
+      className="fixed top-52 right-8 z-[60] pointer-events-none"
+      initial={{ opacity: 0, scale: 0 }}
+      animate={{ opacity: 1, scale: 1.5 }} // Scale up to make individual pixels visible
+      transition={{ delay: 3.5, type: "spring" }}
     >
       <motion.div
         animate={{
-          y: isExcited ? [0, -6, 0] : [0, -2, 0],
-          rotate: isOverdrive ? [-1, 1, -1] : 0
+          y: isExcited ? [0, -4, 0] : [0, -1, 0],
+          rotate: isOverdrive ? [-2, 2, -2] : 0
         }}
         transition={{
-          duration: isOverdrive ? 0.05 : (isExcited ? 0.3 : 4),
+          duration: isOverdrive ? 0.08 : 2,
           repeat: Infinity,
           ease: "easeInOut"
         }}
         className="relative"
       >
-        {/* Xenogears-style Mech (Weltall inspired) */}
+        {/* Pixel Art SVG with crispEdges */}
         <svg
-          width="90"
-          height="100"
-          viewBox="0 0 24 28"
+          width="64"
+          height="64"
+          viewBox="0 0 32 32"
           fill="none"
+          shapeRendering="crispEdges"
           xmlns="http://www.w3.org/2000/svg"
-          className={`filter transition-all duration-500 ${isOverdrive ? 'drop-shadow-[0_0_15px_rgba(0,255,255,0.6)]' : 'drop-shadow-[0_0_10px_rgba(0,0,0,0.5)]'}`}
         >
-          {/* Back Units / Propulsors (Sharp Weltall Wings) */}
-          <motion.path
-            d="M3 12L-2 6L4 16M21 12L26 6L20 16"
-            stroke={isOverdrive ? "#00FFFF" : "#1A202C"}
-            strokeWidth="1.5"
-            strokeLinejoin="round"
+          {/* Back Exhaust Pipe */}
+          <path d="M10 12h2v4h-2z" fill={colors.bronze} />
+          <path d="M12 10h2v2h-2z" fill={colors.armorDark} />
+
+          {/* Legs (Stout mechanical walker) */}
+          <path d="M12 24h2v4h-2z M18 24h2v4h-2z" fill={colors.mechanical} />
+          <path d="M11 28h4v2h-4z M17 28h4v2h-4z" fill={colors.armorDark} />
+
+          {/* Main Body Pod */}
+          <rect x="10" y="14" width="12" height="11" fill={colors.armor} />
+          <path d="M10 14h12v2H10z" fill={colors.armorLight} />
+          <path d="M10 23h12v2H10z" fill={colors.armorDark} />
+          <path d="M21 14v11h1v-11z" fill={colors.armorDark} />
+          
+          {/* Rivets */}
+          <path d="M11 16h1v1h-1z M20 16h1v1h-1z M11 22h1v1h-1z M20 22h1v1h-1z" fill={colors.armorDark} />
+
+          {/* Head Unit */}
+          <rect x="13" y="9" width="6" height="6" fill={colors.armor} />
+          <path d="M13 9h6v1h-6z" fill={colors.armorLight} />
+          
+          {/* Visor Glow */}
+          <motion.rect 
+            x="14" y="11" width="4" height="2" 
+            fill={colors.core}
             animate={{ 
-              rotate: isOverdrive ? [-10, 10, -10] : (isExcited ? [-5, 5, -5] : 0),
-              scale: isOverdrive ? [1, 1.1, 1] : 1
+              opacity: isOverdrive ? [1, 0, 1] : (isExcited ? [1, 0.4, 1] : 1)
             }}
+            transition={{ duration: isOverdrive ? 0.1 : 0.8, repeat: Infinity }}
           />
-
-          {/* Aggressive Legs */}
-          <path d="M9 22L6 27H10L11 22M15 22L18 27H14L13 22" fill="#10141D" />
           
-          {/* Weltall Lower Body / Waist */}
-          <path d="M7 16L5 21L12 24L19 21L17 16H7Z" fill="#1A202C" stroke="#2D3748" strokeWidth="0.5" />
-          
-          {/* Sharp Shoulders */}
-          <path d="M2 10L6 8V14L2 15V10Z" fill="#1A202C" stroke="#2D3748" strokeWidth="0.5" />
-          <path d="M22 10L18 8V14L22 15V10Z" fill="#1A202C" stroke="#2D3748" strokeWidth="0.5" />
+          {/* Upper Fins */}
+          <path d="M15 7h2v2h-2z" fill={colors.armorLight} />
+          <path d="M12 8h1v1h-1z M19 8h1v1h-1z" fill={colors.armorDark} />
 
-          {/* Torso Section */}
-          <path d="M6 10L5 16L12 19L19 16L18 10H6Z" fill="#2D3748" stroke="#1A202C" strokeWidth="0.5" />
-          
-          {/* Central Power Source (Zohar Point) */}
-          <motion.circle
-            cx="12"
-            cy="14"
-            r="1.2"
-            fill={isError ? "#FF0000" : (isOverdrive ? "#00FFFF" : (isExcited ? "#4FD1C5" : "#2D3748"))}
-            animate={{
-              scale: isOverdrive ? [1, 2, 1] : (isExcited ? [1, 1.4, 1] : 1),
-              opacity: isExcited ? [1, 0.4, 1] : 0.2
-            }}
-            transition={{ duration: isOverdrive ? 0.3 : 1, repeat: Infinity }}
-          />
-
-          {/* Head Unit (Weltall Shape) */}
+          {/* Arms */}
           <motion.g
-            animate={{
-              y: isOverdrive ? [-1, 1, -1] : (isExcited ? [-1, 0, -1] : 0)
-            }}
+            animate={{ x: isExcited ? [-1, 1, -1] : 0 }}
+            transition={{ duration: 0.2, repeat: Infinity }}
           >
-            <path d="M8 4L12 2L16 4V9H8V4Z" fill="#1A202C" stroke="#2D3748" strokeWidth="0.5" />
-            {/* Weltall Blade/Fins on head */}
-            <path d="M12 3L9 0L12 4L15 0L12 3Z" fill={isOverdrive ? "#00FFFF" : (isExcited ? "#4FD1C5" : "#718096")} />
-            
-            {/* Mono-eye / Visor */}
-            <motion.rect
-              x="10.5" y="5.5" width="3" height="1" rx="0.5"
-              fill={isError ? "#FF0000" : (isOverdrive ? "#00FFFF" : (isExcited ? "#4FD1C5" : "#2D3748"))}
-              animate={{
-                opacity: isOverdrive ? [1, 0.5, 1] : 1,
-              }}
-              transition={{ duration: 0.2, repeat: Infinity }}
-            />
+            <path d="M8 18h2v2H8z M22 18h2v2h-2z" fill={colors.mechanical} />
+            <path d="M7 19h2v5H7z M23 19h2v5h-2z" fill={colors.armorDark} />
           </motion.g>
 
-          {/* Arms (Weltall Claws/Sharp Hands) */}
-          <motion.path
-            d="M5 12V18L3 21M19 12V18L21 21"
-            stroke="#1A202C"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            animate={{
-              y: isOverdrive ? [-2, 2, -2] : 0,
-              rotate: isOverdrive ? [-3, 3, -3] : 0
-            }}
-          />
+          {/* Steam/Exhaust for Overdrive */}
+          {isOverdrive && (
+            <motion.g
+              animate={{ opacity: [0, 1, 0], y: [-2, -8] }}
+              transition={{ duration: 0.5, repeat: Infinity }}
+            >
+              <rect x="9" y="5" width="2" height="2" fill="white" opacity="0.6" />
+              <rect x="21" y="5" width="2" height="2" fill="white" opacity="0.6" />
+            </motion.g>
+          )}
         </svg>
 
-        {/* Tactical Overlay Text */}
+        {/* Retro UI Overlay */}
         {(miningState === 'mining' || isOverdrive) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0.8, 1, 0.8] }}
-            transition={{ duration: 0.5, repeat: Infinity }}
-            className={`absolute -left-16 top-0 text-[8px] font-black font-mono whitespace-nowrap bg-black/60 px-1 border-l-2 ${isOverdrive ? 'text-[#00FFFF] border-[#00FFFF]' : 'text-[#4FD1C5] border-[#4FD1C5]'}`}
-          >
-            {isOverdrive ? 'ID_SYSTEM: OVERDRIVE' : 'TARGET: NODAL_SYNC'}
-          </motion.div>
-        )}
-
-        {/* Power Surge Spark Effect when Overdrive */}
-        {isOverdrive && (
-          <div className="absolute inset-0 overflow-visible">
-            {[...Array(4)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute w-[2px] h-[2px] bg-cyan-400"
-                style={{ top: '50%', left: '50%' }}
-                animate={{
-                  x: [0, (Math.random() - 0.5) * 100],
-                  y: [0, (Math.random() - 0.5) * 100],
-                  opacity: [1, 0],
-                  scale: [1, 0]
-                }}
-                transition={{ duration: 0.4, repeat: Infinity, delay: i * 0.1 }}
-              />
-            ))}
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 pointer-events-none">
+            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-sm tracking-tighter ${isOverdrive ? 'bg-red-600 text-white animate-pulse shadow-[0_0_8px_rgba(255,0,0,0.5)]' : 'bg-teal-900/80 text-teal-300 border border-teal-500/30'}`}>
+              {isOverdrive ? 'BERSERK' : 'SYNC_OK'}
+            </span>
           </div>
         )}
       </motion.div>
