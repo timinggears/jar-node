@@ -48,6 +48,7 @@ export default function App() {
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
   const [miningState, setMiningState] = useState<MiningPhase>('idle');
+  const [lastSyncSuccess, setLastSyncSuccess] = useState(false);
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
 
   const statsRef = useRef(stats);
@@ -117,6 +118,9 @@ export default function App() {
       
       if (result.success) {
         addLog("GT_PULL_ACK: Pulse received. Realignment successful.", "success");
+        setLastSyncSuccess(true);
+        setTimeout(() => setLastSyncSuccess(false), 8000);
+        
         if (result.output) addLog(`OUTPUT: ${result.output.split('\n')[0]}`, "info");
         
         setTimeout(() => {
@@ -672,12 +676,29 @@ export default function App() {
               <button 
                 onClick={() => handleGitPull(true)}
                 disabled={isSyncing}
-                className={`p-2 rounded border transition-all ${
-                  isSyncing ? 'border-blue-500 text-blue-500 bg-blue-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
+                className={`p-2 rounded border transition-all relative ${
+                  isSyncing 
+                    ? 'border-blue-500 text-blue-500 bg-blue-500/10' 
+                    : lastSyncSuccess
+                    ? 'border-green-400 text-green-400 bg-green-400/20 shadow-[0_0_15px_rgba(74,222,128,0.5)] ring-2 ring-green-400/50'
+                    : 'border-white/10 text-white/40 hover:text-white/60'
                 }`}
                 title="Git Pull (Force Real Sync)"
               >
                 <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                
+                <AnimatePresence>
+                  {lastSyncSuccess && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.8 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-green-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded shadow-[0_0_10px_#22c55e]"
+                    >
+                      SYNC_COMPLETE
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </button>
                <div 
                 className={`p-2 rounded border transition-all ${
