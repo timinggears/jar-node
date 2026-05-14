@@ -71,9 +71,11 @@ export default function App() {
   isOverdriveRef.current = isOverdrive;
   const lastUpdateRef = useRef(Date.now());
 
+  const logCounterRef = useRef(0);
+
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     const newLog: LogEntry = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: `${Date.now()}-${logCounterRef.current++}`,
       timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
       message,
       type,
@@ -703,6 +705,7 @@ export default function App() {
         <AnimatePresence>
           {openWindows.includes('terminal') && (
             <DesktopWindow 
+              key="terminal"
               id="terminal" 
               title="Reservoir_Terminal" 
               icon={<Terminal size={16} />}
@@ -717,6 +720,7 @@ export default function App() {
 
           {openWindows.includes('stats') && (
             <DesktopWindow 
+              key="stats"
               id="stats" 
               title="System_Monitor" 
               icon={<Activity size={16} />}
@@ -739,6 +743,7 @@ export default function App() {
 
           {openWindows.includes('settings') && (
             <DesktopWindow 
+              key="settings"
               id="settings" 
               title="Central_Governance" 
               icon={<Settings size={16} />}
@@ -761,6 +766,7 @@ export default function App() {
 
           {openWindows.includes('files') && (
             <DesktopWindow 
+              key="files"
               id="files" 
               title="Substrate_Files" 
               icon={<Folder size={16} />}
@@ -775,6 +781,7 @@ export default function App() {
 
           {openWindows.includes('visualizer') && (
             <DesktopWindow 
+              key="visualizer"
               id="visualizer" 
               title="Vector_Topology" 
               icon={<Layout size={16} />}

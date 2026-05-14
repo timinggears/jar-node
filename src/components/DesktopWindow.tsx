@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 
 interface DesktopWindowProps {
   id: string;
+  key?: string | number;
   title: string;
   icon: ReactNode;
   children: ReactNode;
