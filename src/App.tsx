@@ -83,7 +83,7 @@ export default function App() {
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     const newLog: LogEntry = {
-      id: `${Date.now()}-${logCounterRef.current++}`,
+      id: `${Date.now()}-${logCounterRef.current++}-${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
       message,
       type,

@@ -3,7 +3,7 @@ import { Folder, File, ChevronRight, HardDrive, RefreshCw, GitBranch, Check } fr
 import { motion } from 'motion/react';
 
 export default function FileExplorer() {
-  const [files, setFiles] = useState<{name: string, size: number, type: string}[]>([]);
+  const [files, setFiles] = useState<{id: string, name: string, size: number, type: string}[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGitSyncing, setIsGitSyncing] = useState(false);
   const [gitStatus, setGitStatus] = useState<'clean' | 'synced'>('clean');
@@ -16,12 +16,13 @@ export default function FileExplorer() {
       if (data.success) {
         // Mocking some internal substrate structure
         setFiles([
-          { name: 'kernel_v3.bin', size: 1024 * 1024 * 4, type: 'system' },
-          { name: 'neural_weights.dat', size: 1024 * 512, type: 'data' },
-          { name: 'reservoir_config.json', size: 1024 * 4, type: 'config' },
-          { name: 'telemetry_log.001', size: 1024 * 128, type: 'log' },
+          { id: 'f1', name: 'kernel_v3.bin', size: 1024 * 1024 * 4, type: 'system' },
+          { id: 'f2', name: 'neural_weights.dat', size: 1024 * 512, type: 'data' },
+          { id: 'f3', name: 'reservoir_config.json', size: 1024 * 4, type: 'config' },
+          { id: 'f4', name: 'telemetry_log.001', size: 1024 * 128, type: 'log' },
           ...Array.from({ length: 5 }, (_, i) => ({
-            name: `nodal_artifact_${i+1}.ghost`,
+            id: `nodal_artifact_${i + 1}`,
+            name: `nodal_artifact_${i + 1}.ghost`,
             size: Math.random() * 1024,
             type: 'ghost'
           }))
@@ -117,7 +118,7 @@ export default function FileExplorer() {
             
             {files.map((file, i) => (
               <motion.div 
-                key={`${file.name}-${i}`}
+                key={file.id}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}

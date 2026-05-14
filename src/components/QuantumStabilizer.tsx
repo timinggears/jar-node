@@ -15,14 +15,17 @@ export default function QuantumStabilizer({
   onToggleQec,
   systemModel 
 }: QuantumStabilizerProps) {
-  const [errorHistory, setErrorHistory] = useState<number[]>([]);
+  const [errorHistory, setErrorHistory] = useState<{id: string, val: number}[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('09:42:01');
 
   useEffect(() => {
     const interval = setInterval(() => {
       setErrorHistory(prev => {
-        const next = [...prev, Math.random() * (1 - coherence)];
+        const next = [...prev, {
+          id: Math.random().toString(36).substr(2, 9),
+          val: Math.random() * (1 - coherence)
+        }];
         if (next.length > 20) return next.slice(1);
         return next;
       });
@@ -102,11 +105,11 @@ export default function QuantumStabilizer({
             {isQecActive ? '42.8 THz' : '0.0 THz'}
           </span>
           <div className="flex gap-1 h-4 items-end">
-            {errorHistory.map((err, i) => (
+            {errorHistory.map((item) => (
               <motion.div 
-                key={i}
+                key={item.id}
                 initial={{ height: 0 }}
-                animate={{ height: `${err * 100}%` }}
+                animate={{ height: `${item.val * 100}%` }}
                 className={`w-1 rounded-t-sm ${isQecActive ? 'bg-blue-400' : 'bg-red-500'}`}
               />
             ))}
