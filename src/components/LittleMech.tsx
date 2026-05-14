@@ -23,7 +23,7 @@ export default function LittleMech({ miningState, isBoosted }: { miningState: 'i
 
   return (
     <motion.div
-      className="fixed top-56 right-8 z-[60] pointer-events-none"
+      className="fixed top-44 right-8 z-[60] pointer-events-none"
       initial={{ opacity: 0, scale: 0 }}
       animate={{ opacity: 1, scale: 1.2 }} // Smaller scale
       transition={{ delay: 3.5, type: "spring" }}
