@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -13,6 +13,10 @@ import WarpVisualizer from './components/WarpVisualizer';
 import ConsoleLog from './components/ConsoleLog';
 import BootLoader from './components/BootLoader';
 import PetBay from './components/PetBay';
+import DesktopWindow from './components/DesktopWindow';
+import Taskbar from './components/Taskbar';
+import SystemSettings from './components/SystemSettings';
+import FileExplorer from './components/FileExplorer';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -52,6 +56,10 @@ export default function App() {
   const [miningState, setMiningState] = useState<MiningPhase>('idle');
   const [lastSyncSuccess, setLastSyncSuccess] = useState(false);
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
+
+  // OS State
+  const [openWindows, setOpenWindows] = useState<string[]>(['terminal', 'stats']);
+  const [activeWindow, setActiveWindow] = useState<string | null>('terminal');
 
   const statsRef = useRef(stats);
   statsRef.current = stats;
@@ -619,15 +627,57 @@ export default function App() {
         addLog(`ERROR: Invalid protocol: ${command}`, 'error');
     }
   }, [addLog, stats, hardwareState, handleGitPull, handleGitReset]);
+  const toggleWindow = useCallback((id: string) => {
+    setOpenWindows(prev => {
+      if (prev.includes(id)) {
+        if (activeWindow === id) {
+          const next = prev.filter(w => w !== id);
+          setActiveWindow(next.length > 0 ? next[next.length - 1] : null);
+          return next;
+        } else {
+          setActiveWindow(id);
+          return prev;
+        }
+      } else {
+        setActiveWindow(id);
+        return [...prev, id];
+      }
+    });
+  }, [activeWindow]);
+
+  const closeWindow = useCallback((id: string) => {
+    setOpenWindows(prev => {
+      const next = prev.filter(w => w !== id);
+      if (activeWindow === id) {
+        setActiveWindow(next.length > 0 ? next[next.length - 1] : null);
+      }
+      return next;
+    });
+  }, [activeWindow]);
 
   return (
-    <div className={`h-screen text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black transition-colors duration-700 ${isOverdrive ? 'bg-[#0a0000]' : 'bg-[#050505]'}`}>
-      {/* Background Grid Pattern */}
-      <div className={`fixed inset-0 pointer-events-none opacity-[0.03] transition-all duration-1000 ${isOverdrive ? 'opacity-[0.08] scale-110' : ''}`} 
-           style={{ 
-             backgroundImage: `linear-gradient(${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px), linear-gradient(90deg, ${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px)`,
-             backgroundSize: '40px 40px' 
-           }} />
+    <div className={`h-screen text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black transition-colors duration-700 relative ${isOverdrive ? 'bg-[#0a0000]' : 'bg-[#050505]'}`}>
+      {/* Background Live Wallpaper */}
+      <div className="fixed inset-0 z-0 overflow-hidden">
+        <WarpVisualizer 
+          coherence={stats.coherence} 
+          jitter={stats.jitter} 
+          frequency={stats.frequency} 
+          isInstalling={isInstalling}
+          installProgress={installProgress}
+          isAiActive={isAiAnalysisActive}
+          isSolving={isSolving}
+        />
+        {/* Background Grid Overlay */}
+        <div className={`absolute inset-0 pointer-events-none opacity-[0.03] transition-all duration-1000 ${isOverdrive ? 'opacity-[0.08] scale-110' : ''}`} 
+             style={{ 
+               backgroundImage: `linear-gradient(${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px), linear-gradient(90deg, ${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px)`,
+               backgroundSize: '80px 80px' 
+             }} />
+        
+        {/* VIGNETTE & CRUNCH */}
+        <div className="absolute inset-0 pointer-events-none bg-radial-[circle_at_center,_transparent_40%,_black_90%] opacity-40" />
+      </div>
 
       <AnimatePresence>
         {!isBooted ? (
@@ -636,7 +686,7 @@ export default function App() {
             initial={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 1.1, filter: 'blur(20px)' }}
             transition={{ duration: 0.8, ease: 'easeInOut' }}
-            className="fixed inset-0 z-50"
+            className="fixed inset-0 z-[200]"
           >
             <BootLoader onBoot={() => setIsBooted(true)} />
           </motion.div>
@@ -644,248 +694,156 @@ export default function App() {
       </AnimatePresence>
 
       {/* SCANLINE OVERLAY */}
-      <div className="fixed inset-0 pointer-events-none z-50 bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-20" />
+      <div className="fixed inset-0 pointer-events-none z-[150] bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-10" />
       
       <PetBay miningState={miningState} isOverdrive={isOverdrive} />
 
-      <motion.div 
-        animate={{ 
-          opacity: isBooted ? 1 : 0,
-          x: isOverdrive ? [0, -1, 1, -1, 1, 0] : 0 
-        }}
-        transition={{ 
-          opacity: { duration: 1, delay: 0.5 },
-          x: { duration: 0.1, repeat: Infinity, ease: "linear" }
-        }}
-        className="h-full max-w-[1400px] mx-auto w-full flex flex-col p-6 gap-6 overflow-hidden"
-      >
-        {/* HEADER SECTION */}
-        {hardwareState === 'disconnected' && (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg flex items-center justify-between gap-4 shrink-0 backdrop-blur-sm">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-yellow-500 animate-pulse" />
-              <div>
-                <p className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Awaiting Backend Link</p>
-                <p className="text-[10px] text-yellow-300/70 uppercase">
-                  Hardware bridge is offline. Running simulation mode. Ensure the server is running on your Raspberry Pi.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <header className="flex justify-between items-center border-b border-[#ffffff15] pb-4 shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="w-3 h-3 rounded-full bg-[#00ffcc] animate-pulse shadow-[0_0_8px_#00ffcc]"></div>
-            <h1 className="text-xl font-bold tracking-tighter flex items-center gap-3">
-              <span className="bg-[#00ffcc] text-black px-2 py-0.5 rounded italic font-black">V{systemVersion.toFixed(2)}</span>
-              <span className="text-[#00ffcc] drop-shadow-[0_0_8px_#00ffcc] tracking-[0.2em]">TACHYONIC_SOVEREIGN_PRO</span>
-            </h1>
-          </div>
-          <div className="flex gap-8 items-center">
-            <div className="text-right">
-              <p className="text-[10px] text-[#888] uppercase tracking-widest leading-none mb-1">Compute Core</p>
-              <p className="text-xs font-bold text-[#00ffcc] tracking-wider animate-pulse">RPi_RESERVOIR_ACTIVE</p>
-            </div>
-            <div className="h-10 w-[1px] bg-[#ffffff15]"></div>
-            <div className="text-right">
-              <p className="text-[10px] text-[#888] uppercase tracking-widest leading-none mb-1">Nodal Pool</p>
-              <p className="text-xs text-white/80 tracking-tighter">void.nodal_sys.local</p>
-            </div>
-            <div className="h-10 w-[1px] bg-[#ffffff15]"></div>
-            <div className="flex gap-2">
-              <button 
-                onClick={handleInstall}
-                disabled={isInstalling}
-                className={`p-2 rounded border transition-all ${
-                  isInstalling ? 'border-green-500 text-green-500 bg-green-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
-                }`}
-                title="Reservoir Scan (Analyze Substrate)"
-              >
-                <Terminal className={`w-4 h-4 ${isInstalling ? 'animate-pulse' : ''}`} />
-              </button>
-              <button 
-                onClick={() => {
-                  addLog("MOVING_ARTIFACTS: Rotating nodal buffers...", "info");
-                  setTimeout(() => addLog("ARTIFACTS_SYNCHRONIZED.", "success"), 800);
-                }}
-                className="p-2 rounded border border-white/10 text-white/40 hover:text-white/60 hover:bg-white/5 transition-all"
-                title="Move Artifacts"
-              >
-                <motion.div whileTap={{ x: 10 }}>
-                  <Folder className="w-4 h-4" />
-                </motion.div>
-              </button>
-              <button 
-                onClick={handleTSPSolve}
-                disabled={isSolving}
-                className={`p-2 rounded border transition-all ${
-                  isSolving ? 'border-purple-500 text-purple-500 bg-purple-500/10' : 'border-white/10 text-white/40 hover:text-white/60'
-                }`}
-                title="TSP Solve (250 City Optimization)"
-              >
-                <MapPin className={`w-4 h-4 ${isSolving ? 'animate-bounce' : ''}`} />
-              </button>
-              <button 
-                onClick={() => handleGitPull(true)}
-                disabled={isSyncing}
-                className={`p-2 rounded border transition-all relative ${
-                  isSyncing 
-                    ? 'border-blue-500 text-blue-500 bg-blue-500/10' 
-                    : lastSyncSuccess
-                    ? 'border-green-400 text-green-400 bg-green-400/20 shadow-[0_0_15px_rgba(74,222,128,0.5)] ring-2 ring-green-400/50'
-                    : 'border-white/10 text-white/40 hover:text-white/60'
-                }`}
-                title="Git Pull (Force Real Sync)"
-              >
-                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                
-                <AnimatePresence>
-                  {lastSyncSuccess && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.8 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                      className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-green-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded shadow-[0_0_10px_#22c55e]"
-                    >
-                      SYNC_COMPLETE
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </button>
-               <div 
-                className={`p-2 rounded border transition-all ${
-                  hardwareState === 'bridged' ? 'border-[#00ffcc] text-[#00ffcc] bg-[#00ffcc]/10 shadow-[0_0_10px_#00ffcc44]' : 'border-white/10 text-white/40'
-                }`}
-                title={hardwareState === 'bridged' ? 'Hardware Bridged via Backend' : 'Backend Hardware Link Offline'}
-              >
-                {hardwareState === 'bridged' ? <HardDrive className="w-4 h-4" /> : <Unplug className="w-4 h-4 opacity-50" />}
-              </div>
-              <button 
-                onClick={() => setIsAiAnalysisActive(!isAiAnalysisActive)}
-                className={`p-2 rounded border transition-all ${
-                  isAiAnalysisActive ? 'border-[#ffff00] text-[#ffff00] bg-[#ffff00]/10 shadow-[0_0_10px_#ffff0033]' : 'border-white/10 text-white/40 hover:text-white/60'
-                }`}
-                title={isAiAnalysisActive ? 'Deactivate VOID_LINK' : 'Activate VOID_LINK: AI Resonance'}
-              >
-                <Cpu className={`w-4 h-4 ${isAiAnalysisActive ? 'animate-pulse' : ''}`} />
-              </button>
-              <button 
-                onClick={() => setIsMining(!isMining)}
-                className={`p-2 rounded border transition-all ${
-                  isMining ? 'border-[#cc5500] text-[#cc5500] bg-[#cc5500]/10' : 'border-[#00ffcc] text-[#00ffcc] bg-[#00ffcc]/10'
-                }`}
-                title={isMining ? 'Stop Mining' : 'Start Mining'}
-              >
-                {isMining ? <Zap className="w-4 h-4" /> : <Zap className="w-4 h-4 opacity-30" />}
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* MAIN CONTENT AREA: Vertical Stack like Python GUI */}
-        <motion.main 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.6 }}
-          className="flex-1 flex flex-col gap-4 min-h-0"
-        >
-          
-          {/* TOP: VISUALIZER */}
-          <motion.div 
-            className="shrink-0"
-            layout
-          >
-            <WarpVisualizer 
-              coherence={stats.coherence} 
-              jitter={stats.jitter} 
-              frequency={stats.frequency} 
-              isInstalling={isInstalling}
-              installProgress={installProgress}
-              isAiActive={isAiAnalysisActive}
-              isSolving={isSolving}
-            />
-          </motion.div>
-
-          {/* MIDDLE: LARGE CONSOLE (scrolledtext) */}
-          <div className="flex-1 min-h-0 bg-[#050505] rounded-xl border border-white/5 overflow-hidden shadow-2xl">
-            <ConsoleLog logs={logs} onCommand={handleCommand} />
-          </div>
-
-          {/* BOTTOM: SYSTEM STATS (stats_frame) */}
-          <motion.div 
-            layout
-            className="shrink-0 pb-2"
-          >
-            <StatsGrid stats={stats} />
-          </motion.div>
-          
-        </motion.main>
-
-        {/* FOOTER */}
-        <footer className="flex justify-between items-center px-4 py-3 bg-[#000] border-t border-white/5 h-16 shrink-0 selection:bg-[#00ffcc] selection:text-black">
-          <div className="flex items-center gap-6 text-[9px] tracking-widest text-[#00ffcc] uppercase font-bold">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00ffcc] animate-pulse" />
-              IO_LINK: /dev/ttyACM0 @ 115200bps
-            </div>
-            
-            <div className="w-[1px] h-3 bg-white/10 hidden sm:block" />
-            
-            <a 
-              href="/SYSTEM_MANUAL.md" 
-              target="_blank" 
-              className="flex items-center gap-1.5 hover:text-white transition-colors"
+      {/* DESKTOP AREA */}
+      <div className="relative flex-1 z-10 pointer-events-none">
+        <AnimatePresence>
+          {openWindows.includes('terminal') && (
+            <DesktopWindow 
+              id="terminal" 
+              title="Reservoir_Terminal" 
+              icon={<Terminal size={16} />}
+              onClose={() => closeWindow('terminal')}
+              onFocus={() => setActiveWindow('terminal')}
+              isActive={activeWindow === 'terminal'}
+              initialPos={{ x: 60, y: 40 }}
             >
-              <Info className="w-3.5 h-3.5" />
-              PI_SETUP_GUIDE
-            </a>
-          </div>
+              <ConsoleLog logs={logs} onCommand={handleCommand} />
+            </DesktopWindow>
+          )}
 
-          <div className="flex items-center gap-4">
-             <div className="hidden lg:flex items-center gap-4 pr-6 border-r border-white/10">
-               <div className="text-[8px] text-white/30 uppercase tracking-[0.2em] font-mono">Carrier_Bias</div>
-               <div className="flex items-center gap-3">
-                 <input 
-                   type="range" 
-                   min="0" 
-                   max="100" 
-                   value={carrierBias}
-                   onChange={(e) => setCarrierBias(parseInt(e.target.value))}
-                   className="w-24 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
-                 />
-                 <span className="text-[10px] font-mono text-[#00ffcc] w-12 text-right">{(carrierBias * 0.5).toFixed(1)} GHz</span>
-               </div>
-             </div>
+          {openWindows.includes('stats') && (
+            <DesktopWindow 
+              id="stats" 
+              title="System_Monitor" 
+              icon={<Activity size={16} />}
+              onClose={() => closeWindow('stats')}
+              onFocus={() => setActiveWindow('stats')}
+              isActive={activeWindow === 'stats'}
+              initialPos={{ x: 680, y: 200 }}
+            >
+              <div className="p-4 bg-black/40 h-full overflow-hidden flex flex-col">
+                <StatsGrid stats={stats} />
+                <div className="flex-1 mt-4 border border-white/5 rounded-lg bg-black/40 flex items-center justify-center">
+                  <div className="text-[10px] text-zinc-600 uppercase tracking-widest flex flex-col items-center gap-2">
+                    <Radio size={24} className="opacity-20 animate-pulse" />
+                    Telemetric Feed Active
+                  </div>
+                </div>
+              </div>
+            </DesktopWindow>
+          )}
 
-             <div className="hidden md:block text-right">
-               <div className="text-[9px] text-white/40 font-mono tracking-widest uppercase mb-0.5">Sovereign_Reservoir_Core // v{systemVersion.toFixed(2)}_PRO</div>
-               <div className="text-[8px] text-white/20 font-mono tracking-widest uppercase italic">© 2026 PI_RESERVOIR_SOVEREIGN</div>
-             </div>
-             {/* Small Control Toggle */}
-             <div className="flex gap-2 border-l border-white/10 pl-4 ml-2">
-               <button 
-                onClick={() => setIsMining(!isMining)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-bold transition-all ${
-                  isMining ? 'bg-[#cc5500]/20 text-[#cc5500] border border-[#cc5500]/40' : 'bg-[#00ffcc20] text-[#00ffcc] border border-[#00ffcc40]'
-                }`}
-              >
-                {isMining ? 'SYSTEM_LOCKED_MINING' : 'READY_STANDBY'}
-                <Zap className="w-3.5 h-3.5" />
-              </button>
-              <button 
-                onClick={() => setIsOverdrive(!isOverdrive)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-bold transition-all ${
-                  isOverdrive ? 'bg-cyan-500 text-black border border-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.5)]' : 'bg-black text-cyan-500/40 border border-cyan-500/20 hover:border-cyan-500/40'
-                }`}
-              >
-                OVERDRIVE
-                <Activity className={`w-3.5 h-3.5 ${isOverdrive ? 'animate-pulse' : ''}`} />
-              </button>
-             </div>
+          {openWindows.includes('settings') && (
+            <DesktopWindow 
+              id="settings" 
+              title="Central_Governance" 
+              icon={<Settings size={16} />}
+              onClose={() => closeWindow('settings')}
+              onFocus={() => setActiveWindow('settings')}
+              isActive={activeWindow === 'settings'}
+              initialPos={{ x: 740, y: 60 }}
+            >
+              <SystemSettings 
+                carrierBias={carrierBias}
+                setCarrierBias={setCarrierBias}
+                isOverdrive={isOverdrive}
+                setIsOverdrive={setIsOverdrive}
+                isAiActive={isAiAnalysisActive}
+                setIsAiActive={setIsAiAnalysisActive}
+                systemVersion={systemVersion}
+              />
+            </DesktopWindow>
+          )}
+
+          {openWindows.includes('files') && (
+            <DesktopWindow 
+              id="files" 
+              title="Substrate_Files" 
+              icon={<Folder size={16} />}
+              onClose={() => closeWindow('files')}
+              onFocus={() => setActiveWindow('files')}
+              isActive={activeWindow === 'files'}
+              initialPos={{ x: 100, y: 150 }}
+            >
+              <FileExplorer />
+            </DesktopWindow>
+          )}
+
+          {openWindows.includes('visualizer') && (
+            <DesktopWindow 
+              id="visualizer" 
+              title="Vector_Topology" 
+              icon={<Layout size={16} />}
+              onClose={() => closeWindow('visualizer')}
+              onFocus={() => setActiveWindow('visualizer')}
+              isActive={activeWindow === 'visualizer'}
+              initialPos={{ x: 400, y: 100 }}
+            >
+              <div className="h-full bg-black relative">
+                <WarpVisualizer 
+                  coherence={stats.coherence} 
+                  jitter={stats.jitter} 
+                  frequency={stats.frequency} 
+                  isInstalling={isInstalling}
+                  installProgress={installProgress}
+                />
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <p className="text-[8px] text-white/20 font-black tracking-[1em] uppercase">Phase_Projection</p>
+                </div>
+              </div>
+            </DesktopWindow>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* TOP STATUS BAR */}
+      <div className="fixed top-0 left-0 right-0 h-6 bg-black/60 backdrop-blur-md border-b border-white/10 z-[120] flex items-center justify-between px-3 text-[9px] uppercase tracking-widest font-black">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 text-[#00ffcc] drop-shadow-[0_0_5px_rgba(0,255,204,0.5)]">
+            <Zap size={10} className={isMining ? 'animate-pulse' : ''} />
+            <span>CyberOS Sovereignty v{systemVersion.toFixed(2)}</span>
           </div>
-        </footer>
-      </motion.div>
+          <div className="text-zinc-600">/</div>
+          <div className="text-zinc-400">Host: void.nodal_sys.local</div>
+        </div>
+
+        <div className="flex items-center gap-4">
+           <div className="flex items-center gap-2">
+             <span className="text-zinc-500">RES_FREQ:</span>
+             <span className="text-[#00ffcc]">{(stats.frequency / 1000).toFixed(2)} GHz</span>
+           </div>
+           <div className="flex items-center gap-2">
+             <span className="text-zinc-500">COH:</span>
+             <span className={stats.coherence < 0.4 ? 'text-red-500' : 'text-white'}>{(stats.coherence * 100).toFixed(0)}%</span>
+           </div>
+           <div className="text-zinc-400">{new Date().toLocaleTimeString('en-US', { hour12: false })}</div>
+        </div>
+      </div>
+
+      {/* DOCK / TASKBAR */}
+      <Taskbar 
+        onToggleWindow={toggleWindow}
+        openWindows={openWindows}
+        activeWindow={activeWindow}
+        isMining={isMining}
+        onToggleMining={() => setIsMining(!isMining)}
+      />
+
+      {/* HARDWARE BRIDGE STATUS BANNER */}
+      {hardwareState === 'disconnected' && (
+        <motion.div 
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] bg-yellow-500/10 border border-yellow-500/30 p-2 px-4 rounded-full flex items-center gap-3 backdrop-blur-sm pointer-events-none"
+        >
+          <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
+          <p className="text-[8px] font-bold text-yellow-400 uppercase tracking-widest">Hardware Link Offline - Simulation Active</p>
+        </motion.div>
+      )}
     </div>
   );
 }
