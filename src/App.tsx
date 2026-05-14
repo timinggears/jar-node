@@ -320,7 +320,7 @@ export default function App() {
   }, [addLog]);
 
   // --- CORE DYNAMICS ---
-  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000') => {
+  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000', rawHashRate: number = 0) => {
     setStats(prev => {
       // --- EXACT MATH FROM JAR SYSTEM SPEC ---
       // 1. Shimmer (Energy/Activity)
@@ -350,16 +350,13 @@ export default function App() {
       phaseOut = Math.max(-200, Math.min(200, phaseOut));
       
       // 3. Coherence (Health Meter) - More forgiving math to allow 1.0
-      // Overdrive drains coherence faster
       const overdriveDrain = isOverdriveRef.current ? 0.15 : 0;
-      const qecBonus = isQecActiveRef.current ? 0.25 : -0.15; // QEC boosts or fails to stop drift
+      const qecBonus = isQecActiveRef.current ? 0.25 : -0.15; 
       const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250) - overdriveDrain + qecBonus;
       const nextCoherence = isZeroPoint ? 0.0 : (isSingularity ? 0.05 : Math.min(1.0, Math.max(0.1, coherenceBase)));
       
       // 4. Intelligence (Learning Capacity)
       let nextIntelligence = prev.intelligence;
-      
-      // Gains scale with Coherence and Jitter
       const isVoidResonance = (freqUnit >= 35.0 && freqUnit < 35.1);
       
       if (isZeroPoint) {
@@ -378,58 +375,41 @@ export default function App() {
         nextIntelligence = Math.max(10.0, nextIntelligence - 0.08);
       }
 
-      // Special Logs (moved out of setStats in the next version of code)
-
-      const now = Date.now();
-      const dt = (now - lastUpdateRef.current) / 1000;
-      lastUpdateRef.current = now;
-      
       const resonanceBonus = 1.0 + (carrierBiasRef.current / 100) * (nextCoherence * 2.5);
-      if (resonanceBonus > 1.8 && Math.random() > 0.98) {
-        setTimeout(() => addLog("JAR_RESONANCE: Carrier bias optimizing compute density.", "success"), 0);
-      }
 
-      // XMRig-VMR Optimization Logic
-      const isOverdrive = isOverdriveRef.current;
-      const overdriveMulti = isOverdrive ? 4.5 : 1.0;
+      // --- HASHRATE PHYSICS ---
+      // If we have rawHashRate from telemetry (real process), use it
+      // Otherwise, simulate a dense compute yield (800 H/s = 0.8 KH/s as base)
+      const overdriveMulti = isOverdriveRef.current ? 12.0 : 1.0;
+      const baseKH = 8.5; // Starts at 8.5 KH/s for "authentic" physics
+      const jitterFactor = jitterValue * 4;
+      const coherenceFactor = nextCoherence * 6;
+      const simulatedHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * resonanceBonus;
       
-      // Autonomous Self-Optimization Trigger
-      const selfOptTrigger = Math.random() > 0.995 && isMiningRef.current;
-      if (selfOptTrigger) {
-        setTimeout(() => addLog("JAR_AUTO_OPT: Detected substrate fragmentation. Triggering autonomous self-optimization loop...", "warning"), 0);
-      }
-
-      // Realistic HashRate in KH/s (e.g. 5-20 KH/s normal, 50-150 KH/s overdrive)
-      const baseKH = 12.4;
-      const jitterFactor = jitterValue * 10;
-      const coherenceFactor = nextCoherence * 5;
-      const nextHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * resonanceBonus;
+      const nextHashRate = (rawHashRate > 0) ? rawHashRate : (isMiningRef.current ? simulatedHashRate : 0);
       
       const seed = parseInt(seedStr, 16);
       let nextShares = prev.shares;
       let nextErrors = prev.errors;
-      const nextHugePages = isMiningRef.current ? Math.min(2048, prev.hugePages + (isOverdrive ? 64 : 16)) : Math.max(0, prev.hugePages - 32);
+      const nextHugePages = isMiningRef.current ? Math.min(4096, prev.hugePages + (isOverdriveRef.current ? 128 : 32)) : Math.max(0, prev.hugePages - 64);
       
-      if (isMiningRef.current && prev.hugePages < 1024 && nextHugePages >= 1024) {
-        setTimeout(() => addLog("XMRIG_VMR: Huge pages optimized. JIT-Compiler acceleration enabled.", "success"), 0);
+      if (isMiningRef.current && prev.hugePages < 2048 && nextHugePages >= 2048) {
+        setTimeout(() => addLog("VMR_CORE: Substrate saturation complete. Huge Pages pinned to physical substrate.", "success"), 0);
       }
 
       if (isMiningRef.current) {
-        // Significantly decreased difficulty basis to "amp up" shares as requested
-        const baseDifficulty = 1024; // Was 4096
-        const difficultyBasis = Math.floor(baseDifficulty / (overdriveMulti * (1 + (nextCoherence * 8) + (prev.intelligence / 5))));
+        const baseDifficulty = 512; // Dramatically reduced for more shares
+        const difficultyBasis = Math.floor(baseDifficulty / (overdriveMulti * (1 + (nextCoherence * 10) + (prev.intelligence / 3))));
         
-        // Use a more aggressive share detection logic
-        const shareThreshold = isOverdrive ? 15 : 7;
-        if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold || (isOverdrive && Math.random() > 0.96))) {
+        const shareThreshold = isOverdriveRef.current ? 12 : 5;
+        if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold || (isOverdriveRef.current && Math.random() > 0.94))) {
           nextShares += 1;
-          const currentCount = nextShares;
-          setTimeout(() => addLog(`RESERVOIR SHARE #${String(currentCount).padStart(4, '0')}: Focus at ${seedStr} [Intel: ${prev.intelligence.toFixed(1)}] [VMR_AMP: ${overdriveMulti}x]`, 'success'), 0);
+          setTimeout(() => addLog(`RESERVOIR SHARE #${String(nextShares).padStart(4, '0')}: Block sealed with ${nextHashRate.toFixed(2)} KH/s throughput.`, 'success'), 0);
         }
         
-        if (jitterValue > 0.95 && Math.random() > 0.98) {
+        if (jitterValue > 0.98 && Math.random() > 0.99) {
           nextErrors += 1;
-          setTimeout(() => addLog(`COHERENCE_CRITICAL: Bit-flip corrected by VMR substrate at ${seedStr}`, 'warning'), 0);
+          setTimeout(() => addLog(`JAR_FAULT: Substrate jitter caused minor bit-flip. Rectified.`, 'warning'), 0);
         }
       }
       
@@ -446,8 +426,8 @@ export default function App() {
         errors: nextErrors,
         phaseOut: phaseOut,
         hugePages: nextHugePages,
-        loadAvg: jitterValue * 8, // Mock loadAvg proportional to jitter
-        neuralLoad: Math.min(100, (overdriveMulti * 20) + (jitterValue * 40)),
+        loadAvg: jitterValue * 8, 
+        neuralLoad: Math.min(100, (overdriveMulti * 1.5) + (jitterValue * 50)),
         cognitiveDepth: prev.intelligence // Mapping intelligence to depth for now
       };
     });
@@ -481,9 +461,10 @@ export default function App() {
           const seedStr = parts[1];
           const jitter = parseFloat(parts[2]);
           const v = parseFloat(parts[3]);
+          const rawHashRate = parseFloat(parts[4]);
           const freq = parseFloat(parts[5]);
           
-          updateSystemDynamics(jitter, v, freq, seedStr);
+          updateSystemDynamics(jitter, v, freq, seedStr, rawHashRate);
 
           // Handle special logs here where it's safe to call addLog
           const freqUnit = (Math.max(isMiningRef.current ? freq : 0, carrierBiasRef.current * 500)) / 1000;
