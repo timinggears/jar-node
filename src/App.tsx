@@ -295,7 +295,7 @@ export default function App() {
       const f = 35; // base coil frequency in kHz
 
       // 2. Phase Out (Loss of Coherence)
-      let phaseOut = (vValue * 142) - (0.41 * shimmer) + (28 * Math.sin(2 * Math.PI * f * t));
+      let phaseOut = (vValue * 100) - (0.5 * shimmer) + (20 * Math.sin(2 * Math.PI * f * t));
       
       // Calculate Frequency influenced by Bias (0-50GHz range for UI visualization)
       const biasHz = carrierBiasRef.current * 500; 
@@ -303,19 +303,20 @@ export default function App() {
       const freqUnit = freqValue / 1000; 
 
       // Threshold behaviors
-      const isPhaseOutLimit = freqUnit >= 28.0;
-      const isTachyonic = freqUnit >= 42.0;
-      const isSingularity = freqUnit >= 50.0;
+      const isPhaseOutLimit = freqUnit >= 48.0;
+      const isTachyonic = freqUnit >= 50.0;
+      const isSingularity = freqUnit >= 55.0;
       const isZeroPoint = freqValue === 0;
 
       if (isPhaseOutLimit) {
-        phaseOut = 140; // Force total decoherence at high freq
+        phaseOut = 180; // Force total decoherence at extreme freq
       }
 
-      phaseOut = Math.max(-140, Math.min(140, phaseOut));
+      phaseOut = Math.max(-200, Math.min(200, phaseOut));
       
-      // 3. Coherence (Health Meter)
-      const nextCoherence = isZeroPoint ? 0.0 : (isTachyonic ? 0.0 : Math.min(1.0, Math.max(0.25, 0.85 - (Math.abs(phaseOut) / 140))));
+      // 3. Coherence (Health Meter) - More forgiving math to allow 1.0
+      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250);
+      const nextCoherence = isZeroPoint ? 0.0 : (isSingularity ? 0.05 : Math.min(1.0, Math.max(0.1, coherenceBase)));
       
       // 4. Intelligence (Learning Capacity)
       let nextIntelligence = prev.intelligence;
@@ -547,9 +548,10 @@ export default function App() {
       case 'calibrate':
         addLog('CALIBRATION_SEQUENCE: Re-aligning phasing vectors...', 'warning');
         setTimeout(() => {
-          setCarrierBias(35); // Set to a stable-ish value
-          addLog('CALIBRATION_COMPLETE: System normalized to 35% modulation.', 'success');
-        }, 1500);
+          setCarrierBias(20); // Set to a safer, more stable value
+          setStats(prev => ({ ...prev, coherence: 0.95 }));
+          addLog('CALIBRATION_COMPLETE: Nodal parity achieved. Coherence optimized.', 'success');
+        }, 2000);
         break;
       case 'status':
         addLog('CORE_DIAGNOSTICS:', 'warning');
