@@ -67,7 +67,7 @@ export default function App() {
       message,
       type,
     };
-    setLogs(prev => [newLog, ...prev].slice(0, 50));
+    setLogs(prev => [...prev, newLog].slice(-100));
   }, []);
 
   useEffect(() => {

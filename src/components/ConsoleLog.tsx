@@ -14,18 +14,33 @@ interface ConsoleLogProps {
 export default function ConsoleLog({ logs, onCommand }: ConsoleLogProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState('');
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  const checkScroll = () => {
+    if (scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      // Using a 10px buffer for reliability
+      const atBottom = scrollHeight - scrollTop - clientHeight < 10;
+      setIsAtBottom(atBottom);
+    }
+  };
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current && isAtBottom) {
+      const { scrollHeight, clientHeight } = scrollRef.current;
+      scrollRef.current.scrollTo({
+        top: scrollHeight - clientHeight,
+        behavior: 'auto'
+      });
     }
-  }, [logs]);
+  }, [logs, isAtBottom]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim() && onCommand) {
       onCommand(inputValue);
       setInputValue('');
+      setIsAtBottom(true); // Force scroll to bottom on new command
     }
   };
 
@@ -38,14 +53,31 @@ export default function ConsoleLog({ logs, onCommand }: ConsoleLogProps) {
             Sovereign_Reservoir_Console_v3.2.0
           </span>
         </div>
+        {!isAtBottom && (
+          <button 
+            onClick={() => {
+              setIsAtBottom(true);
+              if (scrollRef.current) {
+                scrollRef.current.scrollTo({
+                  top: scrollRef.current.scrollHeight,
+                  behavior: 'smooth'
+                });
+              }
+            }}
+            className="text-[9px] bg-[#00ffcc] text-black px-2 py-0.5 rounded font-black animate-pulse"
+          >
+            RESUME_AUTO_SCROLL
+          </button>
+        )}
       </div>
       
       <div 
         ref={scrollRef}
-        className="flex-1 p-4 text-[11px] overflow-y-auto space-y-0.5 no-scrollbar scroll-smooth"
+        onScroll={checkScroll}
+        className="flex-1 p-4 text-[11px] overflow-y-auto space-y-1 no-scrollbar selection:bg-[#00ffcc] selection:text-black"
       >
         {logs.map((log) => (
-          <div key={log.id} className="flex gap-2 leading-relaxed whitespace-pre-wrap">
+          <div key={log.id} className="flex gap-2 leading-relaxed whitespace-pre-wrap animate-in fade-in slide-in-from-left-1 duration-300">
             <span className="text-white/20 shrink-0 select-none">[{log.timestamp}]</span>
             <span className={`${getTypeStyles(log.type)}`}>{log.message}</span>
           </div>
