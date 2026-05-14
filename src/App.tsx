@@ -365,12 +365,12 @@ export default function App() {
       const dt = (now - lastUpdateRef.current) / 1000;
       lastUpdateRef.current = now;
       
-      const resonanceBonus = 1.0 + (carrierBiasRef.current / 100) * (nextCoherence * 2);
-      if (resonanceBonus > 1.8 && Math.random() > 0.99) {
+      const resonanceBonus = 1.0 + (carrierBiasRef.current / 100) * (nextCoherence * 2.5);
+      if (resonanceBonus > 1.8 && Math.random() > 0.98) {
         setTimeout(() => addLog("JAR_RESONANCE: Carrier bias optimizing compute density.", "success"), 0);
       }
-      const boostMultiplier = (isOverdriveRef.current ? 12.5 : 1.0) * resonanceBonus;
-      const instantaneousHashRate = (jitterValue * 3000000000 * dt * boostMultiplier) / 1000;
+      const boostMultiplier = (isOverdriveRef.current ? 15.0 : 1.0) * resonanceBonus;
+      const instantaneousHashRate = (jitterValue * 4500000000 * dt * boostMultiplier) / 1000;
       
       const seed = parseInt(seedStr, 16);
       let nextShares = prev.shares;
