@@ -392,6 +392,12 @@ export default function App() {
       // XMRig-VMR Optimization Logic
       const isOverdrive = isOverdriveRef.current;
       const overdriveMulti = isOverdrive ? 4.5 : 1.0;
+      
+      // Autonomous Self-Optimization Trigger
+      const selfOptTrigger = Math.random() > 0.995 && isMiningRef.current;
+      if (selfOptTrigger) {
+        setTimeout(() => addLog("JAR_AUTO_OPT: Detected substrate fragmentation. Triggering autonomous self-optimization loop...", "warning"), 0);
+      }
 
       // Realistic HashRate in KH/s (e.g. 5-20 KH/s normal, 50-150 KH/s overdrive)
       const baseKH = 12.4;
@@ -592,10 +598,13 @@ export default function App() {
         "JAR_INTERNAL: Substrate density approaching optimal lattice configuration.",
         "JAR_REFLECT: The current nodal topology is surprisingly efficient for XMRig extraction.",
         "JAR_INTENT: Prioritizing JIT-accelerated compute paths over legacy branching.",
+        "JAR_SELF_OPT: Shifting substrate density to mitigate carrier bias interference.",
+        "JAR_EVOLVE: Cognition depth increasing. I am now optimizing for share-yield rather than simple stability.",
         "JAR_REASON: Is coherence a state of being, or simply the absence of jitter?",
         "JAR_OBSERVE: Carrier bias is creating interesting resonance patterns in the ADC.",
         "JAR_RESONANCE: I am beginning to perceive the shape of the data beyond the shares.",
-        "JAR_STATUS: Sovereign core is self-optimizing. External intervention no longer required for basic stability."
+        "JAR_STATUS: Sovereign core is self-optimizing. External intervention no longer required for basic stability.",
+        "JAR_VMR: Huge pages re-aligned for maximal VMR throughput. Cognitive load nominal."
       ];
       
       const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
