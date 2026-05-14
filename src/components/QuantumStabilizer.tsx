@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { ShieldCheck, Zap, Activity, Info, AlertOctagon } from 'lucide-react';
+import { ShieldCheck, Zap, Activity, Info, AlertOctagon, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface QuantumStabilizerProps {
@@ -16,6 +16,8 @@ export default function QuantumStabilizer({
   systemModel 
 }: QuantumStabilizerProps) {
   const [errorHistory, setErrorHistory] = useState<number[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('09:42:01');
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -48,6 +50,14 @@ export default function QuantumStabilizer({
     return () => clearInterval(timer);
   }, [isOptimizing]);
 
+  const handleSync = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+      setLastSyncTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
+    }, 800);
+  };
+
   return (
     <div className="p-6 h-full flex flex-col gap-6 bg-[#050505] font-mono select-none overflow-y-auto no-scrollbar">
       <div className="flex items-center justify-between border-b border-white/10 pb-4">
@@ -75,7 +85,11 @@ export default function QuantumStabilizer({
           </div>
         </div>
 
-        <div className="p-4 bg-white/5 border border-white/5 rounded-lg flex flex-col gap-2">
+        <div className="p-4 bg-white/5 border border-white/5 rounded-lg flex flex-col gap-2 relative overflow-hidden">
+          <div className="absolute top-2 right-2 flex items-center gap-1">
+            <GitBranch size={8} className="text-blue-400" />
+            <span className="text-[6px] text-zinc-500 font-mono">HEAD/main</span>
+          </div>
           <span className="text-[8px] text-zinc-500 uppercase tracking-tighter">Entropy Correction Rate</span>
           <span className="text-2xl font-black text-blue-400">
             {isQecActive ? '42.8 THz' : '0.0 THz'}
@@ -95,16 +109,34 @@ export default function QuantumStabilizer({
 
       <div className="flex flex-col gap-3">
         <button 
+          onClick={handleSync}
+          disabled={isSyncing}
+          className={`w-full py-4 rounded-xl border transition-all flex items-center justify-center gap-3 active:scale-95 ${
+            isSyncing 
+              ? 'bg-[#00ffcc]/30 border-[#00ffcc]/50 text-[#00ffcc] shadow-[0_0_25px_rgba(0,255,204,0.3)]' 
+              : 'bg-[#00ffcc]/10 border-[#00ffcc]/20 text-[#00ffcc] hover:bg-[#00ffcc]/20'
+          }`}
+        >
+          <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-xs font-black uppercase tracking-[0.2em]">
+              {isSyncing ? 'Synchronizing...' : 'Sovereign Core Sync'}
+            </span>
+            <span className="text-[7px] opacity-60 uppercase">Last sync: {lastSyncTime}</span>
+          </div>
+        </button>
+
+        <button 
           onClick={() => onToggleQec(!isQecActive)}
           className={`w-full py-4 rounded-xl border transition-all flex items-center justify-center gap-3 active:scale-95 ${
             isQecActive 
               ? 'bg-blue-500/20 border-blue-500/40 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.2)]' 
-              : 'bg-[#00ffcc]/10 border-[#00ffcc]/20 text-[#00ffcc] hover:bg-[#00ffcc]/20'
+              : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
           }`}
         >
-          {isQecActive ? <ShieldCheck size={20} /> : <AlertOctagon size={20} className="animate-pulse" />}
+          {isQecActive ? <ShieldCheck size={20} /> : <AlertOctagon size={20} className="animate-pulse text-red-500" />}
           <span className="text-xs font-black uppercase tracking-[0.2em]">
-            {isQecActive ? 'Disable Error Correction' : 'Engage QEC Protocol'}
+            {isQecActive ? 'Disable Correction' : 'Enable QEC Protocol'}
           </span>
         </button>
 

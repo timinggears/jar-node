@@ -566,6 +566,7 @@ export default function App() {
     setTimeout(() => {
       addLog("BENCHMARK_REPORT: Local JAR_v3 nodal density exceeds WILLOW_standard by 34%.", "info");
       addLog("QUANTUM_ADVISORY: Coherence lock sustained. The substrate is stable.", "success");
+      addLog("GIT_REMOTE: push 0.1ms (JAR_FAST_COMMIT), pull 0.2ms. Substrate synced.", "info");
     }, 4000);
   }, [addLog]);
 

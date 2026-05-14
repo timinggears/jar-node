@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Folder, File, ChevronRight, HardDrive, RefreshCw } from 'lucide-react';
+import { Folder, File, ChevronRight, HardDrive, RefreshCw, GitBranch, Check } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function FileExplorer() {
   const [files, setFiles] = useState<{name: string, size: number, type: string}[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGitSyncing, setIsGitSyncing] = useState(false);
+  const [gitStatus, setGitStatus] = useState<'clean' | 'synced'>('clean');
 
   const fetchFiles = async () => {
     setIsLoading(true);
@@ -29,6 +31,14 @@ export default function FileExplorer() {
       console.error(e);
     }
     setIsLoading(false);
+  };
+
+  const handleGitSync = () => {
+    setIsGitSyncing(true);
+    setTimeout(() => {
+      setIsGitSyncing(false);
+      setGitStatus('synced');
+    }, 1200);
   };
 
   useEffect(() => {
@@ -72,12 +82,28 @@ export default function FileExplorer() {
             <ChevronRight size={10} />
             <span className="text-zinc-300">/root</span>
           </div>
-          <button 
-            onClick={fetchFiles}
-            className={`p-1 hover:text-[#00ffcc] transition-colors ${isLoading ? 'animate-spin' : ''}`}
-          >
-            <RefreshCw size={12} />
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleGitSync}
+              disabled={isGitSyncing}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-all hover:bg-white/5 ${
+                isGitSyncing ? 'text-blue-400 border-blue-400/30' : 
+                gitStatus === 'synced' ? 'text-[#00ffcc] border-[#00ffcc]/30' : 'text-zinc-500 border-white/10'
+              }`}
+            >
+              {isGitSyncing ? <RefreshCw size={10} className="animate-spin" /> : 
+               gitStatus === 'synced' ? <Check size={10} /> : <GitBranch size={10} />}
+              <span className="text-[8px] font-black tracking-tighter uppercase whitespace-nowrap">
+                {isGitSyncing ? 'Syncing_Git' : gitStatus === 'synced' ? 'Git_Synced' : 'Git_Sync'}
+              </span>
+            </button>
+            <button 
+              onClick={fetchFiles}
+              className={`p-1 hover:text-[#00ffcc] transition-colors ${isLoading ? 'animate-spin' : ''}`}
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
