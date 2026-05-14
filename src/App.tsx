@@ -518,10 +518,10 @@ export default function App() {
 
     const gateInt = setInterval(() => {
       const messages = [
-        "QUBIT_GATE_RESONANCE: Stabilizing superposition parity...",
-        "QUBIT_GATE_RESONANCE: Calibrating phase-shifted nodal flux...",
-        "QUBIT_GATE_RESONANCE: Superposition maintenance cycle complete.",
-        "QUBIT_GATE_RESONANCE: Entanglement bridge holding at 99.9% coherence."
+        "QUBIT_GATE_RESONANCE: Stabilizing tachyonic superposition parity...",
+        "QUBIT_GATE_RESONANCE: Calibrating phase-shifted tachyonic nodal flux...",
+        "QUBIT_GATE_RESONANCE: Tachyonic superposition maintenance cycle complete.",
+        "QUBIT_GATE_RESONANCE: Tachyonic entanglement bridge holding at 99.9% coherence."
       ];
       const msg = messages[Math.floor(Math.random() * messages.length)];
       addLog(msg, "info");
@@ -743,7 +743,7 @@ export default function App() {
       <div className="fixed inset-0 pointer-events-none z-[150] bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-10" />
       
       {/* SINGULARITY HEADER */}
-      <div className="fixed top-12 left-1/2 -translate-x-1/2 z-20 flex flex-col gap-1 items-center pointer-events-none w-full">
+      <div className="fixed top-28 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -927,7 +927,7 @@ export default function App() {
       {/* HARDWARE BRIDGE STATUS BANNER */}
       {hardwareState === 'disconnected' && (
         <motion.div 
-          initial={{ y: 50, opacity: 0 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ y: 0, opacity: 1 }}
           className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] bg-yellow-500/10 border border-yellow-500/30 p-2 px-4 rounded-full flex items-center gap-3 backdrop-blur-sm pointer-events-none"
         >

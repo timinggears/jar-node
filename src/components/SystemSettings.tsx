@@ -81,6 +81,7 @@ export default function SystemSettings({
               className={`w-12 h-6 rounded-full relative transition-colors ${isOverdrive ? 'bg-yellow-400' : 'bg-zinc-800'}`}
             >
               <motion.div 
+                initial={{ x: 4 }}
                 animate={{ x: isOverdrive ? 26 : 4 }}
                 className="absolute top-1 left-0 w-4 h-4 rounded-full bg-black shadow-lg"
               />
@@ -108,6 +109,7 @@ export default function SystemSettings({
             className={`w-12 h-6 rounded-full relative transition-colors ${isAiActive ? 'bg-green-400' : 'bg-zinc-800'}`}
           >
             <motion.div 
+              initial={{ x: 4 }}
               animate={{ x: isAiActive ? 26 : 4 }}
               className="absolute top-1 left-0 w-4 h-4 rounded-full bg-black shadow-lg"
             />

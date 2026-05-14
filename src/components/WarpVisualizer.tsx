@@ -236,6 +236,7 @@ export default function WarpVisualizer({
             <div className="flex-1 h-0.5 bg-purple-500/10 rounded-full overflow-hidden">
                <motion.div 
                 className="h-full bg-purple-500 shadow-[0_0_10px_#a855f7]"
+                initial={{ x: -1000 }}
                 animate={{ x: [-1000, 1000] }}
                 transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
                />
