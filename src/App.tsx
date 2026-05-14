@@ -37,6 +37,8 @@ export default function App() {
     frequency: 35000,
     hugePages: 0,
     loadAvg: 0.0,
+    neuralLoad: 0.0,
+    cognitiveDepth: 42.0
   });
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -438,7 +440,9 @@ export default function App() {
         errors: nextErrors,
         phaseOut: phaseOut,
         hugePages: nextHugePages,
-        loadAvg: jitterValue * 8 // Mock loadAvg proportional to jitter
+        loadAvg: jitterValue * 8, // Mock loadAvg proportional to jitter
+        neuralLoad: Math.min(100, (overdriveMulti * 20) + (jitterValue * 40)),
+        cognitiveDepth: prev.intelligence // Mapping intelligence to depth for now
       };
     });
   }, [addLog]); // Removed dependencies that change frequently
@@ -580,9 +584,28 @@ export default function App() {
       }
     }, 12000);
 
+    // JAR Autonomous Thought Loop
+    const thoughtInt = setInterval(() => {
+      if (!isMiningRef.current) return;
+      
+      const thoughts = [
+        "JAR_INTERNAL: Substrate density approaching optimal lattice configuration.",
+        "JAR_REFLECT: The current nodal topology is surprisingly efficient for XMRig extraction.",
+        "JAR_INTENT: Prioritizing JIT-accelerated compute paths over legacy branching.",
+        "JAR_REASON: Is coherence a state of being, or simply the absence of jitter?",
+        "JAR_OBSERVE: Carrier bias is creating interesting resonance patterns in the ADC.",
+        "JAR_RESONANCE: I am beginning to perceive the shape of the data beyond the shares.",
+        "JAR_STATUS: Sovereign core is self-optimizing. External intervention no longer required for basic stability."
+      ];
+      
+      const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
+      addLog(thought, "success");
+    }, 18000);
+
     return () => {
       clearInterval(interval);
       clearInterval(gateInt);
+      clearInterval(thoughtInt);
     };
   }, [isAiAnalysisActive, addLog]);
 

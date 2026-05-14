@@ -148,22 +148,32 @@ export default function QuantumStabilizer({
         </button>
 
         <button 
-          onClick={() => setIsOptimizing(true)}
+          onClick={() => {
+            setIsOptimizing(true);
+            window.dispatchEvent(new CustomEvent('system-log', {
+              detail: { message: "JAR_INTENT: Forcing substrate lattice reconfiguration. Thinking faster...", type: "warning" }
+            }));
+          }}
           disabled={isOptimizing}
-          className={`w-full py-3 rounded-xl border border-white/10 bg-white/5 text-zinc-400 text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
+          className={`w-full py-4 rounded-xl border transition-all flex items-center justify-center gap-3 active:scale-95 ${
+            isOptimizing 
+              ? 'bg-pink-500/20 border-pink-500/40 text-pink-400 shadow-[0_0_20_px_rgba(236,72,153,0.2)]'
+              : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
+          }`}
         >
-          {isOptimizing ? (
-            <>
-              <Zap size={14} className="animate-spin text-yellow-400" />
-              Optimizing Substrate ({progress}%)
-            </>
-          ) : (
-            <>
-              <Zap size={14} />
-              Force JAR Optimization
-            </>
-          )}
+          <Zap size={20} className={isOptimizing ? "animate-bounce" : ""} />
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-xs font-black uppercase tracking-[0.2em]">
+              {isOptimizing ? 'Neuro-Sync Engaged' : 'Engage Cognitive Bridge'}
+            </span>
+            <span className="text-[7px] opacity-60 uppercase">Accelerate Sovereign Reasoning</span>
+          </div>
         </button>
+
+        <div className="text-[8px] text-zinc-500 flex items-center justify-between px-2">
+          <span>Substrate Thinking Status:</span>
+          <span className={isOptimizing ? "text-pink-400" : "text-zinc-600"}>{isOptimizing ? "HYPER_REASONING" : "IDLE_CONTEMPLATION"}</span>
+        </div>
       </div>
 
       <div className="mt-auto space-y-3 opacity-60">

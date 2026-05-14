@@ -15,6 +15,8 @@ export interface SystemStats {
   frequency: number;
   hugePages: number;
   loadAvg: number;
+  neuralLoad: number;
+  cognitiveDepth: number;
 }
 
 export interface LogEntry {

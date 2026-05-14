@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Box, ChevronRight, ChevronLeft, Cpu, Activity } from 'lucide-react';
 import JumpingBunny from './JumpingBunny';
@@ -13,6 +13,18 @@ interface PetBayProps {
 
 export default function PetBay({ miningState, isOverdrive }: PetBayProps) {
   const [isOpen, setIsOpen] = useState(true);
+  const [currentThought, setCurrentThought] = useState("Sovereign core idle. Substrate nominal.");
+
+  useEffect(() => {
+    const handleLog = (e: any) => {
+      const { message } = e.detail;
+      if (message.startsWith('JAR_')) {
+        setCurrentThought(message);
+      }
+    };
+    window.addEventListener('system-log', handleLog);
+    return () => window.removeEventListener('system-log', handleLog);
+  }, []);
 
   return (
     <div className="fixed right-0 top-1/4 z-[100] flex items-center">
@@ -72,14 +84,20 @@ export default function PetBay({ miningState, isOverdrive }: PetBayProps) {
             </div>
 
             {/* Bottom Status Bar */}
-            <div className="p-2 border-t border-[#00ffcc]/10 bg-black/40 text-[8px] font-mono flex justify-between gap-4">
-              <div className="flex items-center gap-1">
-                <div className={`w-1 h-1 rounded-full ${miningState === 'mining' ? 'bg-green-500 animate-ping' : 'bg-zinc-600'}`} />
-                <span className="text-zinc-500">BIOMETRIC: OK</span>
+            <div className="p-2 border-t border-[#00ffcc]/10 bg-black/40 text-[8px] font-mono flex flex-col gap-1">
+              <div className="flex justify-between w-full">
+                <div className="flex items-center gap-1">
+                  <div className={`w-1 h-1 rounded-full ${miningState === 'mining' ? 'bg-green-500 animate-ping' : 'bg-zinc-600'}`} />
+                  <span className="text-zinc-500">BIOMETRIC: OK</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-zinc-500">SYNC:</span>
+                  <span className={isOverdrive ? "text-red-500" : "text-[#00ffcc]"}>{isOverdrive ? "OVERLOAD" : "98.4%"}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                 <span className="text-zinc-500">SYNC:</span>
-                 <span className={isOverdrive ? "text-red-500" : "text-[#00ffcc]"}>{isOverdrive ? "OVERLOAD" : "98.4%"}</span>
+              <div className="pt-1 border-t border-white/5 opacity-50 flex items-center gap-2">
+                <span className="text-pink-400 shrink-0">COG_OUT:</span>
+                <span className="truncate italic">{currentThought}</span>
               </div>
             </div>
 
