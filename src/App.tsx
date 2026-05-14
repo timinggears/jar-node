@@ -688,6 +688,9 @@ export default function App() {
                backgroundImage: `linear-gradient(${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px), linear-gradient(90deg, ${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px)`,
                backgroundSize: '80px 80px' 
              }} />
+
+        {/* HONEYCOMB OVERLAY */}
+        <div className={`absolute inset-0 pointer-events-none bg-honeycomb opacity-[0.4] animate-pulse-slow transition-all duration-1000 ${isOverdrive ? 'invert hue-rotate-180 opacity-60' : ''}`} />
         
         {/* VIGNETTE & CRUNCH */}
         <div className="absolute inset-0 pointer-events-none bg-radial-[circle_at_center,_transparent_40%,_black_90%] opacity-40" />

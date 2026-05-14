@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { ShieldCheck, Zap, Activity, Info, AlertOctagon, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Zap, Activity, Info, AlertOctagon, RefreshCw, GitBranch } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface QuantumStabilizerProps {
