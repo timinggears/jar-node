@@ -30,13 +30,27 @@ export default function LittleMech({ miningState, isBoosted }: { miningState: 'i
     >
       <motion.div
         animate={{
-          y: isExcited ? [0, -2, 0] : [0, -0.5, 0],
-          x: isOverdrive ? [-0.5, 0.5, -0.5] : 0
+          // Idle bobing, Success jump, or Overdrive vibration
+          y: isOverdrive 
+            ? [-1, 1, -1] 
+            : (miningState === 'success' ? [0, -20, 0] : [0, -1.5, 0]),
+          x: isOverdrive ? [-1.5, 1.5, -1.5] : 0,
+          scale: miningState === 'success' ? [1, 1.1, 1] : 1
         }}
         transition={{
-          duration: isOverdrive ? 0.05 : 2,
-          repeat: Infinity,
-          ease: "linear"
+          y: {
+            duration: isOverdrive ? 0.06 : (miningState === 'success' ? 0.4 : 3),
+            repeat: isOverdrive ? Infinity : (miningState === 'success' ? 0 : Infinity),
+            ease: isOverdrive ? "linear" : "easeInOut"
+          },
+          x: {
+            duration: 0.05,
+            repeat: Infinity,
+            ease: "linear"
+          },
+          scale: {
+            duration: 0.4
+          }
         }}
         className="relative"
       >
