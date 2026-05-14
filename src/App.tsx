@@ -189,7 +189,7 @@ export default function App() {
     }
 
     setIsSolving(true);
-    addLog("TSP_START: Calculating optimal path for 250 nodal cities...", "info");
+    addLog("TSP_INIT: Calculating optimal path for 250-city synthetic geometry...", "info");
 
     // Generate 250 cities
     const cities = Array.from({ length: 250 }, () => ({
@@ -247,6 +247,7 @@ export default function App() {
         setTimeout(run2Opt, 50); // Small delay to visualize/keep UI responsive
       } else {
         addLog(`TSP_FINAL: Optimal path locked at ${currentDistance.toFixed(2)}`, "success");
+        addLog("TSP_COMPUTE: 250-city topology resolved.", "info");
         setStats(prev => ({ ...prev, intelligence: Math.min(999.9, prev.intelligence + 15.0) }));
         setIsSolving(false);
       }

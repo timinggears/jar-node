@@ -29,12 +29,12 @@ export default function LittleSquirrel({ miningState }: { miningState: 'idle' | 
           viewBox="0 0 24 24"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className="drop-shadow-[0_0_8px_rgba(255,165,0,0.4)]"
+          className="drop-shadow-[0_0_8px_rgba(128,128,128,0.4)]"
         >
           {/* Tail */}
           <motion.path
             d="M18 10C18 6 22 4 22 8C22 12 18 14 16 14"
-            stroke="#D2691E"
+            stroke="#808080"
             strokeWidth="3"
             strokeLinecap="round"
             animate={{ 
@@ -45,14 +45,14 @@ export default function LittleSquirrel({ miningState }: { miningState: 'idle' | 
           />
           
           {/* Body */}
-          <ellipse cx="12" cy="14" rx="5" ry="6" fill="#F4A460" stroke="#D2691E" strokeWidth="1" />
+          <ellipse cx="12" cy="14" rx="5" ry="6" fill="#C0C0C0" stroke="#808080" strokeWidth="1" />
           
           {/* Head */}
-          <circle cx="12" cy="8" r="4.5" fill="#F4A460" stroke="#D2691E" strokeWidth="1" />
+          <circle cx="12" cy="8" r="4.5" fill="#C0C0C0" stroke="#808080" strokeWidth="1" />
           
           {/* Ears */}
-          <path d="M9 5L8 2L10 4" fill="#D2691E" />
-          <path d="M15 5L16 2L14 4" fill="#D2691E" />
+          <path d="M9 5L8 2L10 4" fill="#808080" />
+          <path d="M15 5L16 2L14 4" fill="#808080" />
 
           {/* Eyes */}
           <motion.circle 
