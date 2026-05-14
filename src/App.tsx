@@ -353,8 +353,8 @@ export default function App() {
       const dt = (now - lastUpdateRef.current) / 1000;
       lastUpdateRef.current = now;
       
-      const boostMultiplier = isOverdriveRef.current ? 3.5 : 1.0;
-      const instantaneousHashRate = (jitterValue * 1200000000 * dt * boostMultiplier) / 1000;
+      const boostMultiplier = isOverdriveRef.current ? 8.5 : 1.0;
+      const instantaneousHashRate = (jitterValue * 1500000000 * dt * boostMultiplier) / 1000;
       
       const seed = parseInt(seedStr, 16);
       let nextShares = prev.shares;
@@ -364,7 +364,8 @@ export default function App() {
         const difficultyBasis = Math.floor(4096 / (1 + (nextCoherence * 5) + (prev.intelligence / 10)));
         if (seed > 0 && Math.abs(seed % Math.max(2, difficultyBasis)) === 7) {
           nextShares += 1;
-          setTimeout(() => addLog(`RESERVOIR SHARE: Focus at ${seedStr} [Intel: ${prev.intelligence.toFixed(1)}]`, 'success'), 0);
+          const currentCount = nextShares;
+          setTimeout(() => addLog(`RESERVOIR SHARE #${String(currentCount).padStart(4, '0')}: Focus at ${seedStr} [Intel: ${prev.intelligence.toFixed(1)}]`, 'success'), 0);
         }
         if (jitterValue > 0.92 && Math.random() > 0.95) {
           nextErrors += 1;
@@ -438,10 +439,12 @@ export default function App() {
       
       switch (type) {
         case 'success':
-          setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
+          setStats(prev => {
+            const nextCount = prev.shares + 1;
+            setTimeout(() => addLog(`!!! JAR SUCCESS !!! Share #${String(nextCount).padStart(4, '0')} // ${message}`, 'success'), 0);
+            return { ...prev, shares: nextCount };
+          });
           setMiningState('success');
-          addLog(`!!! JAR SUCCESS !!! ${message}`, 'success');
-          setTimeout(() => setMiningState('mining'), 5000);
           break;
         case 'error':
           setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
