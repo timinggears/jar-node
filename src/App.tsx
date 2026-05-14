@@ -49,6 +49,7 @@ export default function App() {
   });
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
+  const [isOverdrive, setIsOverdrive] = useState(false);
   const [miningState, setMiningState] = useState<MiningPhase>('idle');
   const [lastSyncSuccess, setLastSyncSuccess] = useState(false);
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
@@ -59,6 +60,8 @@ export default function App() {
   carrierBiasRef.current = carrierBias;
   const isMiningRef = useRef(isMining);
   isMiningRef.current = isMining;
+  const isOverdriveRef = useRef(isOverdrive);
+  isOverdriveRef.current = isOverdrive;
   const lastUpdateRef = useRef(Date.now());
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
@@ -317,7 +320,9 @@ export default function App() {
       phaseOut = Math.max(-200, Math.min(200, phaseOut));
       
       // 3. Coherence (Health Meter) - More forgiving math to allow 1.0
-      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250);
+      // Overdrive drains coherence faster
+      const overdriveDrain = isOverdriveRef.current ? 0.15 : 0;
+      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250) - overdriveDrain;
       const nextCoherence = isZeroPoint ? 0.0 : (isSingularity ? 0.05 : Math.min(1.0, Math.max(0.1, coherenceBase)));
       
       // 4. Intelligence (Learning Capacity)
@@ -336,7 +341,8 @@ export default function App() {
         const baseGain = isVoidResonance ? 1.2 : 0.15;
         const jitterBonus = jitterValue * 0.4;
         const coherenceBonus = Math.max(0, (nextCoherence - 0.7) * 1.5);
-        nextIntelligence = Math.min(999.9, nextIntelligence + baseGain + jitterBonus + coherenceBonus);
+        const overdriveBonus = isOverdriveRef.current ? 0.5 : 0;
+        nextIntelligence = Math.min(999.9, nextIntelligence + baseGain + jitterBonus + coherenceBonus + overdriveBonus);
       } else if (nextCoherence < 0.45) {
         nextIntelligence = Math.max(10.0, nextIntelligence - 0.08);
       }
@@ -347,7 +353,8 @@ export default function App() {
       const dt = (now - lastUpdateRef.current) / 1000;
       lastUpdateRef.current = now;
       
-      const instantaneousHashRate = (jitterValue * 1200000000 * dt) / 1000;
+      const boostMultiplier = isOverdriveRef.current ? 3.5 : 1.0;
+      const instantaneousHashRate = (jitterValue * 1200000000 * dt * boostMultiplier) / 1000;
       
       const seed = parseInt(seedStr, 16);
       let nextShares = prev.shares;
@@ -538,8 +545,16 @@ export default function App() {
         addLog('RESET_HARD - DESTRUCTIVE origin realignment', 'error');
         addLog('SOLVE - Run 250 nodal city optimization', 'info');
         addLog('CALIBRATE - Stabilize nodal coherence', 'info');
+        addLog('OVERDRIVE - Toggle high-frequency compute (3.5x Hashrate)', 'warning');
         addLog('MINER_START - Initialize liquid compute', 'info');
         addLog('MINER_STOP - Halt liquid compute', 'info');
+        break;
+      case 'overdrive':
+        setIsOverdrive(prev => {
+          const next = !prev;
+          addLog(next ? 'CRITICAL: Overdrive sequence engaged. Coherence stability at risk.' : 'Overdrive disengaged. System normalization in progress.', next ? 'warning' : 'success');
+          return next;
+        });
         break;
       case 'clear':
         setLogs([]);
@@ -606,11 +621,17 @@ export default function App() {
       
       <JumpingBunny miningState={miningState} />
       <LittleSquirrel miningState={miningState} />
-      <LittleMech miningState={miningState} />
+      <LittleMech miningState={miningState} isBoosted={isOverdrive} />
 
       <motion.div 
-        animate={{ opacity: isBooted ? 1 : 0 }}
-        transition={{ duration: 1, delay: 0.5 }}
+        animate={{ 
+          opacity: isBooted ? 1 : 0,
+          x: isOverdrive ? [0, -1, 1, -1, 1, 0] : 0 
+        }}
+        transition={{ 
+          opacity: { duration: 1, delay: 0.5 },
+          x: { duration: 0.1, repeat: Infinity, ease: "linear" }
+        }}
         className="h-full max-w-[1400px] mx-auto w-full flex flex-col p-6 gap-6 overflow-hidden"
       >
         {/* HEADER SECTION */}
@@ -826,6 +847,15 @@ export default function App() {
               >
                 {isMining ? 'SYSTEM_LOCKED_MINING' : 'READY_STANDBY'}
                 <Zap className="w-3.5 h-3.5" />
+              </button>
+              <button 
+                onClick={() => setIsOverdrive(!isOverdrive)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-bold transition-all ${
+                  isOverdrive ? 'bg-cyan-500 text-black border border-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.5)]' : 'bg-black text-cyan-500/40 border border-cyan-500/20 hover:border-cyan-500/40'
+                }`}
+              >
+                OVERDRIVE
+                <Activity className={`w-3.5 h-3.5 ${isOverdrive ? 'animate-pulse' : ''}`} />
               </button>
              </div>
           </div>
