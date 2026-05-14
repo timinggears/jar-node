@@ -35,10 +35,11 @@ export default function FileExplorer() {
 
   const handleGitSync = () => {
     setIsGitSyncing(true);
+    window.dispatchEvent(new CustomEvent('system-sync'));
     setTimeout(() => {
       setIsGitSyncing(false);
       setGitStatus('synced');
-    }, 1200);
+    }, 1500);
   };
 
   useEffect(() => {

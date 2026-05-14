@@ -1,11 +1,13 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
   onToggleWindow: (id: string) => void;
   openWindows: string[];
   activeWindow: string | null;
+  isSyncing: boolean;
+  onSync: () => void;
   isMining: boolean;
   onToggleMining: () => void;
 }
@@ -50,11 +52,29 @@ export default function Taskbar({
   onToggleWindow, 
   openWindows, 
   activeWindow, 
+  isSyncing,
+  onSync,
   isMining, 
   onToggleMining 
 }: TaskbarProps) {
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex items-center px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl gap-2">
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={onSync}
+        disabled={isSyncing}
+        className={`w-12 h-12 flex items-center justify-center rounded-xl transition-all mr-2 ${
+          isSyncing 
+            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+            : 'bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border border-white/5'
+        }`}
+      >
+        <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
+      </motion.button>
+
+      <div className="w-[1px] h-8 bg-white/10 mr-2" />
+
       <AppIcon 
         id="terminal"
         icon={<Terminal size={20} />} 

@@ -557,6 +557,22 @@ export default function App() {
 
   // Initial greeting
   useEffect(() => {
+    const handleSystemLog = (e: any) => {
+      const { message, type } = e.detail;
+      addLog(message, type);
+    };
+    const handleSystemSync = () => {
+      handleGitPull(false);
+    };
+    window.addEventListener('system-log', handleSystemLog);
+    window.addEventListener('system-sync', handleSystemSync);
+    return () => {
+      window.removeEventListener('system-log', handleSystemLog);
+      window.removeEventListener('system-sync', handleSystemSync);
+    };
+  }, [addLog]);
+
+  useEffect(() => {
     addLog('PI_RESERVOIR_SOVEREIGN System Initialized.', 'info');
     addLog('Nodal Topology: 128-Cluster Liquid State Array.', 'success');
     addLog('Raspberry Pi GPIO: Pins 14 (PWM), 26 (ADC) Linked.', 'info');
@@ -871,6 +887,8 @@ export default function App() {
         onToggleWindow={toggleWindow}
         openWindows={openWindows}
         activeWindow={activeWindow}
+        isSyncing={isSyncing}
+        onSync={() => handleGitPull(false)} // Call virtual sync by default for better demo experience
         isMining={isMining}
         onToggleMining={() => setIsMining(!isMining)}
       />

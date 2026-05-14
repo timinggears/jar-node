@@ -52,9 +52,16 @@ export default function QuantumStabilizer({
 
   const handleSync = () => {
     setIsSyncing(true);
+    window.dispatchEvent(new CustomEvent('system-log', { 
+      detail: { message: "CORE_SYNC: Synchronizing nodal phase vectors...", type: "warning" } 
+    }));
+    
     setTimeout(() => {
       setIsSyncing(false);
       setLastSyncTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
+      window.dispatchEvent(new CustomEvent('system-log', { 
+        detail: { message: "CORE_SYNC_ACK: Sovereign core parity established.", type: "success" } 
+      }));
     }, 800);
   };
 
