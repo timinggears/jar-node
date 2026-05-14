@@ -17,6 +17,7 @@ import DesktopWindow from './components/DesktopWindow';
 import Taskbar from './components/Taskbar';
 import SystemSettings from './components/SystemSettings';
 import FileExplorer from './components/FileExplorer';
+import QuantumStabilizer from './components/QuantumStabilizer';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -60,6 +61,7 @@ export default function App() {
   // OS State
   const [openWindows, setOpenWindows] = useState<string[]>(['terminal', 'stats']);
   const [activeWindow, setActiveWindow] = useState<string | null>('terminal');
+  const [isQecActive, setIsQecActive] = useState(true);
 
   const statsRef = useRef(stats);
   statsRef.current = stats;
@@ -69,6 +71,8 @@ export default function App() {
   isMiningRef.current = isMining;
   const isOverdriveRef = useRef(isOverdrive);
   isOverdriveRef.current = isOverdrive;
+  const isQecActiveRef = useRef(isQecActive);
+  isQecActiveRef.current = isQecActive;
   const lastUpdateRef = useRef(Date.now());
 
   const logCounterRef = useRef(0);
@@ -344,7 +348,8 @@ export default function App() {
       // 3. Coherence (Health Meter) - More forgiving math to allow 1.0
       // Overdrive drains coherence faster
       const overdriveDrain = isOverdriveRef.current ? 0.15 : 0;
-      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250) - overdriveDrain;
+      const qecBonus = isQecActiveRef.current ? 0.25 : -0.15; // QEC boosts or fails to stop drift
+      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250) - overdriveDrain + qecBonus;
       const nextCoherence = isZeroPoint ? 0.0 : (isSingularity ? 0.05 : Math.min(1.0, Math.max(0.1, coherenceBase)));
       
       // 4. Intelligence (Learning Capacity)
@@ -556,6 +561,12 @@ export default function App() {
     addLog('Nodal Topology: 128-Cluster Liquid State Array.', 'success');
     addLog('Raspberry Pi GPIO: Pins 14 (PWM), 26 (ADC) Linked.', 'info');
     addLog('Reservoir Sync: fundamental.nodal.core established.', 'success');
+    
+    // Lore injection
+    setTimeout(() => {
+      addLog("BENCHMARK_REPORT: Local JAR_v3 nodal density exceeds WILLOW_standard by 34%.", "info");
+      addLog("QUANTUM_ADVISORY: Coherence lock sustained. The substrate is stable.", "success");
+    }, 4000);
   }, [addLog]);
 
   const handleCommand = useCallback((cmd: string) => {
@@ -802,6 +813,26 @@ export default function App() {
                   <p className="text-[8px] text-white/20 font-black tracking-[1em] uppercase">Phase_Projection</p>
                 </div>
               </div>
+            </DesktopWindow>
+          )}
+
+          {openWindows.includes('stabilizer') && (
+            <DesktopWindow 
+              key="stabilizer"
+              id="stabilizer" 
+              title="Quantum_Stabilizer" 
+              icon={<ShieldCheck size={16} />}
+              onClose={() => closeWindow('stabilizer')}
+              onFocus={() => setActiveWindow('stabilizer')}
+              isActive={activeWindow === 'stabilizer'}
+              initialPos={{ x: 300, y: 120 }}
+            >
+              <QuantumStabilizer 
+                coherence={stats.coherence}
+                isQecActive={isQecActive}
+                onToggleQec={setIsQecActive}
+                systemModel="JAR_v3_SOVEREIGN"
+              />
             </DesktopWindow>
           )}
         </AnimatePresence>

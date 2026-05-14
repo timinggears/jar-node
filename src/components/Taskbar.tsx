@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -78,6 +78,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('visualizer')} 
         isActive={activeWindow === 'visualizer'}
         onClick={() => onToggleWindow('visualizer')}
+      />
+      <AppIcon 
+        id="stabilizer"
+        icon={<ShieldCheck size={20} />} 
+        label="Stabilizer" 
+        isOpen={openWindows.includes('stabilizer')} 
+        isActive={activeWindow === 'stabilizer'}
+        onClick={() => onToggleWindow('stabilizer')}
       />
       <AppIcon 
         id="files"
