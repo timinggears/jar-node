@@ -100,6 +100,7 @@ export default function App() {
   // Sync Hardware Settings to Backend
   useEffect(() => {
     if (hardwareState === 'bridged' && socketRef.current) {
+      console.log(`[BRIDGE] Emitting hardware:params - Bias: ${carrierBias}, Overdrive: ${isOverdrive}`);
       socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
     }
   }, [carrierBias, isOverdrive, hardwareState]);

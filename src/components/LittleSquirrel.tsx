@@ -11,9 +11,11 @@ export default function LittleSquirrel({ miningState, isStatic }: { miningState:
       transition={{ delay: 2.5, duration: 1 }}
     >
       <motion.div
+        initial={{ y: 0, x: 0, scale: 1, opacity: 1 }}
         animate={{
           scale: isExcited ? [1, 1.1, 1] : [1, 1.02, 1],
-          x: isExcited ? [0, -5, 5, 0] : 0
+          x: isExcited ? [0, -5, 5, 0] : 0,
+          opacity: 1
         }}
         transition={{
           duration: isExcited ? 0.3 : 2,

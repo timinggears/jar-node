@@ -35,12 +35,13 @@ async function startServer() {
       }
     });
 
-    socket.on('hardware:params', (params: any) => {
-      systemBias = Number(params.bias || 0);
-      isOverdrive = Boolean(params.overdrive);
-      console.log(`[HARDWARE] Params updated: Bias=${systemBias}, Overdrive=${isOverdrive}`);
-      socket.emit('log', `SYSTEM: Received params - Bias: ${systemBias}, Overdrive: ${isOverdrive}`);
-    });
+      socket.on('hardware:params', (params: any) => {
+        systemBias = Number(params.bias || 0);
+        isOverdrive = Boolean(params.overdrive);
+        console.log(`[HARDWARE] Params updated: Bias=${systemBias}, Overdrive=${isOverdrive}`);
+        const baseKHz = (35000 + (systemBias * 500)) / 1000;
+        socket.emit('log', `SYSTEM: Nodal Bias realignment complete. Anchor shifted to ${baseKHz.toFixed(1)} KHz.`);
+      });
 
     socket.on('hardware:command', (cmd: string) => {
       if (hardwarePort && hardwarePort.isOpen) {

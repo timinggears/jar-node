@@ -103,6 +103,7 @@ export default function PetBay({ miningState, isOverdrive }: PetBayProps) {
 
             {/* Scanner Line Effect */}
             <motion.div 
+              initial={{ y: 0 }}
               animate={{ y: [0, 450, 0] }}
               transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
               className="absolute left-0 right-0 h-[1px] bg-[#00ffcc]/20 z-0 pointer-events-none shadow-[0_0_10px_#00ffcc]"

@@ -75,6 +75,7 @@ export default function JumpingBunny({ miningState, isStatic }: { miningState: '
           <motion.div
             key={i}
             className="absolute w-1 h-1 bg-white rounded-full translate-x-[-50%] translate-y-[-50%]"
+            initial={{ opacity: 0, scale: 0, x: 0, y: 0 }}
             animate={{
               scale: [0, 1.2, 0],
               x: [0, (i - 2) * 20, (i - 2) * 30],
@@ -92,6 +93,7 @@ export default function JumpingBunny({ miningState, isStatic }: { miningState: '
 
         {/* Small jumping "dust" or sparks */}
         <motion.div
+           initial={{ opacity: 0, scale: 0, y: 0 }}
            animate={{
              scale: [0, 1.5, 0],
              opacity: [0, 1, 0],

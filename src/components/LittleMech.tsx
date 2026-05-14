@@ -29,13 +29,15 @@ export default function LittleMech({ miningState, isBoosted, isStatic }: { minin
       transition={{ delay: 3.5, type: "spring" }}
     >
       <motion.div
+        initial={{ y: 0, x: 0, scale: 1, opacity: 1 }}
         animate={{
           // Idle bobing, Success jump, or Overdrive vibration
           y: isOverdrive 
             ? [-1, 1, -1] 
             : (miningState === 'success' ? [0, -20, 0] : [0, -1.5, 0]),
           x: isOverdrive ? [-1.5, 1.5, -1.5] : 0,
-          scale: miningState === 'success' ? [1, 1.1, 1] : 1
+          scale: miningState === 'success' ? [1, 1.1, 1] : 1,
+          opacity: 1
         }}
         transition={{
           y: {
@@ -93,6 +95,7 @@ export default function LittleMech({ miningState, isBoosted, isStatic }: { minin
           <motion.rect
             x="10" y="7" width="4" height="1"
             fill={isOverdrive ? "#ff0000" : "#00ffcc"}
+            initial={{ opacity: 1 }}
             animate={{ opacity: isOverdrive ? [1, 0.5, 1] : 1 }}
             transition={{ duration: 0.1, repeat: Infinity }}
           />

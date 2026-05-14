@@ -14,7 +14,9 @@ export default function LittleBee({ miningState, isStatic }: { miningState: 'idl
         animate={{
           y: isMining ? [0, -2, 0, -1, 0] : [0, -4, 0],
           x: [0, 2, 0, -2, 0],
+          opacity: 1 // Ensure initial state for opacity is tracked
         }}
+        initial={{ opacity: 1, y: 0, x: 0 }}
         transition={{
           duration: isMining ? 0.2 : 2.5,
           repeat: Infinity,
@@ -35,7 +37,7 @@ export default function LittleBee({ miningState, isStatic }: { miningState: 'idl
           <motion.path 
             d="M6 4h4v2H6z" 
             fill="#ffffff" 
-            opacity="0.6"
+            initial={{ opacity: 0.6 }}
             animate={{ opacity: isMining ? [0.2, 0.8, 0.2] : [0.4, 0.6, 0.4] }}
             transition={{ duration: 0.1, repeat: Infinity }}
           />
