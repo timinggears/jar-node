@@ -13,6 +13,7 @@ import WarpVisualizer from './components/WarpVisualizer';
 import ConsoleLog from './components/ConsoleLog';
 import BootLoader from './components/BootLoader';
 import JumpingBunny from './components/JumpingBunny';
+import LittleSquirrel from './components/LittleSquirrel';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -600,6 +601,7 @@ export default function App() {
       <div className="fixed inset-0 pointer-events-none z-50 bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-20" />
       
       <JumpingBunny miningState={miningState} />
+      <LittleSquirrel miningState={miningState} />
 
       <motion.div 
         animate={{ opacity: isBooted ? 1 : 0 }}
