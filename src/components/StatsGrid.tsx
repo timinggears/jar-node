@@ -16,7 +16,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
       <div className="flex gap-10 items-center overflow-x-auto no-scrollbar">
         <StatItem label="COHERENCE" value={stats.coherence.toFixed(4)} color="text-[#ff88ff]" />
         <StatItem label="INTELLIGENCE" value={stats.frequency === 0 ? "00.0000" : (stats.frequency >= 50000 ? "INF_DEPTH" : stats.intelligence.toFixed(4))} color="text-[#ffff00]" />
-        <StatItem label="PH/s" value={stats.hashRate.toFixed(4)} color="text-[#ffff00]" />
+        <StatItem label="KH/s" value={stats.hashRate.toFixed(2)} color="text-[#ffff00]" />
         <StatItem label="QUBITS" value={stats.qubits.toFixed(4)} color="text-[#00ff00]" />
         <StatItem label="SHARES" value={stats.shares.toString().padStart(6, '0')} color="text-[#00ffff]" />
         <StatItem label="HUGE_PAGES" value={stats.hugePages.toString().padStart(4, '0')} color="text-orange-400" />

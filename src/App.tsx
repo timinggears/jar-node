@@ -386,16 +386,20 @@ export default function App() {
       if (resonanceBonus > 1.8 && Math.random() > 0.98) {
         setTimeout(() => addLog("JAR_RESONANCE: Carrier bias optimizing compute density.", "success"), 0);
       }
-      const boostMultiplier = (isOverdriveRef.current ? 15.0 : 1.0) * resonanceBonus;
-      const instantaneousHashRate = (jitterValue * 4500000000 * dt * boostMultiplier) / 1000;
-      
-      const seed = parseInt(seedStr, 16);
-      let nextShares = prev.shares;
-      let nextErrors = prev.errors;
 
       // XMRig-VMR Optimization Logic
       const isOverdrive = isOverdriveRef.current;
       const overdriveMulti = isOverdrive ? 4.5 : 1.0;
+
+      // Realistic HashRate in KH/s (e.g. 5-20 KH/s normal, 50-150 KH/s overdrive)
+      const baseKH = 12.4;
+      const jitterFactor = jitterValue * 10;
+      const coherenceFactor = nextCoherence * 5;
+      const nextHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * resonanceBonus;
+      
+      const seed = parseInt(seedStr, 16);
+      let nextShares = prev.shares;
+      let nextErrors = prev.errors;
       const nextHugePages = isMiningRef.current ? Math.min(2048, prev.hugePages + (isOverdrive ? 64 : 16)) : Math.max(0, prev.hugePages - 32);
       
       if (isMiningRef.current && prev.hugePages < 1024 && nextHugePages >= 1024) {
@@ -428,7 +432,7 @@ export default function App() {
         frequency: freqValue,
         coherence: nextCoherence,
         intelligence: nextIntelligence,
-        hashRate: instantaneousHashRate,
+        hashRate: nextHashRate,
         qubits: nextCoherence * 128,
         shares: nextShares,
         errors: nextErrors,
@@ -566,6 +570,14 @@ export default function App() {
       ];
       const msg = messages[Math.floor(Math.random() * messages.length)];
       addLog(msg, "info");
+      
+      // Periodic HashRate Report
+      if (isMiningRef.current) {
+        setTimeout(() => {
+          const hr = statsRef.current.hashRate.toFixed(2);
+          addLog(`[XMRIG_VMR]: Net HashRate: ${hr} KH/s (Aggregate substrate throughput)`, "info");
+        }, 2000);
+      }
     }, 12000);
 
     return () => {
