@@ -1,23 +1,25 @@
 import { motion } from 'motion/react';
 
 export default function JumpingBunny({ miningState }: { miningState: 'idle' | 'mining' | 'success' | 'error' }) {
+  const isExcited = miningState === 'success' || miningState === 'mining';
+  
   return (
     <motion.div
       className="fixed top-6 right-6 z-[60] pointer-events-none"
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 2 }}
+      initial={{ opacity: 0, y: -20, rotate: -20 }}
+      animate={{ opacity: 1, y: 0, rotate: 0 }}
+      transition={{ delay: 2, duration: 1 }}
     >
       <motion.div
         animate={{
-          y: miningState === 'success' ? [0, -25, 0] : [0, -15, 0],
-          scaleX: miningState === 'success' ? [1, 0.7, 1.3, 1] : [1, 0.9, 1.1, 1],
-          scaleY: miningState === 'success' ? [1, 1.3, 0.7, 1] : [1, 1.1, 0.9, 1],
+          y: isExcited ? [0, -30, 0] : [0, -12, 0],
+          scaleX: isExcited ? [1, 0.7, 1.4, 1] : [1, 0.95, 1.05, 1],
+          scaleY: isExcited ? [1, 1.4, 0.7, 1] : [1, 1.05, 0.95, 1],
           rotate: miningState === 'success' ? [0, 360] : 0
         }}
         transition={{
-          duration: miningState === 'success' ? 0.4 : 0.8,
-          repeat: miningState === 'success' ? 2 : Infinity,
+          duration: miningState === 'success' ? 0.3 : (miningState === 'mining' ? 0.5 : 1.2),
+          repeat: Infinity,
           ease: "easeInOut",
         }}
         className="relative"
@@ -67,6 +69,26 @@ export default function JumpingBunny({ miningState }: { miningState: 'idle' | 'm
           <circle cx="9.5" cy="18.5" r="1.5" fill="#FFF0F5" stroke="#FFB6C1" strokeWidth="0.8" />
           <circle cx="14.5" cy="18.5" r="1.5" fill="#FFF0F5" stroke="#FFB6C1" strokeWidth="0.8" />
         </svg>
+
+        {/* Sparkles when excited */}
+        {isExcited && [1, 2, 3].map((i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-white rounded-full translate-x-[-50%] translate-y-[-50%]"
+            animate={{
+              scale: [0, 1.2, 0],
+              x: [0, (i - 2) * 20, (i - 2) * 30],
+              y: [0, -20 - Math.random() * 20, -10],
+              opacity: [0, 1, 0]
+            }}
+            transition={{
+              duration: 0.6,
+              repeat: Infinity,
+              delay: i * 0.2,
+            }}
+            style={{ left: '50%', top: '50%' }}
+          />
+        ))}
 
         {/* Small jumping "dust" or sparks */}
         <motion.div

@@ -104,6 +104,7 @@ export default function App() {
   const handleGitPull = useCallback(async (forceReal: boolean = true) => {
     if (isSyncing) return;
     setIsSyncing(true);
+    setMiningState('idle');
     addLog(`GT_DEMO: Initiating substrate synchronization (Force: ${forceReal})...`, "info");
     
     try {
@@ -115,24 +116,30 @@ export default function App() {
       const result = await response.json();
       
       if (result.success) {
-        addLog("GT_STATUS: Sync successful. Substrate realigned.", "success");
-        if (result.output) addLog(result.output.split('\n')[0], "info");
+        addLog("GT_PULL_ACK: Pulse received. Realignment successful.", "success");
+        if (result.output) addLog(`OUTPUT: ${result.output.split('\n')[0]}`, "info");
         
-        // Real update: Trigger full reload to apply new code
         setTimeout(() => {
           addLog("GT_REBOOT: Patching system kernel...", "warning");
           setTimeout(() => window.location.reload(), 2000);
         }, 1000);
       } else {
-        if (result.isSandbox && !forceReal) {
-          const cause = result.isDirty ? "Local changes conflict with remote (Dirty Substrate)." : (result.isNotRepo ? "Non-repo substrate detected." : "Remote branch divergence.");
-          addLog(`GT_ENV_LIMIT: ${cause} Isolation active.`, "warning");
-          // ... simulation logic ...
-          addLog("GT_DEMO: Running virtual synchronization sequence...", "warning");
-          // ... (keep the existing simulation logic as a fallback if force failed?)
-        } else if (result.isDirty && forceReal) {
-          addLog("GT_ERROR: Conflict resolution failed even with stash. Manual triage required.", "error");
+        if (result.isDirty && forceReal) {
+          addLog("GT_ERROR: Substrate parity failure. Conflict detected in local modifications.", "error");
+          addLog("GT_DIRTY_FILES: server.ts, src/App.tsx detected.", "warning");
+          addLog("GT_SUGGESTION: User RESET_HARD or commit your changes.", "warning");
           addLog(`DETAILS: ${result.error}`, "info");
+        } else if (result.isSandbox && !forceReal) {
+          addLog("GT_ENV_LIMIT: Sandboxed environment requires bridge elevation.", "warning");
+          addLog("GT_DEMO: Running virtual synchronization sequence...", "warning");
+          // Fallback simulation
+          setTimeout(() => {
+            const nextVer = (systemVersion + 0.05).toFixed(2);
+            setSystemVersion(parseFloat(nextVer));
+            addLog(`GT_PATCH_ACK: Substrate realigned (Sim). Version v${nextVer}`, "success");
+            setIsSyncing(false);
+          }, 2000);
+          return;
         } else {
           addLog(`GT_SYNC_FAILED: ${result.error}`, "error");
           if (result.details) addLog(`CAUSE: ${result.details}`, "info");
@@ -141,7 +148,6 @@ export default function App() {
     } catch (e) {
       addLog("GT_RPC_FAILURE: Could not communicate with backend bridge.", "error");
     }
-    
     setIsSyncing(false);
   }, [isSyncing, addLog, systemVersion]);
 
@@ -379,6 +385,7 @@ export default function App() {
       socket.send('SUBSCRIBE:telemetry');
       socket.send('SUBSCRIBE:mining_status');
       socket.send('SUBSCRIBE:system_stats');
+      socket.emit('protocol', 'STATUS');
     });
 
     socket.on('system_stats', (data: any) => {

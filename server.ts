@@ -290,23 +290,27 @@ async function startServer() {
       let result;
       try {
         if (force) {
-          console.log('[GIT] Force sync: Stashing local changes...');
-          await execPromise('git stash save "Sovereign_Bridge_Auto_Stash"').catch(() => {});
+          console.log('[GIT] Force sync: Stashing local changes (including untracked)...');
+          await execPromise('git stash push -u -m "Sovereign_Bridge_Auto_Stash"').catch(() => {});
         }
 
         try {
-          result = await execPromise('git pull origin main --rebase');
+          // Fetch and rebase for a cleaner sync
+          await execPromise('git fetch origin');
+          result = await execPromise('git pull origin main --rebase --autostash');
         } catch (pullErr: any) {
           // If main branch doesn't exist, try master
           if (pullErr.message.includes('main') || pullErr.message.includes('branch') || pullErr.message.includes('upstream')) {
-             result = await execPromise('git pull origin master --rebase');
+             result = await execPromise('git pull origin master --rebase --autostash');
           } else {
+             // If we failed mid-rebase, abort it to keep substrate clean
+             await execPromise('git rebase --abort').catch(() => {});
              throw pullErr;
           }
         }
 
         if (force) {
-          console.log('[GIT] Restoring local changes (stash pop)...');
+          console.log('[GIT] Restoring local changes...');
           await execPromise('git stash pop').catch(e => console.warn('[GIT] Stash pop had conflicts or failed:', e.message));
         }
 
