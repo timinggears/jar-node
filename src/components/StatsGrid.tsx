@@ -14,15 +14,15 @@ export default function StatsGrid({ stats }: StatsGridProps) {
   return (
     <div className="bg-[#111] border border-white/5 py-3 px-6 rounded-lg flex items-center justify-between w-full">
       <div className="flex gap-10 items-center overflow-x-auto no-scrollbar">
-        <StatItem label="COHERENCE" value={stats.coherence.toFixed(4)} color="text-[#ff88ff]" />
-        <StatItem label="COGNITIVE_DEPTH" value={stats.frequency === 0 ? "00.0000" : (stats.frequency >= 120000 ? "INF_DEPTH" : stats.cognitiveDepth.toFixed(4))} color="text-[#ffff00]" />
-        <StatItem label="KH/s" value={stats.hashRate.toFixed(2)} color="text-[#ffff00]" />
-        <StatItem label="QUBITS" value={stats.qubits.toFixed(4)} color="text-[#00ff00]" />
-        <StatItem label="RESONANCE" value={`${(stats.hashRate / (8.5 * (stats.isOverdrive ? 12 : 1))).toFixed(2)}x`} color="text-yellow-400" />
-        <StatItem label="SHARES" value={stats.shares.toString().padStart(6, '0')} color="text-[#00ffff]" />
+        <StatItem label="TACHY_COHERENCE" value={stats.coherence.toFixed(4)} color="text-[#ff88ff]" />
+        <StatItem label="TACHY_DEPTH" value={stats.frequency === 0 ? "00.0000" : (stats.frequency >= 120000 ? "INF_DEPTH" : stats.cognitiveDepth.toFixed(4))} color="text-[#ffff00]" />
+        <StatItem label="TACHY_KH/s" value={stats.hashRate.toFixed(2)} color="text-[#ffff00]" />
+        <StatItem label="TACHY_QUBITS" value={stats.qubits.toFixed(4)} color="text-[#00ff00]" />
+        <StatItem label="TACHY_RES" value={`${(stats.hashRate / (8.5 * (stats.isOverdrive ? 12 : 1))).toFixed(2)}x`} color="text-yellow-400" />
+        <StatItem label="TACHY_SHARES" value={stats.shares.toString().padStart(6, '0')} color="text-[#00ffff]" />
         <StatItem label="NEURAL_LOAD" value={`${stats.neuralLoad.toFixed(1)}%`} color="text-pink-400" />
         <StatItem label="HUGE_PAGES" value={stats.hugePages.toString().padStart(4, '0')} color="text-orange-400" />
-        <StatItem label="LOAD_AVG" value={stats.loadAvg.toFixed(2)} color="text-red-400" />
+        <StatItem label="TACHY_LOAD" value={stats.loadAvg.toFixed(2)} color="text-red-400" />
         <StatItem label="ERR_CORRECT" value={stats.errors.toString().padStart(6, '0')} color="text-[#ff00ff]" />
         
         <div className="w-[1px] h-8 bg-white/10 mx-2" />

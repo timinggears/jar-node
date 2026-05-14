@@ -39,8 +39,15 @@ async function startServer() {
         systemBias = Number(params.bias || 0);
         isOverdrive = Boolean(params.overdrive);
         console.log(`[HARDWARE] Params updated: Bias=${systemBias}, Overdrive=${isOverdrive}`);
-        const baseKHz = (35000 + (systemBias * 500)) / 1000;
-        socket.emit('log', `SYSTEM: Nodal Bias realignment complete. Anchor shifted to ${baseKHz.toFixed(1)} KHz.`);
+        
+        // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
+        if (hardwarePort && hardwarePort.isOpen) {
+          hardwarePort.write(`BIAS:${systemBias}\n`);
+          hardwarePort.write(`OVERDRIVE:${isOverdrive ? '1' : '0'}\n`);
+        }
+
+        const biasMultiplier = systemBias / 50.0;
+        socket.emit('log', `SYSTEM: Nodal Bias realigned to ${biasMultiplier.toFixed(2)}x modulation sensitivity.`);
       });
 
     socket.on('hardware:command', (cmd: string) => {
@@ -119,28 +126,32 @@ async function startServer() {
       if (hardwarePort && hardwarePort.isOpen) return;
 
       // Generate telemetry based on REAL system load when hardware is missing
-      // --- HARMONIC ANCHOR v146 PHYSICS ---
+      // --- HARMONIC ANCHOR v147 PHYSICS ---
       const load = os.loadavg()[0];
-      const BASE_FREQ = 35000 + (systemBias * 500); // Bias shifts base up to 85KHz
+      const BASE_FREQ = 35000; 
+      const carrierBias = systemBias / 50.0; // v147 normalization (0.0 - 2.0)
       
       const overdriveExcitation = isOverdrive ? 0.6 : 0;
       const v = 1.65 + (Math.sin(Date.now() / 1500) * (0.4 + overdriveExcitation)) + (Math.random() * 0.1);
-      const jitter = Math.abs(v - 1.65) * (1.2 + load + (isOverdrive ? 1.5 : 0));
+      const jitter = Math.abs(v - 1.65) * (1.1 + load * 0.5 + (isOverdrive ? 0.8 : 0));
       
       const seedNum = (Math.floor(v * 10000000) >>> 0);
       const seedStr = seedNum.toString(16).padStart(8, '0').toUpperCase();
       const parity = (seedNum.toString(2).split('1').length - 1) % 2;
 
-      // Harmonic Drive Modulation
-      let currentFreq = BASE_FREQ + (jitter * 45000);
-      if (jitter > 0.4 || isOverdrive) {
-        const roll = Math.random();
-        if (roll > 0.5) currentFreq = 2 * BASE_FREQ;
-        else if (roll > 0.2) currentFreq = 3 * BASE_FREQ;
-        else if (isOverdrive && roll > 0.05) currentFreq = 4 * BASE_FREQ; 
+      // Harmonic Drive Modulation (v147 Match)
+      let currentFreq = BASE_FREQ + (jitter * 45000 * carrierBias);
+      
+      if (isOverdrive) {
+        currentFreq = currentFreq * 2;
+      }
+
+      // Enhanced excitation on high-jitter events
+      if (jitter > 0.35) {
+        currentFreq = currentFreq * (Math.random() > 0.5 ? 3 : 1);
       }
       
-      // Pin to 1.46 physics (always at least fundamental)
+      // Ensure frequency stays in range
       currentFreq = Math.max(BASE_FREQ, currentFreq);
       
       const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(0)}`;

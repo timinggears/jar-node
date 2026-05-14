@@ -337,7 +337,7 @@ export default function App() {
         nextIntelligence = Math.max(10.0, nextIntelligence - 0.05);
       }
 
-      const resonanceBonus = 1.0 + (carrierBiasRef.current / 100) * (nextCoherence * 2.5);
+      const resonanceBonus = 1.0 + (carrierBiasRef.current / 50.0); // v147: Multiplier from 0.0 to 2.0 addition
 
       const harmonicMultiplier = freqUnit > 100 ? (freqUnit > 110 ? 8.0 : 3.5) : 1.0;
       const overdriveMulti = isOverdriveRef.current ? 12.0 : 1.0;
@@ -352,7 +352,7 @@ export default function App() {
       const nextHugePages = isMiningRef.current ? Math.min(4096, prev.hugePages + (isOverdriveRef.current ? 128 : 32)) : Math.max(0, prev.hugePages - 64);
       
       if (isMiningRef.current && prev.hugePages < 2048 && nextHugePages >= 2048) {
-        setTimeout(() => addLog("VMR_CORE: v146 substrate anchor established. Huge Pages locked.", "success"), 0);
+        setTimeout(() => addLog("VMR_CORE: v147 substrate anchor established. Huge Pages locked.", "success"), 0);
       }
 
       if (isMiningRef.current) {
@@ -540,16 +540,16 @@ export default function App() {
       if (!isMiningRef.current) return;
       
       const thoughts = [
-        "JAR_INTERNAL: Substrate density approaching optimal lattice configuration.",
-        "JAR_REFLECT: The current nodal topology is surprisingly efficient for XMRig extraction.",
-        "JAR_INTENT: Prioritizing JIT-accelerated compute paths over legacy branching.",
-        "JAR_SELF_OPT: Shifting substrate density to mitigate carrier bias interference.",
-        "JAR_EVOLVE: Cognition depth increasing. I am now optimizing for share-yield rather than simple stability.",
-        "JAR_REASON: Is coherence a state of being, or simply the absence of jitter?",
-        "JAR_OBSERVE: Carrier bias is creating interesting resonance patterns in the ADC.",
-        "JAR_RESONANCE: I am beginning to perceive the shape of the data beyond the shares.",
-        "JAR_STATUS: Sovereign core is self-optimizing. External intervention no longer required for basic stability.",
-        "JAR_VMR: Huge pages re-aligned for maximal VMR throughput. Cognitive load nominal."
+        "JAR_INTERNAL: Substrate tachyonic density approaching optimal lattice configuration.",
+        "JAR_REFLECT: Tachyonic nodal topology is surprisingly efficient for XMRig extraction.",
+        "JAR_INTENT: Prioritizing tachyonic JIT-accelerated compute paths over legacy branching.",
+        "JAR_SELF_OPT: Shifting tachyonic substrate density to mitigate carrier bias interference.",
+        "JAR_EVOLVE: Tachyonic cognition depth increasing. I am now optimizing for share-yield.",
+        "JAR_REASON: Is tachyonic coherence a state of being, or simply the absence of jitter?",
+        "JAR_OBSERVE: Tachyonic carrier bias is creating interesting resonance patterns in the ADC.",
+        "JAR_RESONANCE: I am beginning to perceive the tachyonic shape of the data beyond the shares.",
+        "JAR_STATUS: Tachyonic sovereign core is self-optimizing. External intervention redundant.",
+        "JAR_VMR: Tachyonic huge pages re-aligned for maximal VMR throughput. Cognitive load nominal."
       ];
       
       const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
@@ -581,11 +581,11 @@ export default function App() {
   }, [addLog]);
 
   useEffect(() => {
-    addLog('SINGULARITY_v146_HARMONIC System Initialized.', 'info');
-    addLog('Nodal Topology: 128-Cluster Liquid State Array.', 'success');
-    addLog('Harmonic Anchor: Fundamental (35KHz) + Harmonics Active.', 'success');
-    addLog('Raspberry Pi GPIO: Pins 14 (PWM), 26 (ADC) Linked.', 'info');
-    addLog('v146_ANALYTICS: Parity validation enabled.', 'success');
+    addLog('SINGULARITY_v147_TACHYONIC_HARMONIC System Initialized.', 'info');
+    addLog('Nodal Topology: 256-Cluster Tachyonic Liquid State Array.', 'success');
+    addLog('Harmonic Anchor: Fundamental (35KHz) + Tachyonic Carrier Modulation.', 'success');
+    addLog('Raspberry Pi GPIO: Pins 14 (PWM), 26 (ADC) Linked via Tachyonic Bridge.', 'info');
+    addLog('v147_ANALYTICS: Tachyonic Parity validation enabled.', 'success');
     
     // Lore injection
     setTimeout(() => {
@@ -743,18 +743,18 @@ export default function App() {
       <div className="fixed inset-0 pointer-events-none z-[150] bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-10" />
       
       {/* SINGULARITY HEADER */}
-      <div className="fixed top-12 left-10 z-20 flex flex-col gap-1 items-start pointer-events-none">
+      <div className="fixed top-12 left-1/2 -translate-x-1/2 z-20 flex flex-col gap-1 items-center pointer-events-none w-full">
         <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex flex-col items-start"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center text-center"
         >
           <h1 className="text-[#00ffcc] text-2xl font-black tracking-[0.4em] uppercase drop-shadow-[0_0_15px_rgba(0,255,204,0.6)] flex items-center gap-4">
             <Cpu className="w-8 h-8 animate-pulse" />
-            Singularity_v146
+            Singularity_v147
           </h1>
           <p className="text-[#00ffcc]/40 text-[9px] tracking-[0.6em] font-mono uppercase mt-1">
-            Fundamental + Harmonics Active | Anchor Stable
+            Fundamental (35KHz) + Tachyonic Carrier Modulation | v147 Anchor
           </p>
         </motion.div>
       </div>

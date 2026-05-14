@@ -35,8 +35,8 @@ export default function SystemSettings({
         <div className="space-y-6">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] text-zinc-500 uppercase font-bold">Carrier Bias (Nodal Offset)</label>
-              <span className="text-xs font-mono text-[#00ffcc]">+{(carrierBias * 0.5).toFixed(1)} KHz</span>
+              <label className="text-[10px] text-zinc-500 uppercase font-bold">Carrier Bias (Excitation)</label>
+              <span className="text-xs font-mono text-[#00ffcc]">{(carrierBias / 50.0).toFixed(2)}x Boost</span>
             </div>
             <input 
               type="range" 
@@ -46,18 +46,17 @@ export default function SystemSettings({
               onChange={(e) => setCarrierBias(parseInt(e.target.value))}
               className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic">Shifts the fundamental anchor frequency (BASE_FREQ) from 35.0K to 85.0K.</p>
+            <p className="text-[9px] text-zinc-600 italic">Scales the modulation sensitivity. Normal operation at 1.00x (Bias: 50).</p>
           </div>
 
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <label className="text-[10px] text-blue-500 uppercase font-bold">Harmonic Resonance</label>
-              <span className="text-xs font-mono text-blue-400">v1.46_LIVE: {freqKHz.toFixed(1)} KHz</span>
+              <span className="text-xs font-mono text-blue-400">v1.47_LIVE: {freqKHz.toFixed(1)} KHz</span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {[1, 2, 3].map(h => {
-                const base = 35000 + (carrierBias * 500);
-                const target = base * h;
+                const target = 35000 * h;
                 const isActive = Math.abs(currentFreq - target) < 5000;
                 return (
                   <div key={h} className={`border p-2 rounded text-center transition-colors ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5'}`}>
