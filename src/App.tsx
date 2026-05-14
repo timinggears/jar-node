@@ -706,7 +706,11 @@ export default function App() {
              }} />
 
         {/* HONEYCOMB OVERLAY */}
-        <div className={`absolute inset-0 pointer-events-none bg-honeycomb opacity-[0.4] animate-pulse-slow transition-all duration-1000 ${isOverdrive ? 'invert hue-rotate-180 opacity-60' : ''}`} />
+        <div className={`absolute inset-0 pointer-events-none animate-pulse-slow transition-all duration-1000 ${isOverdrive ? 'invert hue-rotate-180 opacity-40' : 'opacity-20'}`}
+             style={{
+               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100' viewBox='0 0 56 100'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100' fill='none' stroke='%2300ffcc' stroke-opacity='0.6' stroke-width='1.5'/%3E%3C/svg%3E")`,
+               backgroundSize: '56px 100px'
+             }} />
         
         {/* VIGNETTE & CRUNCH */}
         <div className="absolute inset-0 pointer-events-none bg-radial-[circle_at_center,_transparent_40%,_black_90%] opacity-40" />
