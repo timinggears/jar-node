@@ -14,6 +14,7 @@ import ConsoleLog from './components/ConsoleLog';
 import BootLoader from './components/BootLoader';
 import JumpingBunny from './components/JumpingBunny';
 import LittleSquirrel from './components/LittleSquirrel';
+import LittleMech from './components/LittleMech';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -605,6 +606,7 @@ export default function App() {
       
       <JumpingBunny miningState={miningState} />
       <LittleSquirrel miningState={miningState} />
+      <LittleMech miningState={miningState} />
 
       <motion.div 
         animate={{ opacity: isBooted ? 1 : 0 }}
