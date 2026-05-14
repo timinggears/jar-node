@@ -1,12 +1,12 @@
 import { motion } from 'motion/react';
 
-export default function JumpingBunny({ miningState }: { miningState: 'idle' | 'mining' | 'success' | 'error' }) {
+export default function JumpingBunny({ miningState, isStatic }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean }) {
   const isExcited = miningState === 'success' || miningState === 'mining';
   
   return (
     <motion.div
-      className="fixed top-6 right-6 z-[60] pointer-events-none"
-      initial={{ opacity: 0, y: -20, rotate: -20 }}
+      className={`${isStatic ? 'relative' : 'fixed top-6 right-6'} z-[60] pointer-events-none`}
+      initial={isStatic ? false : { opacity: 0, y: -20, rotate: -20 }}
       animate={{ opacity: 1, y: 0, rotate: 0 }}
       transition={{ delay: 2, duration: 1 }}
     >

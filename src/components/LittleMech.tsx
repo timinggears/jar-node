@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 
-export default function LittleMech({ miningState, isBoosted }: { miningState: 'idle' | 'mining' | 'success' | 'error', isBoosted?: boolean }) {
+export default function LittleMech({ miningState, isBoosted, isStatic }: { miningState: 'idle' | 'mining' | 'success' | 'error', isBoosted?: boolean, isStatic?: boolean }) {
   const isExcited = miningState === 'success' || miningState === 'mining' || isBoosted;
   const isOverdrive = isBoosted;
   
@@ -23,9 +23,9 @@ export default function LittleMech({ miningState, isBoosted }: { miningState: 'i
 
   return (
     <motion.div
-      className="fixed top-44 right-8 z-[60] pointer-events-none"
-      initial={{ opacity: 0, scale: 0 }}
-      animate={{ opacity: 1, scale: 1.2 }} // Smaller scale
+      className={`${isStatic ? 'relative' : 'fixed top-44 right-8'} z-[60] pointer-events-none`}
+      initial={isStatic ? false : { opacity: 0, scale: 0 }}
+      animate={{ opacity: 1, scale: isStatic ? 1 : 1.2 }}
       transition={{ delay: 3.5, type: "spring" }}
     >
       <motion.div

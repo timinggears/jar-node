@@ -1,12 +1,12 @@
 import { motion } from 'motion/react';
 
-export default function LittleSquirrel({ miningState }: { miningState: 'idle' | 'mining' | 'success' | 'error' }) {
+export default function LittleSquirrel({ miningState, isStatic }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean }) {
   const isExcited = miningState === 'success' || miningState === 'mining';
   
   return (
     <motion.div
-      className="fixed top-24 right-6 z-[60] pointer-events-none"
-      initial={{ opacity: 0, x: 20 }}
+      className={`${isStatic ? 'relative' : 'fixed top-24 right-6'} z-[60] pointer-events-none`}
+      initial={isStatic ? false : { opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: 2.5, duration: 1 }}
     >

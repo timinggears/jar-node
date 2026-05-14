@@ -1,13 +1,13 @@
 import { motion } from 'motion/react';
 
-export default function LittleBee({ miningState }: { miningState: 'idle' | 'mining' | 'success' | 'error' }) {
+export default function LittleBee({ miningState, isStatic }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean }) {
   const isMining = miningState === 'mining' || miningState === 'success';
   
   return (
     <motion.div
-      className="fixed top-64 right-14 z-[55] pointer-events-none"
-      initial={{ opacity: 0, scale: 0 }}
-      animate={{ opacity: 1, scale: 1.2 }}
+      className={`${isStatic ? 'relative' : 'fixed top-64 right-14'} z-[55] pointer-events-none`}
+      initial={isStatic ? false : { opacity: 0, scale: 0 }}
+      animate={{ opacity: 1, scale: isStatic ? 1 : 1.2 }}
       transition={{ delay: 4, type: "spring" }}
     >
       <motion.div
