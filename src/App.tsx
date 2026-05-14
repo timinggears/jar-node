@@ -604,7 +604,14 @@ export default function App() {
   }, [addLog, stats, hardwareState, handleGitPull, handleGitReset]);
 
   return (
-    <div className="h-screen bg-[#050505] text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black">
+    <div className={`h-screen text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black transition-colors duration-700 ${isOverdrive ? 'bg-[#0a0000]' : 'bg-[#050505]'}`}>
+      {/* Background Grid Pattern */}
+      <div className={`fixed inset-0 pointer-events-none opacity-[0.03] transition-all duration-1000 ${isOverdrive ? 'opacity-[0.08] scale-110' : ''}`} 
+           style={{ 
+             backgroundImage: `linear-gradient(${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px), linear-gradient(90deg, ${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px)`,
+             backgroundSize: '40px 40px' 
+           }} />
+
       <AnimatePresence>
         {!isBooted ? (
           <motion.div
