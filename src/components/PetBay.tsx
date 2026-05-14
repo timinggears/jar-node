@@ -96,7 +96,7 @@ export default function PetBay({ miningState, isOverdrive }: PetBayProps) {
                 </div>
               </div>
               <div className="pt-1 border-t border-white/5 opacity-50 flex items-center gap-2">
-                <span className="text-pink-400 shrink-0">COG_OUT:</span>
+                <span className="text-pink-400 shrink-0">HARM_OUT:</span>
                 <span className="truncate italic">{currentThought}</span>
               </div>
             </div>

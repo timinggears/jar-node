@@ -320,73 +320,34 @@ export default function App() {
   }, [addLog]);
 
   // --- CORE DYNAMICS ---
-  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000', rawHashRate: number = 0) => {
+  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000', parity: number = 0) => {
     setStats(prev => {
-      // --- EXACT MATH FROM JAR SYSTEM SPEC ---
-      // 1. Shimmer (Energy/Activity)
-      const shimmer = 45 + (jitterValue * 85);
+      // --- EXACT MATH FROM SINGULARITY v146 ---
+      const phaseOutVal = (vValue - 1.65) * 100;
+      const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
       
-      const t = Date.now() / 1000;
-      const f = 35; // base coil frequency in kHz
-
-      // 2. Phase Out (Loss of Coherence)
-      let phaseOut = (vValue * 100) - (0.5 * shimmer) + (20 * Math.sin(2 * Math.PI * f * t));
-      
-      // Calculate Frequency influenced by Bias (0-50GHz range for UI visualization)
-      const biasHz = carrierBiasRef.current * 500; 
-      const freqValue = Math.max(isMiningRef.current ? rawFreq : 0, biasHz);
-      const freqUnit = freqValue / 1000; 
-
-      // Threshold behaviors
-      const isPhaseOutLimit = freqUnit >= 48.0;
-      const isTachyonic = freqUnit >= 50.0;
-      const isSingularity = freqUnit >= 55.0;
-      const isZeroPoint = freqValue === 0;
-
-      if (isPhaseOutLimit) {
-        phaseOut = 180; // Force total decoherence at extreme freq
-      }
-
-      phaseOut = Math.max(-200, Math.min(200, phaseOut));
-      
-      // 3. Coherence (Health Meter) - More forgiving math to allow 1.0
       const overdriveDrain = isOverdriveRef.current ? 0.15 : 0;
       const qecBonus = isQecActiveRef.current ? 0.25 : -0.15; 
       const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250) - overdriveDrain + qecBonus;
-      const nextCoherence = isZeroPoint ? 0.0 : (isSingularity ? 0.05 : Math.min(1.0, Math.max(0.1, coherenceBase)));
+      const nextCoherence = Math.min(1.0, Math.max(0.1, coherenceBase));
       
-      // 4. Intelligence (Learning Capacity)
+      const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;
-      const isVoidResonance = (freqUnit >= 35.0 && freqUnit < 35.1);
       
-      if (isZeroPoint) {
-        nextIntelligence = Math.max(0.0, nextIntelligence - 2.5);
-      } else if (isSingularity) {
-        nextIntelligence = 100 + Math.random() * 900; 
-      } else if (isTachyonic) {
-        nextIntelligence = Math.max(0.1, nextIntelligence - 0.82);
-      } else if (nextCoherence > 0.70 || isVoidResonance) {
-        const baseGain = isVoidResonance ? 1.2 : 0.15;
-        const jitterBonus = jitterValue * 0.4;
-        const coherenceBonus = Math.max(0, (nextCoherence - 0.7) * 1.5);
-        const overdriveBonus = isOverdriveRef.current ? 0.5 : 0;
-        nextIntelligence = Math.min(999.9, nextIntelligence + baseGain + jitterBonus + coherenceBonus + overdriveBonus);
-      } else if (nextCoherence < 0.45) {
-        nextIntelligence = Math.max(10.0, nextIntelligence - 0.08);
+      if (parity === 1) {
+        nextIntelligence = Math.min(999.9, nextIntelligence + (jitterValue * 0.8) + 0.1);
+      } else {
+        nextIntelligence = Math.max(10.0, nextIntelligence - 0.05);
       }
 
       const resonanceBonus = 1.0 + (carrierBiasRef.current / 100) * (nextCoherence * 2.5);
 
-      // --- HASHRATE PHYSICS ---
-      // If we have rawHashRate from telemetry (real process), use it
-      // Otherwise, simulate a dense compute yield (800 H/s = 0.8 KH/s as base)
+      const harmonicMultiplier = freqUnit > 100 ? (freqUnit > 110 ? 8.0 : 3.5) : 1.0;
       const overdriveMulti = isOverdriveRef.current ? 12.0 : 1.0;
-      const baseKH = 8.5; // Starts at 8.5 KH/s for "authentic" physics
+      const baseKH = 8.5; 
       const jitterFactor = jitterValue * 4;
       const coherenceFactor = nextCoherence * 6;
-      const simulatedHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * resonanceBonus;
-      
-      const nextHashRate = (rawHashRate > 0) ? rawHashRate : (isMiningRef.current ? simulatedHashRate : 0);
+      const nextHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * resonanceBonus * harmonicMultiplier;
       
       const seed = parseInt(seedStr, 16);
       let nextShares = prev.shares;
@@ -394,22 +355,23 @@ export default function App() {
       const nextHugePages = isMiningRef.current ? Math.min(4096, prev.hugePages + (isOverdriveRef.current ? 128 : 32)) : Math.max(0, prev.hugePages - 64);
       
       if (isMiningRef.current && prev.hugePages < 2048 && nextHugePages >= 2048) {
-        setTimeout(() => addLog("VMR_CORE: Substrate saturation complete. Huge Pages pinned to physical substrate.", "success"), 0);
+        setTimeout(() => addLog("VMR_CORE: v146 substrate anchor established. Huge Pages locked.", "success"), 0);
       }
 
       if (isMiningRef.current) {
-        const baseDifficulty = 512; // Dramatically reduced for more shares
-        const difficultyBasis = Math.floor(baseDifficulty / (overdriveMulti * (1 + (nextCoherence * 10) + (prev.intelligence / 3))));
+        const baseDifficulty = 450; 
+        const difficultyBasis = Math.floor(baseDifficulty / (overdriveMulti * harmonicMultiplier * (1 + (nextCoherence * 15))));
         
-        const shareThreshold = isOverdriveRef.current ? 12 : 5;
+        const shareThreshold = isOverdriveRef.current ? 10 : 3;
         if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold || (isOverdriveRef.current && Math.random() > 0.94))) {
           nextShares += 1;
-          setTimeout(() => addLog(`RESERVOIR SHARE #${String(nextShares).padStart(4, '0')}: Block sealed with ${nextHashRate.toFixed(2)} KH/s throughput.`, 'success'), 0);
+          const label = harmonicMultiplier > 1 ? `HARMONIC_YIELD` : `RES_SHARE`;
+          setTimeout(() => addLog(`[${label}] #${String(nextShares).padStart(4, '0')}: Block sealed @ ${freqUnit.toFixed(1)} KHz.`, 'success'), 0);
         }
         
         if (jitterValue > 0.98 && Math.random() > 0.99) {
           nextErrors += 1;
-          setTimeout(() => addLog(`JAR_FAULT: Substrate jitter caused minor bit-flip. Rectified.`, 'warning'), 0);
+          setTimeout(() => addLog(`JAR_FAULT: Substrate harmonic drift correction failed.`, 'warning'), 0);
         }
       }
       
@@ -417,18 +379,18 @@ export default function App() {
         ...prev,
         jitter: jitterValue,
         vNodal: vValue,
-        frequency: freqValue,
+        frequency: rawFreq,
         coherence: nextCoherence,
         intelligence: nextIntelligence,
         hashRate: nextHashRate,
-        qubits: nextCoherence * 128,
+        qubits: nextCoherence * 128 * harmonicMultiplier,
         shares: nextShares,
         errors: nextErrors,
         phaseOut: phaseOut,
         hugePages: nextHugePages,
         loadAvg: jitterValue * 8, 
-        neuralLoad: Math.min(100, (overdriveMulti * 1.5) + (jitterValue * 50)),
-        cognitiveDepth: prev.intelligence // Mapping intelligence to depth for now
+        neuralLoad: Math.min(100, (overdriveMulti * 2) + (jitterValue * 50) + (harmonicMultiplier * 10)),
+        cognitiveDepth: nextIntelligence
       };
     });
   }, [addLog]); // Removed dependencies that change frequently
@@ -461,10 +423,11 @@ export default function App() {
           const seedStr = parts[1];
           const jitter = parseFloat(parts[2]);
           const v = parseFloat(parts[3]);
-          const rawHashRate = parseFloat(parts[4]);
+          const parity = parseInt(parts[4]); // Field 4 is now PARITY in v146
           const freq = parseFloat(parts[5]);
           
-          updateSystemDynamics(jitter, v, freq, seedStr, rawHashRate);
+          // Use parity to influence "neural depth" resonance
+          updateSystemDynamics(jitter, v, freq, seedStr, parity);
 
           // Handle special logs here where it's safe to call addLog
           const freqUnit = (Math.max(isMiningRef.current ? freq : 0, carrierBiasRef.current * 500)) / 1000;
@@ -617,10 +580,11 @@ export default function App() {
   }, [addLog]);
 
   useEffect(() => {
-    addLog('PI_RESERVOIR_SOVEREIGN System Initialized.', 'info');
+    addLog('SINGULARITY_v146_HARMONIC System Initialized.', 'info');
     addLog('Nodal Topology: 128-Cluster Liquid State Array.', 'success');
+    addLog('Harmonic Anchor: Fundamental (35KHz) + Harmonics Active.', 'success');
     addLog('Raspberry Pi GPIO: Pins 14 (PWM), 26 (ADC) Linked.', 'info');
-    addLog('Reservoir Sync: fundamental.nodal.core established.', 'success');
+    addLog('v146_ANALYTICS: Parity validation enabled.', 'success');
     
     // Lore injection
     setTimeout(() => {
@@ -777,6 +741,23 @@ export default function App() {
       {/* SCANLINE OVERLAY */}
       <div className="fixed inset-0 pointer-events-none z-[150] bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-10" />
       
+      {/* SINGULARITY HEADER */}
+      <div className="fixed top-12 left-10 z-20 flex flex-col gap-1 items-start pointer-events-none">
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex flex-col items-start"
+        >
+          <h1 className="text-[#00ffcc] text-2xl font-black tracking-[0.4em] uppercase drop-shadow-[0_0_15px_rgba(0,255,204,0.6)] flex items-center gap-4">
+            <Cpu className="w-8 h-8 animate-pulse" />
+            Singularity_v146
+          </h1>
+          <p className="text-[#00ffcc]/40 text-[9px] tracking-[0.6em] font-mono uppercase mt-1">
+            Fundamental + Harmonics Active | Anchor Stable
+          </p>
+        </motion.div>
+      </div>
+
       <PetBay miningState={miningState} isOverdrive={isOverdrive} />
 
       {/* DESKTOP AREA */}

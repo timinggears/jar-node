@@ -107,31 +107,42 @@ async function startServer() {
       if (hardwarePort && hardwarePort.isOpen) return;
 
       // Generate telemetry based on REAL system load when hardware is missing
-      const load = os.loadavg()[0]; // 1 min load
-      const totalMem = os.totalmem();
-      const freeMem = os.freemem();
-      const memUsage = 1 - (freeMem / totalMem);
+      // --- HARMONIC ANCHOR v146 PHYSICS ---
+      const load = os.loadavg()[0];
+      const BASE_FREQ = 35000;
       
-      const jitter = Math.min(1.0, (load * 1.5) / (os.cpus().length || 1));
-      const vNodal = Math.min(1.0, memUsage * 1.2);
-      const freq = 35000 + (load * 2000); // Frequency modulated by load
+      // Simulated voltage drift + jitter base
+      const v = 1.65 + (Math.sin(Date.now() / 2500) * 0.4) + (Math.random() * 0.05);
+      const jitter = Math.abs(v - 1.65) * (1.1 + load * 0.5);
       
-      // Use real process hashrate if available, otherwise simulated
-      const currentHashRate = latestProcessKHs > 0 ? latestProcessKHs : 0.00;
+      const seedNum = (Math.floor(v * 10000000) >>> 0);
+      const seedStr = seedNum.toString(16).padStart(8, '0').toUpperCase();
+      const parity = (seedNum.toString(2).split('1').length - 1) % 2;
+
+      // Harmonic Drive Modulation
+      let currentFreq = BASE_FREQ + (jitter * 45000);
+      if (jitter > 0.4) {
+        // High excitation harmonic jumps
+        const roll = Math.random();
+        if (roll > 0.7) currentFreq = 2 * BASE_FREQ;
+        else if (roll > 0.45) currentFreq = 3 * BASE_FREQ;
+      }
       
-      const fakeSeed = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
-      const telemetryLine = `!S|${fakeSeed}|${jitter.toFixed(4)}|${vNodal.toFixed(4)}|${currentHashRate.toFixed(2)}|${freq.toFixed(2)}`;
+      // Format: !S|seed|jitter|v|parity|freq
+      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(0)}`;
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 
-      if (Math.random() > 0.98) {
-        io.to('mining_status').emit('mining_status', { type: 'info', message: 'VMR_CORE: Syncing huge pages to local JAR substrate...' });
+      if (Math.random() > 0.99) {
+        io.to('mining_status').emit('mining_status', { type: 'info', message: 'SINGULARITY_v146: Harmonic anchor pulse detected. Fundamental + Harmonics active.' });
       }
       
       // Also emit raw system stats for more "real" feel
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
       io.to('system_stats').emit('system_stats', {
         load: os.loadavg(),
-        mem: { total: totalMem, free: freeMem, usage: memUsage },
+        mem: { total: totalMem, free: freeMem, usage: 1 - (freeMem / totalMem) },
         uptime: os.uptime(),
         cpus: os.cpus().length
       });
