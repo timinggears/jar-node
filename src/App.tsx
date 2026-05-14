@@ -469,6 +469,10 @@ export default function App() {
       }
     });
 
+    socket.on('log', (msg: string) => {
+      addLog(msg, 'info');
+    });
+
     socket.on('disconnect', () => {
       addLog('Hardware Bridge disconnected.', 'error');
       setHardwareState('disconnected');

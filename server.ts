@@ -35,10 +35,11 @@ async function startServer() {
       }
     });
 
-    socket.on('hardware:params', (params: { bias: number, overdrive: boolean }) => {
-      systemBias = params.bias;
-      isOverdrive = params.overdrive;
+    socket.on('hardware:params', (params: any) => {
+      systemBias = Number(params.bias || 0);
+      isOverdrive = Boolean(params.overdrive);
       console.log(`[HARDWARE] Params updated: Bias=${systemBias}, Overdrive=${isOverdrive}`);
+      socket.emit('log', `SYSTEM: Received params - Bias: ${systemBias}, Overdrive: ${isOverdrive}`);
     });
 
     socket.on('hardware:command', (cmd: string) => {
@@ -140,6 +141,8 @@ async function startServer() {
       
       // Pin to 1.46 physics (always at least fundamental)
       currentFreq = Math.max(BASE_FREQ, currentFreq);
+      
+      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(0)}`;
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 

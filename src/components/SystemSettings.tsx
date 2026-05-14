@@ -35,8 +35,8 @@ export default function SystemSettings({
         <div className="space-y-6">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] text-zinc-500 uppercase font-bold">Carrier Bias (Modulation)</label>
-              <span className="text-xs font-mono text-[#00ffcc]">{(carrierBias * 0.5).toFixed(1)} GHz</span>
+              <label className="text-[10px] text-zinc-500 uppercase font-bold">Carrier Bias (Nodal Offset)</label>
+              <span className="text-xs font-mono text-[#00ffcc]">+{(carrierBias * 0.5).toFixed(1)} KHz</span>
             </div>
             <input 
               type="range" 
@@ -46,7 +46,7 @@ export default function SystemSettings({
               onChange={(e) => setCarrierBias(parseInt(e.target.value))}
               className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic">Adjusts the fundamental frequency (BASE_FREQ) for the nodal anchor.</p>
+            <p className="text-[9px] text-zinc-600 italic">Shifts the fundamental anchor frequency (BASE_FREQ) from 35.0K to 85.0K.</p>
           </div>
 
           <div className="space-y-3">
