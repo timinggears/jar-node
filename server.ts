@@ -31,6 +31,13 @@ async function startServer() {
       }
     });
 
+    socket.on('hardware:command', (cmd: string) => {
+      if (hardwarePort && hardwarePort.isOpen) {
+        console.log(`[HARDWARE] Sending: ${cmd}`);
+        hardwarePort.write(cmd + '\n');
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[CLIENT] Disconnected: ${socket.id}`);
     });

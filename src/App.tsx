@@ -37,6 +37,7 @@ export default function App() {
   const [isInstalling, setIsInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState(0);
   const [carrierBias, setCarrierBias] = useState(0); // 0-100% modulation
+  const socketRef = useRef<any>(null);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
@@ -75,6 +76,19 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('jar_system_version_v321', systemVersion.toString());
   }, [systemVersion]);
+
+  // Sync Hardware Settings to Backend
+  useEffect(() => {
+    if (hardwareState === 'bridged' && socketRef.current) {
+      socketRef.current.emit('hardware:command', `BIAS:${carrierBias}`);
+    }
+  }, [carrierBias, hardwareState]);
+
+  useEffect(() => {
+    if (hardwareState === 'bridged' && socketRef.current) {
+      socketRef.current.emit('hardware:command', `OVERDRIVE:${isOverdrive ? '1' : '0'}`);
+    }
+  }, [isOverdrive, hardwareState]);
 
   const handleInstall = useCallback(async () => {
     if (isInstalling) return;
@@ -394,6 +408,7 @@ export default function App() {
   // --- HARDWARE BRIDGE (FULL-STACK SOCKET) ---
   useEffect(() => {
     const socket = io();
+    socketRef.current = socket;
 
     socket.on('connect', () => {
       addLog('Hardware Bridge connected to backend.', 'success');
