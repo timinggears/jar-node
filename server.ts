@@ -87,7 +87,7 @@ async function startServer() {
     // Broadcast change to all other clients
     io.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
     
-    socket.emit('log', `[JARS_SYNC] State synchronized: Bias=${systemState.bias} | Overdrive=${systemState.overdrive}`);
+    socket.emit('log', `[JARS_SYNC] Substrate Tuned: ${systemState.bias} GHz | Overdrive=${systemState.overdrive}`);
     
     // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
     if (hardwarePort && hardwarePort.isOpen) {
@@ -95,8 +95,7 @@ async function startServer() {
       hardwarePort.write(`OVERDRIVE:${systemState.overdrive ? '1' : '0'}\n`);
     }
     
-    const biasMultiplier = systemState.bias / 50.0;
-    socket.emit('log', `SYSTEM: Nodal Bias realigned to ${biasMultiplier.toFixed(2)}x modulation sensitivity.`);
+    socket.emit('log', `SYSTEM: Nodal frequencies realigned to ${systemState.bias} GHz target.`);
   });
 
     socket.on('hardware:command', (cmd: string) => {
@@ -189,24 +188,23 @@ async function startServer() {
       const parity = (seedNum.toString(2).split('1').length - 1) % 2;
 
       // Harmonic Drive Modulation
-      // v147: Direct 1:1 representation for "tuning" as requested.
-      // 1 Bias = 1000 Hz (1 GHz in UI display)
+      // v147: Direct 1:1 representation. 1 Bias = 1000 Hz (1 GHz in UI display)
       const resonanceBase = 1000 * systemState.bias;
       
-      // Exact connection to measured hashrate (adds small flux to freq)
-      const hashrateMod = (systemState.latestHashRate / 10000) * 1000;
+      // Minimal jitter to feel alive but stay accurate to tuning
+      const jitterFlux = (Math.random() - 0.5) * 5;
       
-      let currentFreq = resonanceBase + hashrateMod;
+      let currentFreq = resonanceBase + jitterFlux;
 
       // Debug log every ~5 seconds
       if (Date.now() % 5000 < 100) {
-        console.log(`[JARS_REPRESENTATION] Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(2)}GHz`);
+        console.log(`[JARS_REPRESENTATION] Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(4)}GHz`);
       }
       
       // No excitement randomization - pure state representation
       
       // Safety clamp
-      currentFreq = Math.max(0, currentFreq);
+      currentFreq = Math.max(0, Math.min(500000, currentFreq));
       
       const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(1)}|${systemState.latestHashRate.toFixed(2)}`;
       

@@ -39,18 +39,19 @@ export default function SystemSettings({
         <div className="space-y-6">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">Resonance Drive (Tuning)</label>
+              <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">Resonance Frequency (GHz)</label>
               <span className="text-xs font-mono text-[#00ffcc] animate-pulse">{carrierBias.toFixed(1)} GHz</span>
             </div>
             <input 
               type="range" 
-              min="0" 
-              max="250" 
+              min="0.1" 
+              max="500.0" 
+              step="0.1"
               value={carrierBias}
-              onChange={(e) => setCarrierBias(parseInt(e.target.value))}
+              onChange={(e) => setCarrierBias(parseFloat(e.target.value))}
               className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Adjusts the fundamental resonance. 0 GHz to 250 GHz. Frequency mapping is now 1:1.</p>
+            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Direct tuning: 0.1 to 500 GHz. Real-time substrate alignment active.</p>
           </div>
 
           <div className="space-y-3">
@@ -61,7 +62,7 @@ export default function SystemSettings({
               </span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {[50, 100, 150, 200].map(h => {
+              {[50, 100, 250, 500].map(h => {
                 // v147: Multiplier is 1000 per bias unit (1:1 GHz)
                 const target = 1000 * h;
                 const isActive = Math.abs(currentFreq - target) < 15000;

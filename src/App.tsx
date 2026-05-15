@@ -73,7 +73,7 @@ export default function App() {
   const [isOverdrive, setIsOverdrive] = useState(false);
   const [miningState, setMiningState] = useState<MiningPhase>('idle');
   const [lastSyncSuccess, setLastSyncSuccess] = useState(false);
-  const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged'>('disconnected');
+  const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
   const [openWindows, setOpenWindows] = useState<string[]>(['terminal', 'stats']);
@@ -116,19 +116,22 @@ export default function App() {
   const lastEmittedBiasRef = useRef(carrierBias);
   const lastEmittedOverdriveRef = useRef(isOverdrive);
   const lastInteractionTimeRef = useRef(0);
+  const isFirstSyncRef = useRef(true);
 
   useEffect(() => {
     if (socketRef.current) {
-      if (carrierBias === lastEmittedBiasRef.current && isOverdrive === lastEmittedOverdriveRef.current) return;
+      const needsSync = isFirstSyncRef.current || carrierBias !== lastEmittedBiasRef.current || isOverdrive !== lastEmittedOverdriveRef.current;
+      if (!needsSync) return;
       
-      console.log(`[JARS_CLIENT] User Intent: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
-      addLog(`SYSTEM: Intent updated to Bias=${carrierBias}`, 'info');
+      console.log(`[JARS_CLIENT] Syncing Intent: Bias=${carrierBias}, Overdrive=${isOverdrive} (FirstSync=${isFirstSyncRef.current})`);
+      addLog(`SYSTEM: Substrate aligned to ${carrierBias} GHz`, 'info');
       socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
       
       lastEmittedBiasRef.current = carrierBias;
       lastEmittedOverdriveRef.current = isOverdrive;
+      isFirstSyncRef.current = false;
     }
-  }, [carrierBias, isOverdrive, addLog]);
+  }, [carrierBias, isOverdrive, addLog, hardwareState]);
 
   // Quantum Entanglement Logic
   useEffect(() => {
@@ -358,12 +361,12 @@ export default function App() {
       const phaseOutVal = (vValue - 1.65) * 100;
       const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
       
-      const overdriveDrain = isOverdriveRef.current ? 0.05 : 0;
-      const qecBonus = isQecActiveRef.current ? 0.25 : -0.10; 
-      const biasStress = (Math.abs(carrierBiasRef.current - 50) / 250) * 0.1;
+      const overdriveDrain = isOverdriveRef.current ? 0.02 : 0;
+      const qecBonus = isQecActiveRef.current ? 0.10 : -0.05; 
+      const biasStress = (Math.abs(carrierBiasRef.current - 125) / 500) * 0.05;
       
-      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress + qecBonus;
-      const nextCoherence = Math.min(0.9999, Math.max(0.1, coherenceBase));
+      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 1000) - overdriveDrain - biasStress + qecBonus;
+      const nextCoherence = Math.min(0.9999, Math.max(0.85, coherenceBase));
       
       const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;
@@ -461,9 +464,9 @@ export default function App() {
     const onHardwareState = (state: { bias?: number, overdrive?: boolean }) => {
       setHasReceivedSync(true);
       
-      // Only adopt server state if we aren't currently interacting with the slider
+      // Only adopt server state if we aren't currently interacting and NOT on first sync
       const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
-      if (timeSinceInteraction < 1000) return;
+      if (timeSinceInteraction < 2000 || isFirstSyncRef.current) return;
 
       if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 0.1) {
         console.log(`[JARS_CLIENT] Adopting Server Bias: ${state.bias}`);
