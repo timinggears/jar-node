@@ -53,17 +53,17 @@ export default function SystemSettings({
             <div className="flex justify-between items-center">
               <label className="text-[10px] text-blue-500 uppercase font-bold">Harmonic Resonance</label>
               <span className="text-xs font-mono text-blue-400">
-                v1.47_LIVE: {(currentFreq / 1000).toFixed(4)} KHz
+                v1.47_LIVE: {(currentFreq / 1000).toFixed(4)} GHz
               </span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {[1, 2, 3].map(h => {
-                const target = 35000 * h;
-                const isActive = Math.abs(currentFreq - target) < 5000;
+                const target = 50000 * h;
+                const isActive = Math.abs(currentFreq - target) < 8000;
                 return (
                   <div key={h} className={`border p-2 rounded text-center transition-colors ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5'}`}>
                     <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300' : 'text-zinc-600'}`}>H_{h}</p>
-                    <p className={`text-[9px] font-mono ${isActive ? 'text-blue-400' : 'text-zinc-400'}`}>{(target / 1000).toFixed(1)}K</p>
+                    <p className={`text-[9px] font-mono ${isActive ? 'text-blue-400' : 'text-zinc-400'}`}>{(target / 1000).toFixed(1)}G</p>
                   </div>
                 );
               })}

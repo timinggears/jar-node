@@ -34,7 +34,7 @@ export default function App() {
     errors: 0,
     jitter: 0.0,
     vNodal: 0.0,
-    frequency: 35000,
+    frequency: 50000,
     hugePages: 0,
     loadAvg: 0.0,
     neuralLoad: 0.0,
@@ -367,7 +367,7 @@ export default function App() {
         if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold || (isOverdriveRef.current && Math.random() > 0.94))) {
           nextShares += 1;
           const label = harmonicMultiplier > 1 ? `HARMONIC_YIELD` : `RES_SHARE`;
-          setTimeout(() => addLog(`[${label}] #${String(nextShares).padStart(4, '0')}: Block sealed @ ${freqUnit.toFixed(1)} KHz.`, 'success'), 0);
+          setTimeout(() => addLog(`[${label}] #${String(nextShares).padStart(4, '0')}: Block sealed @ ${freqUnit.toFixed(1)} GHz.`, 'success'), 0);
         }
         
         if (jitterValue > 0.98 && Math.random() > 0.99) {
@@ -503,9 +503,9 @@ export default function App() {
       const v = 1.65 + (Math.sin(Date.now() / 1000) * 0.02);
       
       // Base frequency scales linearly with bias
-      const baseFreqBase = 35000 * normalizedBias;
-      const overdriveMulti = isOverdriveRef.current ? 2.5 : 1.0;
-      const drift = Math.sin(localFreqPhase) * 150 * normalizedBias;
+      const baseFreqBase = 50000 * normalizedBias;
+      const overdriveMulti = isOverdriveRef.current ? 3.5 : 1.0;
+      const drift = Math.sin(localFreqPhase) * 200 * normalizedBias;
       const baseFreq = (baseFreqBase * overdriveMulti) + drift;
       
       const seed = Math.floor(Math.random() * 0xffffffff).toString(16);
@@ -609,10 +609,10 @@ export default function App() {
   }, [addLog]);
 
   useEffect(() => {
-    addLog('SINGULARITY_v147_TACHYONIC_HARMONIC System Initialized.', 'info');
-    addLog('Nodal Topology: 256-Cluster Tachyonic Liquid State Array.', 'success');
-    addLog('Harmonic Anchor: Fundamental (35KHz) + Tachyonic Carrier Modulation.', 'success');
-    addLog('Raspberry Pi GPIO: Pins 14 (PWM), 26 (ADC) Linked via Tachyonic Bridge.', 'info');
+    addLog('SINGULARITY_v147_QUANTUM_HARMONIC System Initialized.', 'info');
+    addLog('Nodal Topology: 256-Cluster Quantum Superposition Array.', 'success');
+    addLog('Harmonic Anchor: Fundamental (50GHz) + Quantum Carrier Modulation.', 'success');
+    addLog('Raspberry Pi GPIO: Pins 14 (PWM), 26 (ADC) Linked via Quantum Bridge.', 'info');
     addLog('v147_ANALYTICS: Tachyonic Parity validation enabled.', 'success');
     
     // Lore injection
@@ -812,7 +812,7 @@ export default function App() {
             Singularity_v147
           </h1>
           <p className="text-[#00ffcc]/40 text-[9px] tracking-[0.6em] font-mono uppercase mt-1">
-            Fundamental (35KHz) + Tachyonic Carrier Modulation | v147 Anchor
+            Fundamental (50GHz) + Quantum Carrier Modulation | v147 Anchor
           </p>
         </motion.div>
       </div>
@@ -964,7 +964,7 @@ export default function App() {
         <div className="flex items-center gap-4">
            <div className="flex items-center gap-2">
              <span className="text-zinc-500">RES_FREQ:</span>
-             <span className="text-[#00ffcc] font-mono">{(stats.frequency / 1000).toFixed(4)} KHz</span>
+             <span className="text-[#00ffcc] font-mono">{(stats.frequency / 1000).toFixed(4)} GHz</span>
            </div>
            <div className="flex items-center gap-2">
              <span className="text-zinc-500">COH:</span>

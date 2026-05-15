@@ -128,7 +128,7 @@ async function startServer() {
       // Generate telemetry based on REAL system load when hardware is missing
       // --- HARMONIC ANCHOR v147 PHYSICS ---
       const load = os.loadavg()[0];
-      const BASE_FREQ = 35000; 
+      const BASE_FREQ = 50000; 
       const carrierBias = systemBias / 50.0; // v147 normalization (0.0 - 2.0)
       
       const overdriveExcitation = isOverdrive ? 0.6 : 0;
@@ -142,15 +142,15 @@ async function startServer() {
       // Harmonic Drive Modulation (v147 Match)
       // Normal operation is at bias 50 (1.0x). 
       // Frequency scales linearly with bias for "Coil" effect.
-      let currentFreq = BASE_FREQ * (systemBias / 50) + (jitter * 5000);
+      let currentFreq = BASE_FREQ * (systemBias / 50) + (jitter * 8000);
       
       if (isOverdrive) {
-        currentFreq = currentFreq * 2.5; // v147 Extreme Overdrive
+        currentFreq = currentFreq * 3.5; // v147 Extreme Overdrive - Quantum Leap
       }
 
       // Enhanced excitation on high-jitter events
-      if (jitter > 0.35) {
-        currentFreq = currentFreq * (Math.random() > 0.5 ? 3 : 1);
+      if (jitter > 0.45) {
+        currentFreq = currentFreq * (Math.random() > 0.5 ? 5 : 1);
       }
       
       // Ensure frequency stays in range

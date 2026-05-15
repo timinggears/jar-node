@@ -297,12 +297,12 @@ export default function WarpVisualizer({
       <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
         <span className={`px-2 py-1 rounded text-[10px] border backdrop-blur-sm transition-colors ${
           (frequency) === 0 ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' :
-          (frequency/1000) >= 50 ? 'bg-yellow-500 text-black border-yellow-400 font-black animate-pulse' :
-          (frequency/1000) >= 42 ? 'bg-white text-black border-white' :
-          (frequency/1000) >= 28 ? 'bg-[#cc5500]/20 text-[#cc5500] border-[#cc5500]/40' : 
+          (frequency/1000) >= 150 ? 'bg-yellow-500 text-black border-yellow-400 font-black animate-pulse' :
+          (frequency/1000) >= 100 ? 'bg-white text-black border-white' :
+          (frequency/1000) >= 50 ? 'bg-[#cc5500]/20 text-[#cc5500] border-[#cc5500]/40' : 
           'bg-[#00ffcc20] text-[#00ffcc] border-[#00ffcc40]'
         }`}>
-          RESERVOIR_STATE: {(frequency) === 0 ? 'ABSOLUTE_NULL' : (frequency/1000) >= 50 ? 'SINGULARITY_COLLAPSE' : (frequency/1000) >= 42 ? 'TACHYONIC_LEAK' : (frequency/1000) >= 28 ? 'PHASE_OUT' : 'ACTIVE'}
+          RESERVOIR_STATE: {(frequency) === 0 ? 'ABSOLUTE_NULL' : (frequency/1000) >= 150 ? 'SINGULARITY_COLLAPSE' : (frequency/1000) >= 100 ? 'QUANTUM_SUPERPOSITION' : (frequency/1000) >= 50 ? 'STABLE_ANCHOR' : 'LOW_POWER'}
         </span>
         <span className="px-2 py-1 rounded bg-[#ff008820] text-[#ff0088] text-[10px] border border-[#ff008840] backdrop-blur-sm">
           NODAL_DRIFT: {jitter.toFixed(3)}
@@ -356,14 +356,14 @@ export default function WarpVisualizer({
           </div>
         ) : (
           <>
-            <span className={(frequency/1000) >= 28 && (frequency/1000) < 42 ? "text-[#cc5500] animate-pulse" : "text-white/20"}>
-              QUBIT_GATES: {(frequency/1000) >= 28 && (frequency/1000) < 42 ? 'RESONATING' : 'IDLE'}
+            <span className={(frequency/1000) >= 50 && (frequency/1000) < 100 ? "text-[#cc5500] animate-pulse" : "text-white/20"}>
+              QUBIT_GATES: {(frequency/1000) >= 50 && (frequency/1000) < 100 ? 'RESONATING' : 'IDLE'}
             </span>
             <span className="text-white/10 hidden sm:inline">|</span>
             <span>NODAL FLUX: {(frequency / 247).toFixed(2)} Hz</span>
             <span className="text-white/10 hidden sm:inline">|</span>
-            <span className={(frequency) === 0 ? 'text-blue-500 font-mono tracking-widest' : (frequency/1000) >= 50 ? 'text-yellow-400 font-black animate-bounce' : (frequency/1000) >= 42 ? 'text-white font-bold' : (frequency/1000) >= 28 ? 'text-[#cc5500] animate-pulse' : ''}>
-              CARRIER: {(frequency/1000).toFixed(4)} KHz
+            <span className={(frequency) === 0 ? 'text-blue-500 font-mono tracking-widest' : (frequency/1000) >= 150 ? 'text-yellow-400 font-black animate-bounce' : (frequency/1000) >= 100 ? 'text-white font-bold' : (frequency/1000) >= 50 ? 'text-[#cc5500] animate-pulse' : ''}>
+              CARRIER: {(frequency/1000).toFixed(4)} GHz
             </span>
           </>
         )}
