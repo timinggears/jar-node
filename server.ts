@@ -16,8 +16,11 @@ async function startServer() {
   });
 
   // --- TELEMETRY PARAMS ---
-  let systemBias = 0;
+  let systemBias = 50;
   let isOverdrive = false;
+
+  // Track if we have a real hardware connection to decide whether to simulate
+  let hardwareActive = false;
 
   // --- SUBSCRIPTION LOGIC ---
   io.on('connection', (socket) => {
@@ -36,8 +39,8 @@ async function startServer() {
     });
 
       socket.on('hardware:params', (params: any) => {
-        systemBias = Number(params.bias || 0);
-        isOverdrive = Boolean(params.overdrive);
+        if (params.bias !== undefined) systemBias = Number(params.bias);
+        if (params.overdrive !== undefined) isOverdrive = Boolean(params.overdrive);
         console.log(`[HARDWARE] Params updated: Bias=${systemBias}, Overdrive=${isOverdrive}`);
         
         // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---

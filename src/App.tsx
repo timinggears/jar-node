@@ -47,7 +47,7 @@ export default function App() {
   const [isMining, setIsMining] = useState(true);
   const [isInstalling, setIsInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState(0);
-  const [carrierBias, setCarrierBias] = useState(0); // 0-100% modulation
+  const [carrierBias, setCarrierBias] = useState(50); // 50% = Fundamental resonance (50GHz)
   const socketRef = useRef<any>(null);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -404,48 +404,37 @@ export default function App() {
     const socket = io();
     socketRef.current = socket;
 
-    socket.on('connect', () => {
+    const onConnect = () => {
       addLog('Hardware Bridge connected to backend.', 'success');
       setHardwareState('bridged');
       
-      // --- SUBSCRIBE TO STREAMS ---
       socket.send('SUBSCRIBE:telemetry');
       socket.send('SUBSCRIBE:mining_status');
       socket.send('SUBSCRIBE:system_stats');
       socket.emit('protocol', 'STATUS');
-    });
+      
+      // Sync current state immediately upon connection
+      socket.emit('hardware:params', { 
+        bias: carrierBiasRef.current, 
+        overdrive: isOverdriveRef.current 
+      });
+    };
 
-    socket.on('system_stats', (data: any) => {
-      // Use real system stats to influence dashboard appearance if desired
-      // Logic could go here
-    });
-
-    socket.on('telemetry', (line: string) => {
+    const onTelemetry = (line: string) => {
       if (line.startsWith('!S|')) {
         const parts = line.split('|');
         if (parts.length >= 6) {
           const seedStr = parts[1];
           const jitter = parseFloat(parts[2]);
           const v = parseFloat(parts[3]);
-          const parity = parseInt(parts[4]); // Field 4 is now PARITY in v146
+          const parity = parseInt(parts[4]);
           const freq = parseFloat(parts[5]);
-          
-          // Use parity to influence "neural depth" resonance
           updateSystemDynamics(jitter, v, freq, seedStr, parity);
-
-          // Handle special logs here where it's safe to call addLog
-          const freqUnit = freq / 1000;
-          if (freqUnit >= 100.0 && Math.random() > 0.98) {
-            addLog("SINGULARITY_COLLAPSE: Harmonic saturation detected.", "success");
-          } else if (freqUnit >= 70.0 && freqUnit < 75.0 && Math.random() > 0.995) {
-            addLog("HARMONIC_RESONANCE: 2nd Order Anchor established.", "success");
-          }
         }
       }
-    });
+    };
 
-    socket.on('mining_status', (payload: any) => {
-      // Handle structured payload or legacy string
+    const onMiningStatus = (payload: any) => {
       const { type, message, data } = typeof payload === 'string' ? { type: 'info', message: payload, data: null } : payload;
       
       switch (type) {
@@ -464,21 +453,18 @@ export default function App() {
           break;
         case 'telemetry':
           if (miningState === 'idle') setMiningState('mining');
-          // Optional: Parse hashrate from data if needed
-          if (Math.random() > 0.95) addLog(`[XMRIG_METRIC]: ${data || message}`, 'info');
           break;
         case 'info':
         default:
           if (miningState === 'idle') setMiningState('mining');
-          if (Math.random() > 0.9) addLog(`[XMRIG]: ${message}`, 'info');
           break;
       }
-    });
+    };
 
-    socket.on('log', (msg: string) => {
-      addLog(msg, 'info');
-    });
-
+    socket.on('connect', onConnect);
+    socket.on('telemetry', onTelemetry);
+    socket.on('mining_status', onMiningStatus);
+    socket.on('log', (msg: string) => addLog(msg, 'info'));
     socket.on('disconnect', () => {
       addLog('Hardware Bridge disconnected.', 'error');
       setHardwareState('disconnected');
@@ -487,7 +473,7 @@ export default function App() {
     return () => {
       socket.disconnect();
     };
-  }, [addLog, updateSystemDynamics]);
+  }, [addLog, updateSystemDynamics]); // Dependencies are now more stable
 
 
   // --- SIMULATION LOOP (RUNS WHEN HARDWARE IS DISCONNECTED) ---

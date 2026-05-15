@@ -25,7 +25,7 @@ export default function SystemSettings({
   const freqKHz = currentFreq / 1000;
   
   return (
-    <div className="p-6 h-full overflow-y-auto space-y-8 custom-scrollbar">
+    <div className="p-6 h-full overflow-y-auto space-y-8 custom-scrollbar pb-24">
       <div className="space-y-4">
         <div className="flex items-center gap-2 border-b border-white/10 pb-2">
           <Cpu size={16} className="text-[#00ffcc]" />
