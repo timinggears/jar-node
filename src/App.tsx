@@ -99,11 +99,10 @@ export default function App() {
 
   // Sync Hardware Settings to Backend
   useEffect(() => {
-    if (hardwareState === 'bridged' && socketRef.current) {
-      console.log(`[BRIDGE] Emitting hardware:params - Bias: ${carrierBias}, Overdrive: ${isOverdrive}`);
+    if (socketRef.current) {
       socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
     }
-  }, [carrierBias, isOverdrive, hardwareState]);
+  }, [carrierBias, isOverdrive]);
 
   const handleInstall = useCallback(async () => {
     if (isInstalling) return;

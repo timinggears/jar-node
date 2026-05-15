@@ -41,7 +41,7 @@ async function startServer() {
       socket.on('hardware:params', (params: any) => {
         if (params.bias !== undefined) systemBias = Number(params.bias);
         if (params.overdrive !== undefined) isOverdrive = Boolean(params.overdrive);
-        console.log(`[HARDWARE] Params updated: Bias=${systemBias}, Overdrive=${isOverdrive}`);
+        socket.emit('log', `[JARS_SYNC] Local Bias: ${systemBias} | Overdrive: ${isOverdrive ? 'ACTIVE' : 'IDLE'}`);
         
         // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
         if (hardwarePort && hardwarePort.isOpen) {
