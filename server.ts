@@ -142,17 +142,8 @@ async function startServer() {
       // Harmonic Drive Modulation (v147 Match)
       // Normal operation is at bias 50 (1.0x). 
       // Frequency scales linearly with bias for "Coil" effect.
-      let baseFreqBase = BASE_FREQ * (systemBias / 50.0);
+      let baseFreqBase = 1000 * systemBias;
       
-      // Resonance "Lock" Effect (Match Frontend)
-      const distToH1 = Math.abs(systemBias - 50);
-      const distToH2 = Math.abs(systemBias - 100);
-      const distToH0 = Math.abs(systemBias - 0);
-      
-      if (distToH1 < 3) baseFreqBase = 50000;
-      else if (distToH2 < 3) baseFreqBase = 100000;
-      else if (distToH0 < 3) baseFreqBase = 0;
-
       let currentFreq = baseFreqBase + (jitter * 8000);
       
       if (isOverdrive) {

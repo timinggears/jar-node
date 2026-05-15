@@ -182,7 +182,7 @@ export default function WarpVisualizer({
           const intensity = baseIntensity * biasScale + noise;
           
           // v147: Drive wave speed and frequency strictly by the Hz value
-          const freqMulti = frequency / 35000;
+          const freqMulti = frequency / 50000;
           const speedMulti = (1 + (b * 3)) * freqMulti;
           const wavelength = (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) * (1 / Math.sqrt(freqMulti));
           
@@ -328,7 +328,7 @@ export default function WarpVisualizer({
       </div>
 
       {/* Footer text in visualizer */}
-      <div className="absolute bottom-4 text-[10px] text-[#444] tracking-[0.2em] uppercase flex gap-4">
+      <div className="absolute bottom-28 left-1/2 -translate-x-1/2 text-[10px] text-white/40 tracking-[0.2em] uppercase flex items-center gap-4 bg-black/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 whitespace-nowrap z-10 transition-all duration-500">
         {isSolving ? (
           <div className="flex items-center gap-4 w-full px-12 animate-pulse">
             <span className="text-purple-500 font-bold">OPTIMIZING_250_NODE_PATH...</span>

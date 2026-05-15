@@ -317,7 +317,7 @@ export default function App() {
   }, [addLog]);
 
   // --- CORE DYNAMICS ---
-  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000', parity: number = 0) => {
+  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0) => {
     setStats(prev => {
       // v147: Apply dynamic frequency modulation based on rawFreq (which already includes bias from server if bridged)
       // If we are simulating locally, rawFreq comes from the local loop.
@@ -497,27 +497,16 @@ export default function App() {
     const simInterval = setInterval(() => {
       localFreqPhase += 0.1;
       const rawBias = carrierBiasRef.current;
-      const normalizedBias = rawBias / 50; // 1.0 at bias 50
       
       // Jitter scales with overdrive and bias
-      const jitter = 0.05 + Math.random() * 0.1 + (isOverdriveRef.current ? 0.4 : 0) + (normalizedBias * 0.1);
+      const jitter = 0.05 + Math.random() * 0.1 + (isOverdriveRef.current ? 0.4 : 0) + (rawBias / 500);
       const v = 1.65 + (Math.sin(Date.now() / 1000) * 0.02);
       
       // Base frequency scales linearly with bias
-      let baseFreqBase = 50000 * normalizedBias;
+      const baseFreqBase = 1000 * rawBias; // 100 bias = 100,000 = 100 GHz
       
-      // Resonance "Lock" Effect: Gently pull towards exact harmonics (0, 50, 100)
-      const distToH1 = Math.abs(rawBias - 50);
-      const distToH2 = Math.abs(rawBias - 100);
-      const distToH0 = Math.abs(rawBias - 0);
-      
-      if (distToH1 < 3) baseFreqBase = 50000;
-      else if (distToH2 < 3) baseFreqBase = 100000;
-      else if (distToH0 < 3) baseFreqBase = 0;
-
       const overdriveMulti = isOverdriveRef.current ? 3.5 : 1.0;
-      const driftScalar = (distToH1 < 5 || distToH2 < 5 || distToH0 < 5) ? 0.2 : 1.0;
-      const drift = Math.sin(localFreqPhase) * 200 * normalizedBias * driftScalar;
+      const drift = Math.sin(localFreqPhase) * 150 * (rawBias / 100);
       
       const baseFreq = (baseFreqBase * overdriveMulti) + drift;
       
