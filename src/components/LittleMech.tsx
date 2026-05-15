@@ -57,14 +57,57 @@ export default function LittleMech({ miningState, isBoosted, isStatic }: { minin
         className="relative"
       >
         {/* Gundam Pixel Art SVG */}
-        <svg
-          width="48"
-          height="56"
-          viewBox="0 0 24 28"
-          fill="none"
-          shapeRendering="crispEdges"
-          xmlns="http://www.w3.org/2000/svg"
-        >
+        <div className="relative">
+          {/* Overdrive Glow Effect */}
+          {isOverdrive && (
+            <motion.div
+              className="absolute inset-0 bg-red-600/30 blur-2xl rounded-full z-[-1]"
+              animate={{
+                scale: [0.8, 1.2, 0.8],
+                opacity: [0.3, 0.7, 0.3],
+              }}
+              transition={{
+                duration: 1,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+            />
+          )}
+
+          {/* Energy Trail Particles */}
+          {isOverdrive && (
+            <div className="absolute inset-0 z-[-1]">
+              {[...Array(3)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  className="absolute left-1/2 w-[2px] h-12 bg-gradient-to-t from-red-600 to-transparent"
+                  initial={{ opacity: 0, scaleY: 0, y: 0 }}
+                  animate={{
+                    opacity: [0, 0.8, 0],
+                    scaleY: [0, 1.5, 0.5],
+                    y: [0, -40 - (i * 10)],
+                    x: [-2, 2, -2]
+                  }}
+                  transition={{
+                    duration: 0.6,
+                    repeat: Infinity,
+                    delay: i * 0.2,
+                    ease: "easeOut"
+                  }}
+                  style={{ marginLeft: `${(i - 1) * 12}px` }}
+                />
+              ))}
+            </div>
+          )}
+
+          <svg
+            width="48"
+            height="56"
+            viewBox="0 0 24 28"
+            fill="none"
+            shapeRendering="crispEdges"
+            xmlns="http://www.w3.org/2000/svg"
+          >
           {/* --- SHADOW / OUTLINE LAYER --- */}
           <path d="M7 3h10v2h2v2h2v4h1v10h-1v2h-2v2h-12v-2h-2v-2h-1v-10h1v-4h2v-2h2z" fill={colors.frame} opacity="0.4" />
 
@@ -112,6 +155,7 @@ export default function LittleMech({ miningState, isBoosted, isStatic }: { minin
             </motion.g>
           )}
         </svg>
+      </div>
 
         {/* Retro UI Overlay */}
         {(miningState === 'mining' || isOverdrive) && (

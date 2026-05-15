@@ -702,6 +702,7 @@ export default function App() {
           coherence={stats.coherence} 
           jitter={stats.jitter} 
           frequency={stats.frequency} 
+          bias={carrierBias}
           isInstalling={isInstalling}
           installProgress={installProgress}
           isAiActive={isAiAnalysisActive}

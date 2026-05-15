@@ -10,6 +10,7 @@ interface WarpVisualizerProps {
   coherence: number;
   jitter: number;
   frequency: number;
+  bias: number;
   isInstalling?: boolean;
   installProgress?: number;
   isAiActive?: boolean;
@@ -20,6 +21,7 @@ export default function WarpVisualizer({
   coherence, 
   jitter, 
   frequency, 
+  bias,
   isInstalling = false, 
   installProgress = 0,
   isAiActive = false,
@@ -128,8 +130,9 @@ export default function WarpVisualizer({
       for (let j = 0; j < 3; j++) {
         ctx.beginPath();
         ctx.moveTo(0, height / 2);
+        const biasScale = bias / 50; 
         for (let x = 0; x < width; x += 10) {
-          const intensity = isZeroPoint ? 2 : (isTachyonic ? (Math.random() * 5 + 5) : (isPhaseOut ? (Math.random() * 40 + 10) : 20 + jitter * 100));
+          const intensity = isZeroPoint ? 2 : (isTachyonic ? (Math.random() * 5 + 5) : (isPhaseOut ? (Math.random() * 40 + 10) : (20 + jitter * 100) * biasScale));
           const y = centerY + Math.sin(x * (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) + t * (isZeroPoint ? 0.1 : (0.5 + j))) * intensity;
           ctx.lineTo(x, y);
         }
@@ -188,7 +191,7 @@ export default function WarpVisualizer({
 
     animationId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animationId);
-  }, [coherence, jitter, frequency]);
+  }, [coherence, jitter, frequency, bias, isInstalling, isAiActive, isSolving]);
 
   return (
     <section className="relative w-full h-[400px] flex items-center justify-center bg-[#0a0a0a] rounded-xl border border-[#ffffff10] overflow-hidden shadow-inner font-mono">
