@@ -35,8 +35,8 @@ export default function SystemSettings({
         <div className="space-y-6">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] text-zinc-500 uppercase font-bold">Carrier Bias (Excitation)</label>
-              <span className="text-xs font-mono text-[#00ffcc]">{(carrierBias / 50.0).toFixed(2)}x Boost</span>
+              <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">Resonance Drive (Tuning)</label>
+              <span className="text-xs font-mono text-[#00ffcc] animate-pulse">{(carrierBias / 50.0).toFixed(2)}x Drive</span>
             </div>
             <input 
               type="range" 
@@ -44,14 +44,14 @@ export default function SystemSettings({
               max="100" 
               value={carrierBias}
               onChange={(e) => setCarrierBias(parseInt(e.target.value))}
-              className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
+              className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic">Scales the modulation sensitivity. Normal operation at 1.00x (Bias: 50).</p>
+            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Adjusts the harmonic pump frequency. Shift to 1.00x (Bias: 50) for fundamental stability, or 2.00x for superposition.</p>
           </div>
 
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] text-blue-500 uppercase font-bold">Harmonic Resonance</label>
+              <label className="text-[10px] text-blue-500 uppercase font-bold">Resonance Spectrum Analysis</label>
               <span className="text-xs font-mono text-blue-400">
                 v1.47_LIVE: {(currentFreq / 1000).toFixed(4)} GHz
               </span>
@@ -60,10 +60,13 @@ export default function SystemSettings({
               {[1, 2, 3].map(h => {
                 const target = 50000 * h;
                 const isActive = Math.abs(currentFreq - target) < 8000;
+                const isLocked = Math.abs(currentFreq - target) < 2000;
                 return (
-                  <div key={h} className={`border p-2 rounded text-center transition-colors ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5'}`}>
-                    <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300' : 'text-zinc-600'}`}>H_{h}</p>
-                    <p className={`text-[9px] font-mono ${isActive ? 'text-blue-400' : 'text-zinc-400'}`}>{(target / 1000).toFixed(1)}G</p>
+                  <div key={h} className={`border p-2 rounded text-center transition-all duration-300 ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5 opacity-40'} ${isLocked ? 'ring-1 ring-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)]' : ''}`}>
+                    <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300 font-bold' : 'text-zinc-600'}`}>
+                      {isLocked ? 'LOCKED' : `H_${h}`}
+                    </p>
+                    <p className={`text-[9px] font-mono ${isActive ? (isLocked ? 'text-white' : 'text-blue-400') : 'text-zinc-400'}`}>{(target / 1000).toFixed(1)}G</p>
                   </div>
                 );
               })}
