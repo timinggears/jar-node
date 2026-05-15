@@ -760,7 +760,7 @@ export default function App() {
         </motion.div>
       </div>
 
-      <PetBay miningState={miningState} isOverdrive={isOverdrive} />
+      <PetBay miningState={miningState} isOverdrive={isOverdrive} bias={carrierBias} />
 
       {/* DESKTOP AREA */}
       <div className="relative flex-1 z-10 pointer-events-none">

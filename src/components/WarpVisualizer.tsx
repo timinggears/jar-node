@@ -161,15 +161,39 @@ export default function WarpVisualizer({
       for (let j = 0; j < 3; j++) {
         ctx.beginPath();
         ctx.moveTo(0, centerY);
-        // Improved bias scaling: 0.1 base ensures we always see a signal
-        const biasScale = 0.2 + (bias / 60); 
+        
+        // v147: Dramatic Bias Scaling
+        // normalized bias (0.0 to 1.0)
+        const b = bias / 100;
+        // biasScale range: 0.2 (quiet) -> 1.0 (normal) -> 4.0 (boosted)
+        const biasScale = bias <= 50 
+          ? 0.2 + (bias / 50) * 0.8 
+          : 1.0 + ((bias - 50) / 50) * 3.0;
+
         for (let x = 0; x < width + 10; x += 10) {
-          const intensity = isZeroPoint ? 2 : (isTachyonic ? (Math.random() * 5 + 5) : (isPhaseOut ? (Math.random() * 40 + 10) : (20 + jitter * 150) * biasScale));
-          const y = centerY + Math.sin(x * (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) + t * (isZeroPoint ? 0.1 : (0.5 + j))) * intensity;
+          let baseIntensity = 20 + jitter * 150;
+          if (isZeroPoint) baseIntensity = 2;
+          else if (isSingularity) baseIntensity = 60 + Math.random() * 40;
+          else if (isTachyonic) baseIntensity = 30 + Math.random() * 20;
+          else if (isPhaseOut) baseIntensity = 40 + Math.random() * 20;
+
+          const intensity = baseIntensity * biasScale;
+          const speedMulti = 1 + (b * 2);
+          const y = centerY + Math.sin(x * (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) + t * ((isZeroPoint ? 0.1 : (0.5 + j)) * speedMulti)) * intensity;
           ctx.lineTo(x, y);
         }
-        ctx.strokeStyle = isZeroPoint ? '#3b82f6' : (isSingularity ? '#ffff00' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#cc5500' : (j === 0 ? '#00ffcc' : '#ff0088'))));
-        ctx.lineWidth = isZeroPoint ? 1.0 : (isSingularity ? 3.0 : (isPhaseOut ? 1.5 : 1.0));
+
+        const color = isZeroPoint ? '#3b82f6' : (isSingularity ? '#ffff00' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#cc5500' : (j === 0 ? '#00ffcc' : '#ff0088'))));
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (isZeroPoint ? 1.0 : (isSingularity ? 3.0 : (isPhaseOut ? 1.5 : 1.0))) * (0.8 + b * 1.5);
+        
+        if (bias > 80) {
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = color;
+        } else {
+          ctx.shadowBlur = 0;
+        }
+
         ctx.stroke();
       }
 

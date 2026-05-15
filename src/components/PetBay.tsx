@@ -9,9 +9,10 @@ import LittleBee from './LittleBee';
 interface PetBayProps {
   miningState: 'idle' | 'mining' | 'success' | 'error';
   isOverdrive: boolean;
+  bias: number;
 }
 
-export default function PetBay({ miningState, isOverdrive }: PetBayProps) {
+export default function PetBay({ miningState, isOverdrive, bias }: PetBayProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [currentThought, setCurrentThought] = useState("Sovereign core idle. Substrate nominal.");
 
@@ -70,7 +71,7 @@ export default function PetBay({ miningState, isOverdrive }: PetBayProps) {
                    {/* We'll modify the pet components slightly to be relative in the next step, 
                        or just position them here specifically for the bay. */}
                    <div className="relative h-20 w-full flex justify-center scale-150">
-                      <LittleMech miningState={miningState} isBoosted={isOverdrive} isStatic />
+                      <LittleMech miningState={miningState} isBoosted={isOverdrive} bias={bias} isStatic />
                    </div>
                    <div className="flex w-full justify-around items-center px-4">
                       <div className="scale-125"><JumpingBunny miningState={miningState} isStatic /></div>

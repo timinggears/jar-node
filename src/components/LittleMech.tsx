@@ -1,8 +1,9 @@
 import { motion } from 'motion/react';
 
-export default function LittleMech({ miningState, isBoosted, isStatic }: { miningState: 'idle' | 'mining' | 'success' | 'error', isBoosted?: boolean, isStatic?: boolean }) {
+export default function LittleMech({ miningState, isBoosted, isStatic, bias = 50 }: { miningState: 'idle' | 'mining' | 'success' | 'error', isBoosted?: boolean, isStatic?: boolean, bias?: number }) {
   const isExcited = miningState === 'success' || miningState === 'mining' || isBoosted;
   const isOverdrive = isBoosted;
+  const biasScale = bias / 50; // 1.0 is normal
   
   // Classic SNES Palette (Vibrant & High Contrast)
   const colors = isOverdrive ? {
@@ -28,25 +29,25 @@ export default function LittleMech({ miningState, isBoosted, isStatic }: { minin
       animate={{ opacity: 1, scale: isStatic ? 1 : 1.2 }}
       transition={{ delay: 3.5, type: "spring" }}
     >
-      <motion.div
+        <motion.div
         initial={{ y: 0, x: 0, scale: 1, opacity: 1 }}
         animate={{
           // Idle bobing, Success jump, or Overdrive vibration
           y: isOverdrive 
-            ? [-1, 1, -1] 
-            : (miningState === 'success' ? [0, -20, 0] : [0, -1.5, 0]),
-          x: isOverdrive ? [-1.5, 1.5, -1.5] : 0,
+            ? [-1 * biasScale, 1 * biasScale, -1 * biasScale] 
+            : (miningState === 'success' ? [0, -20, 0] : [0, -1.5 * biasScale, 0]),
+          x: isOverdrive ? [-1.5 * biasScale, 1.5 * biasScale, -1.5 * biasScale] : 0,
           scale: miningState === 'success' ? [1, 1.1, 1] : 1,
           opacity: 1
         }}
         transition={{
           y: {
-            duration: isOverdrive ? 0.06 : (miningState === 'success' ? 0.4 : 3),
+            duration: isOverdrive ? 0.06 / biasScale : (miningState === 'success' ? 0.4 : 3 / biasScale),
             repeat: isOverdrive ? Infinity : (miningState === 'success' ? 0 : Infinity),
             ease: isOverdrive ? "linear" : "easeInOut"
           },
           x: {
-            duration: 0.05,
+            duration: 0.05 / biasScale,
             repeat: Infinity,
             ease: "linear"
           },
@@ -59,15 +60,15 @@ export default function LittleMech({ miningState, isBoosted, isStatic }: { minin
         {/* Gundam Pixel Art SVG */}
         <div className="relative">
           {/* Overdrive Glow Effect */}
-          {isOverdrive && (
+          {(isOverdrive || bias > 80) && (
             <motion.div
-              className="absolute inset-0 bg-red-600/30 blur-2xl rounded-full z-[-1]"
+              className={`absolute inset-0 blur-2xl rounded-full z-[-1] ${isOverdrive ? 'bg-red-600/30' : 'bg-[#00ffcc]/20'}`}
               animate={{
-                scale: [0.8, 1.2, 0.8],
-                opacity: [0.3, 0.7, 0.3],
+                scale: [0.8, 1.2 * biasScale, 0.8],
+                opacity: [0.3, 0.7 * (bias / 100), 0.3],
               }}
               transition={{
-                duration: 1,
+                duration: 1 / biasScale,
                 repeat: Infinity,
                 ease: "easeInOut"
               }}
