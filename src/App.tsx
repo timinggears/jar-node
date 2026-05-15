@@ -696,6 +696,20 @@ export default function App() {
 
   return (
     <div className={`h-screen text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black transition-colors duration-700 relative ${isOverdrive ? 'bg-[#0a0000]' : 'bg-[#050505]'}`}>
+      
+      {/* v147: System Stress Jitter Overlay */}
+      {carrierBias > 90 && (
+        <motion.div 
+          className="fixed inset-0 pointer-events-none z-[160] border-4 border-red-500/10"
+          animate={{
+            x: [0, (Math.random() - 0.5) * 4, 0],
+            y: [0, (Math.random() - 0.5) * 4, 0],
+            opacity: [0.1, 0.3, 0.1]
+          }}
+          transition={{ duration: 0.1, repeat: Infinity }}
+        />
+      )}
+
       {/* Background Live Wallpaper */}
       <div className="fixed top-64 inset-x-0 bottom-0 z-0 overflow-hidden">
         <WarpVisualizer 

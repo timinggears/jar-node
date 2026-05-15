@@ -1,7 +1,8 @@
 import { motion } from 'motion/react';
 
-export default function LittleBee({ miningState, isStatic }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean }) {
+export default function LittleBee({ miningState, isStatic, bias = 50 }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean, bias?: number }) {
   const isMining = miningState === 'mining' || miningState === 'success';
+  const biasScale = bias / 50;
   
   return (
     <motion.div
@@ -12,13 +13,13 @@ export default function LittleBee({ miningState, isStatic }: { miningState: 'idl
     >
       <motion.div
         animate={{
-          y: isMining ? [0, -2, 0, -1, 0] : [0, -4, 0],
-          x: [0, 2, 0, -2, 0],
-          opacity: 1 // Ensure initial state for opacity is tracked
+          y: isMining || bias > 70 ? [0, -2 * biasScale, 0, -1 * biasScale, 0] : [0, -4, 0],
+          x: [0, 2 * biasScale, 0, -2 * biasScale, 0],
+          opacity: 1 
         }}
         initial={{ opacity: 1, y: 0, x: 0 }}
         transition={{
-          duration: isMining ? 0.2 : 2.5,
+          duration: (isMining || bias > 70) ? 0.2 / biasScale : 2.5,
           repeat: Infinity,
           ease: "easeInOut"
         }}

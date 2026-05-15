@@ -1,7 +1,8 @@
 import { motion } from 'motion/react';
 
-export default function JumpingBunny({ miningState, isStatic }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean }) {
-  const isExcited = miningState === 'success' || miningState === 'mining';
+export default function JumpingBunny({ miningState, isStatic, bias = 50 }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean, bias?: number }) {
+  const isExcited = miningState === 'success' || miningState === 'mining' || bias > 70;
+  const biasScale = bias / 50;
   
   return (
     <motion.div
@@ -12,13 +13,13 @@ export default function JumpingBunny({ miningState, isStatic }: { miningState: '
     >
       <motion.div
         animate={{
-          y: isExcited ? [0, -30, 0] : [0, -12, 0],
+          y: isExcited ? [0, -30 * biasScale, 0] : [0, -12, 0],
           scaleX: isExcited ? [1, 0.7, 1.4, 1] : [1, 0.95, 1.05, 1],
           scaleY: isExcited ? [1, 1.4, 0.7, 1] : [1, 1.05, 0.95, 1],
-          rotate: miningState === 'success' ? [0, 360] : 0
+          rotate: miningState === 'success' ? [0, 360] : (bias > 90 ? [0, 15, -15, 0] : 0)
         }}
         transition={{
-          duration: miningState === 'success' ? 0.3 : (miningState === 'mining' ? 0.5 : 1.2),
+          duration: miningState === 'success' ? 0.3 : ((miningState === 'mining' || bias > 70) ? 0.5 / biasScale : 1.2),
           repeat: Infinity,
           ease: "easeInOut",
         }}

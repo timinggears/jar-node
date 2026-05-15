@@ -74,11 +74,11 @@ export default function PetBay({ miningState, isOverdrive, bias }: PetBayProps) 
                       <LittleMech miningState={miningState} isBoosted={isOverdrive} bias={bias} isStatic />
                    </div>
                    <div className="flex w-full justify-around items-center px-4">
-                      <div className="scale-125"><JumpingBunny miningState={miningState} isStatic /></div>
-                      <div className="scale-125"><LittleSquirrel miningState={miningState} isStatic /></div>
+                      <div className="scale-125"><JumpingBunny miningState={miningState} bias={bias} isStatic /></div>
+                      <div className="scale-125"><LittleSquirrel miningState={miningState} bias={bias} isStatic /></div>
                    </div>
                    <div className="relative h-16 w-full flex justify-center">
-                      <LittleBee miningState={miningState} isStatic />
+                      <LittleBee miningState={miningState} bias={bias} isStatic />
                    </div>
                 </div>
               </div>

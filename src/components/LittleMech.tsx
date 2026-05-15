@@ -36,18 +36,18 @@ export default function LittleMech({ miningState, isBoosted, isStatic, bias = 50
           y: isOverdrive 
             ? [-1 * biasScale, 1 * biasScale, -1 * biasScale] 
             : (miningState === 'success' ? [0, -20, 0] : [0, -1.5 * biasScale, 0]),
-          x: isOverdrive ? [-1.5 * biasScale, 1.5 * biasScale, -1.5 * biasScale] : 0,
-          scale: miningState === 'success' ? [1, 1.1, 1] : 1,
+          x: isOverdrive ? [-1.5 * biasScale, 1.5 * biasScale, -1.5 * biasScale] : (bias > 70 ? [(Math.random() - 0.5) * biasScale, (Math.random() - 0.5) * biasScale, 0] : 0),
+          scale: miningState === 'success' ? [1, 1.1, 1] : (bias > 90 ? [1, 1.05, 1] : 1),
           opacity: 1
         }}
         transition={{
           y: {
-            duration: isOverdrive ? 0.06 / biasScale : (miningState === 'success' ? 0.4 : 3 / biasScale),
+            duration: isOverdrive ? 0.04 / biasScale : (miningState === 'success' ? 0.4 : 3 / Math.max(0.1, biasScale)),
             repeat: isOverdrive ? Infinity : (miningState === 'success' ? 0 : Infinity),
             ease: isOverdrive ? "linear" : "easeInOut"
           },
           x: {
-            duration: 0.05 / biasScale,
+            duration: 0.04 / Math.max(0.1, biasScale),
             repeat: Infinity,
             ease: "linear"
           },

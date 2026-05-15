@@ -1,7 +1,8 @@
 import { motion } from 'motion/react';
 
-export default function LittleSquirrel({ miningState, isStatic }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean }) {
-  const isExcited = miningState === 'success' || miningState === 'mining';
+export default function LittleSquirrel({ miningState, isStatic, bias = 50 }: { miningState: 'idle' | 'mining' | 'success' | 'error', isStatic?: boolean, bias?: number }) {
+  const isExcited = miningState === 'success' || miningState === 'mining' || bias > 70;
+  const biasScale = bias / 50;
   
   return (
     <motion.div
@@ -13,12 +14,12 @@ export default function LittleSquirrel({ miningState, isStatic }: { miningState:
       <motion.div
         initial={{ y: 0, x: 0, scale: 1, opacity: 1 }}
         animate={{
-          scale: isExcited ? [1, 1.1, 1] : [1, 1.02, 1],
-          x: isExcited ? [0, -5, 5, 0] : 0,
+          scale: isExcited ? [1, 1.1 * biasScale, 1] : [1, 1.02, 1],
+          x: isExcited ? [0, -5 * biasScale, 5 * biasScale, 0] : 0,
           opacity: 1
         }}
         transition={{
-          duration: isExcited ? 0.3 : 2,
+          duration: isExcited ? 0.3 / biasScale : 2,
           repeat: Infinity,
           ease: "linear"
         }}

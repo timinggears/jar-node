@@ -165,38 +165,54 @@ export default function WarpVisualizer({
         // v147: Dramatic Bias Scaling
         // normalized bias (0.0 to 1.0)
         const b = bias / 100;
-        // biasScale range: 0.2 (quiet) -> 1.0 (normal) -> 4.0 (boosted)
+        // biasScale range: 0.2 (quiet) -> 1.0 (normal) -> 6.0 (extreme boost)
         const biasScale = bias <= 50 
           ? 0.2 + (bias / 50) * 0.8 
-          : 1.0 + ((bias - 50) / 50) * 3.0;
+          : 1.0 + ((bias - 50) / 50) * 5.0;
 
         for (let x = 0; x < width + 10; x += 10) {
           let baseIntensity = 20 + jitter * 150;
           if (isZeroPoint) baseIntensity = 2;
-          else if (isSingularity) baseIntensity = 60 + Math.random() * 40;
-          else if (isTachyonic) baseIntensity = 30 + Math.random() * 20;
-          else if (isPhaseOut) baseIntensity = 40 + Math.random() * 20;
+          else if (isSingularity) baseIntensity = 80 + Math.random() * 40;
+          else if (isTachyonic) baseIntensity = 40 + Math.random() * 20;
+          else if (isPhaseOut) baseIntensity = 50 + Math.random() * 20;
 
-          const intensity = baseIntensity * biasScale;
-          const speedMulti = 1 + (b * 2);
+          // Add jitter-based noise to peak intensity if boosted
+          const noise = bias > 70 ? (Math.random() - 0.5) * (bias - 70) * 0.5 : 0;
+          const intensity = baseIntensity * biasScale + noise;
+          
+          const speedMulti = 1 + (b * 3);
           const y = centerY + Math.sin(x * (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) + t * ((isZeroPoint ? 0.1 : (0.5 + j)) * speedMulti)) * intensity;
           ctx.lineTo(x, y);
         }
 
         const color = isZeroPoint ? '#3b82f6' : (isSingularity ? '#ffff00' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#cc5500' : (j === 0 ? '#00ffcc' : '#ff0088'))));
         ctx.strokeStyle = color;
-        ctx.lineWidth = (isZeroPoint ? 1.0 : (isSingularity ? 3.0 : (isPhaseOut ? 1.5 : 1.0))) * (0.8 + b * 1.5);
+        ctx.lineWidth = (isZeroPoint ? 1.0 : (isSingularity ? 4.0 : (isPhaseOut ? 2.0 : 1.2))) * (0.8 + b * 2.0);
         
-        if (bias > 80) {
-          ctx.shadowBlur = 15;
+        if (bias > 70) {
+          // Manual multi-pass glow for more intensity
+          ctx.shadowBlur = 10 + (b * 20);
           ctx.shadowColor = color;
           
+          // Glitch secondary line
+          if (bias > 90 && Math.random() > 0.9) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth *= 3;
+            ctx.stroke();
+            ctx.strokeStyle = color;
+            ctx.lineWidth /= 3;
+          }
+
           // v147: Chromatic Aberration Glitch
-          if (Math.random() > 0.8) {
+          if (Math.random() > 0.7 && bias > 85) {
             ctx.save();
-            ctx.translate((Math.random() - 0.5) * 10, 0);
-            ctx.globalAlpha = 0.5;
+            ctx.translate((Math.random() - 0.5) * (bias / 5), 0);
+            ctx.globalAlpha = 0.4;
             ctx.strokeStyle = '#ff0088'; // Magenta shift
+            ctx.stroke();
+            ctx.translate((Math.random() - 0.5) * (bias / 5), 0);
+            ctx.strokeStyle = '#00ffcc'; // Cyan shift
             ctx.stroke();
             ctx.restore();
           }
@@ -262,6 +278,17 @@ export default function WarpVisualizer({
 
   return (
     <section ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-transparent overflow-hidden font-mono">
+      {/* Screen Shake Container */}
+      <motion.div 
+        className="absolute inset-0 flex items-center justify-center pointer-events-none z-0"
+        animate={bias > 85 ? {
+          x: [0, (Math.random() - 0.5) * 10, 0],
+          y: [0, (Math.random() - 0.5) * 10, 0],
+        } : { x: 0, y: 0 }}
+        transition={bias > 85 ? { duration: 0.1, repeat: Infinity } : { duration: 0.5 }}
+      >
+        <div className="w-full h-full" />
+      </motion.div>
       {/* Decorative overlays from design */}
       <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
         <span className={`px-2 py-1 rounded text-[10px] border backdrop-blur-sm transition-colors ${
