@@ -48,6 +48,10 @@ export default function App() {
   const [isInstalling, setIsInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState(0);
   const [carrierBias, setCarrierBias] = useState(50); // 50% = Fundamental resonance (50GHz)
+  const handleCarrierBiasChange = useCallback((val: number) => {
+    setCarrierBias(val);
+    setHasReceivedSync(true); // Interaction forces sync mode
+  }, []);
   const socketRef = useRef<any>(null);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -100,8 +104,11 @@ export default function App() {
 
   // Sync Hardware Settings to Backend
   useEffect(() => {
-    if (socketRef.current && hasReceivedSync) {
-      socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
+    if (socketRef.current) {
+      if (hasReceivedSync) {
+        console.log(`[JARS_CLIENT] Emitting params: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
+        socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
+      }
     }
   }, [carrierBias, isOverdrive, hasReceivedSync]);
 
@@ -444,6 +451,11 @@ export default function App() {
           const parity = parseInt(parts[4]);
           const freq = parseFloat(parts[5]);
           const hrate = parts[6] ? parseFloat(parts[6]) : 0;
+          
+          if (Date.now() % 5000 < 100) {
+             console.log(`[JARS_CLIENT] Telemetry Recv: ${freq.toFixed(1)} GHz`);
+          }
+
           updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate);
         }
       }
@@ -878,7 +890,7 @@ export default function App() {
             >
               <SystemSettings 
                 carrierBias={carrierBias}
-                setCarrierBias={setCarrierBias}
+                setCarrierBias={handleCarrierBiasChange}
                 isOverdrive={isOverdrive}
                 setIsOverdrive={setIsOverdrive}
                 isAiActive={isAiAnalysisActive}

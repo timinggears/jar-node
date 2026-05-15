@@ -8,6 +8,13 @@ import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import os from 'os';
 
+// --- GLOBAL SYSTEM STATE (v147) ---
+const systemState = {
+  bias: 50,
+  overdrive: false,
+  latestHashRate: 0
+};
+
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
@@ -16,11 +23,7 @@ async function startServer() {
   });
 
   // --- TELEMETRY PARAMS ---
-  const systemState = {
-    bias: 50,
-    overdrive: false,
-    latestHashRate: 0
-  };
+  // Moved to global scope for v147 stability
 
   // Track if we have a real hardware connection to decide whether to simulate
   let hardwareActive = false;
@@ -44,26 +47,30 @@ async function startServer() {
       }
     });
 
-      socket.on('hardware:params', (params: any) => {
-        if (params.bias !== undefined) systemState.bias = Number(params.bias);
-        if (params.overdrive !== undefined) systemState.overdrive = Boolean(params.overdrive);
-        
-        console.log(`[JARS_SYNC] NEW_PARAMS: Bias=${systemState.bias} | Overdrive=${systemState.overdrive}`);
-
-        // Broadcast change to all other clients
-        socket.broadcast.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
-        
-        socket.emit('log', `[JARS_SYNC] Multi-User Sync: Bias=${systemState.bias} | Overdrive=${systemState.overdrive}`);
-        
-        // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
-        if (hardwarePort && hardwarePort.isOpen) {
-          hardwarePort.write(`BIAS:${systemState.bias}\n`);
-          hardwarePort.write(`OVERDRIVE:${systemState.overdrive ? '1' : '0'}\n`);
-        }
-        
-        const biasMultiplier = systemState.bias / 50.0;
-        socket.emit('log', `SYSTEM: Nodal Bias realigned to ${biasMultiplier.toFixed(2)}x modulation sensitivity.`);
-      });
+  socket.on('hardware:params', (params: any) => {
+    if (params.bias !== undefined) {
+      systemState.bias = Number(params.bias);
+      console.log(`[JARS_SERVER] BIAS_UPDATE: ${systemState.bias}`);
+    }
+    if (params.overdrive !== undefined) {
+      systemState.overdrive = Boolean(params.overdrive);
+      console.log(`[JARS_SERVER] OVERDRIVE_UPDATE: ${systemState.overdrive}`);
+    }
+    
+    // Broadcast change to all other clients
+    socket.broadcast.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
+    
+    socket.emit('log', `[JARS_SYNC] Multi-User Sync: Bias=${systemState.bias} | Overdrive=${systemState.overdrive}`);
+    
+    // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
+    if (hardwarePort && hardwarePort.isOpen) {
+      hardwarePort.write(`BIAS:${systemState.bias}\n`);
+      hardwarePort.write(`OVERDRIVE:${systemState.overdrive ? '1' : '0'}\n`);
+    }
+    
+    const biasMultiplier = systemState.bias / 50.0;
+    socket.emit('log', `SYSTEM: Nodal Bias realigned to ${biasMultiplier.toFixed(2)}x modulation sensitivity.`);
+  });
 
     socket.on('hardware:command', (cmd: string) => {
       if (hardwarePort && hardwarePort.isOpen) {
@@ -162,6 +169,11 @@ async function startServer() {
       const hashrateMod = (systemState.latestHashRate / 10000) * 8500;
       
       let currentFreq = resonanceBase + (jitter * 8000) + hashrateMod;
+
+      // Debug log every ~5 seconds
+      if (Date.now() % 5000 < 100) {
+        console.log(`[JARS_SERVER_LOOP] Bias: ${systemState.bias} | Freq: ${currentFreq.toFixed(1)}`);
+      }
       
       if (systemState.overdrive) {
         currentFreq = currentFreq * 3.5; // Quantum Leap
@@ -196,6 +208,11 @@ async function startServer() {
       console.error('[SERVER] Telemetry error:', err);
     }
   }, 100);
+
+  // Periodic broadcast of actual state to ensure all clients are synced
+  setInterval(() => {
+    io.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
+  }, 10000);
 
   findAndOpenPort();
 
