@@ -72,8 +72,8 @@ npm install
 npm run dev
 ```
 
-## 6. Micro-Controller Script (Pico/Pi)
-Save this as `code.py` on your Raspberry Pi Pico or run it on your Pi with the Nodal Coil hat.
+## 6. Micro-Controller Script (Pico/Pi) v147
+Save this as `code.py` on your Raspberry Pi Pico. This version supports bridge-over-serial commands.
 
 ```python
 import board
@@ -81,33 +81,52 @@ import pwmio
 import analogio
 import time
 import sys
+import supervisor
+import random
 
-# --- NODAL RESERVOIR CORE v146 ---
-BASE_FREQ = 35000          # Fundamental frequency
-coil = pwmio.PWMOut(board.GP14, frequency=BASE_FREQ, duty_cycle=16384, variable_frequency=True)
+# --- NODAL RESERVOIR CORE v147 ---
+# Matches web interface logic: 1 bias = 1 GHz
+system_bias = 50.0
+is_overdrive = False
+base_hw_freq = 50000
+
+coil = pwmio.PWMOut(board.GP14, frequency=base_hw_freq, duty_cycle=16384, variable_frequency=True)
 adc = analogio.AnalogIn(board.GP26)
 
-last_v = 1.65
 last_stat = 0
+buffer = ""
 
 while True:
     t = time.monotonic()
-    v = (adc.value / 65535) * 3.3
-    jitter = abs(v - last_v)
-    last_v = v
+    
+    # Handle incoming bridge commands
+    if supervisor.runtime.serial_bytes_available:
+        char = sys.stdin.read(1)
+        if char == "\n" or char == "\r":
+            if buffer.startswith("BIAS:"):
+                try: system_bias = float(buffer.split(":")[1])
+                except: pass
+            elif buffer.startswith("OVERDRIVE:"):
+                is_overdrive = (buffer.split(":")[1] == "1")
+            buffer = ""
+        else:
+            buffer += char
 
-    seed = int(v * 10000000) & 0xFFFFFFFF
-    parity = bin(seed).count('1') % 2
+    v = (adc.value / 65535) * 3.3
+    jitter = random.random() * 0.05 # ADC noise baseline
+    
+    # Virtual frequency for Web Dashboard
+    multi = 3.5 if is_overdrive else 1.0
+    virtual_freq = system_bias * 1000 * multi
 
     # Stream telemetry to the Web Interface
-    if t - last_stat > 0.018:
-        sys.stdout.write("!S|{:08X}|{:.6f}|{:.4f}|{}|{}\r\n".format(seed, jitter, v, parity, BASE_FREQ))
+    if t - last_stat > 0.02:
+        seed = random.getrandbits(32)
+        parity = bin(seed).count('1') % 2
+        sys.stdout.write("!S|{:08X}|{:.6f}|{:.4f}|{}|{:.1f}\r\n".format(seed, jitter, v, parity, virtual_freq))
         last_stat = t
 
-    # Harmonic Feedback Loop
-    harm1 = int(BASE_FREQ + (jitter * 45000))
-    coil.frequency = harm1
-    coil.duty_cycle = int(max(12000, min(65535, jitter * 1_600_000)))
-
+    # Hardware Excitation
+    coil.frequency = int(base_hw_freq + (v * 5000))
     time.sleep(0.001)
 ```
