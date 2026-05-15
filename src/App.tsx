@@ -319,10 +319,9 @@ export default function App() {
   // --- CORE DYNAMICS ---
   const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000', parity: number = 0) => {
     setStats(prev => {
-      // v147: Apply dynamic frequency modulation based on bias
-      const normalizedBias = carrierBiasRef.current / 100;
-      // Frequency modulates around base: +50Hz jitter + Bias excitation
-      const modulatedFreq = rawFreq * (1 + (normalizedBias * 0.1)) + (Math.random() - 0.5) * 50 * (1 + normalizedBias);
+      // v147: Apply dynamic frequency modulation based on rawFreq (which already includes bias from server if bridged)
+      // If we are simulating locally, rawFreq comes from the local loop.
+      const modulatedFreq = rawFreq + (Math.random() - 0.5) * 20 * (1 + (carrierBiasRef.current / 50));
       
       // --- EXACT MATH FROM SINGULARITY v146 ---
       const phaseOutVal = (vValue - 1.65) * 100;
@@ -497,16 +496,17 @@ export default function App() {
     let localFreqPhase = 0;
     const simInterval = setInterval(() => {
       localFreqPhase += 0.1;
-      const normalizedBias = carrierBiasRef.current / 100;
+      const normalizedBias = carrierBiasRef.current / 50; // 1.0 at bias 50
       
       // Jitter scales with overdrive and bias
-      const jitter = 0.05 + Math.random() * 0.1 + (isOverdriveRef.current ? 0.4 : 0) + (normalizedBias * 0.2);
-      const v = 1.65 + (Math.sin(Date.now() / 1000) * 0.02) + (normalizedBias * 0.01);
+      const jitter = 0.05 + Math.random() * 0.1 + (isOverdriveRef.current ? 0.4 : 0) + (normalizedBias * 0.1);
+      const v = 1.65 + (Math.sin(Date.now() / 1000) * 0.02);
       
-      // Base frequency fluctuates organically + drift
-      const baseFreqBase = isOverdriveRef.current ? 105000 : 35000;
-      const drift = Math.sin(localFreqPhase) * 200 * (1 + normalizedBias);
-      const baseFreq = baseFreqBase + drift;
+      // Base frequency scales linearly with bias
+      const baseFreqBase = 35000 * normalizedBias;
+      const overdriveMulti = isOverdriveRef.current ? 2.5 : 1.0;
+      const drift = Math.sin(localFreqPhase) * 150 * normalizedBias;
+      const baseFreq = (baseFreqBase * overdriveMulti) + drift;
       
       const seed = Math.floor(Math.random() * 0xffffffff).toString(16);
       
@@ -738,8 +738,23 @@ export default function App() {
         />
       )}
 
+      {/* v147: Animated Honeycomb Background Overlay */}
+      <motion.div 
+        className="fixed inset-0 z-0 bg-honeycomb pointer-events-none"
+        initial={{ opacity: 0.05 }}
+        animate={{
+          opacity: isOverdrive ? [0.08, 0.15, 0.08] : [0.04, 0.08, 0.04],
+          scale: isOverdrive ? [1.02, 1.05, 1.02] : [1, 1.02, 1]
+        }}
+        transition={{
+          duration: isOverdrive ? 3 : 8,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }}
+      />
+
       {/* Background Live Wallpaper */}
-      <div className="fixed top-64 inset-x-0 bottom-0 z-0 overflow-hidden">
+      <div className="fixed top-20 inset-x-0 bottom-0 z-0 overflow-hidden">
         <WarpVisualizer 
           coherence={stats.coherence} 
           jitter={stats.jitter} 

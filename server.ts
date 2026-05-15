@@ -140,10 +140,12 @@ async function startServer() {
       const parity = (seedNum.toString(2).split('1').length - 1) % 2;
 
       // Harmonic Drive Modulation (v147 Match)
-      let currentFreq = BASE_FREQ + (jitter * 45000 * carrierBias);
+      // Normal operation is at bias 50 (1.0x). 
+      // Frequency scales linearly with bias for "Coil" effect.
+      let currentFreq = BASE_FREQ * (systemBias / 50) + (jitter * 5000);
       
       if (isOverdrive) {
-        currentFreq = currentFreq * 2;
+        currentFreq = currentFreq * 2.5; // v147 Extreme Overdrive
       }
 
       // Enhanced excitation on high-jitter events
