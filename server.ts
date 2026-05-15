@@ -173,7 +173,7 @@ async function startServer() {
 
       // Debug log every ~5 seconds
       if (Date.now() % 5000 < 100) {
-        console.log(`[JARS_SERVER] STATE: Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(4)}GHz | HR=${systemState.latestHashRate}`);
+        console.log(`[JARS_REPRESENTATION] Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(2)}GHz`);
       }
       
       if (systemState.overdrive) {
@@ -190,7 +190,7 @@ async function startServer() {
       io.to('telemetry').emit('telemetry', telemetryLine);
 
       if (Math.random() > 0.99) {
-        io.to('mining_status').emit('mining_status', { type: 'info', message: 'SINGULARITY_v146: Harmonic anchor pulse detected. Fundamental + Harmonics active.' });
+        io.to('mining_status').emit('mining_status', { type: 'info', message: 'HARMONIC_ANCHOR: Direct state mapping active.' });
       }
       
       // Also emit raw system stats for more "real" feel
@@ -206,11 +206,6 @@ async function startServer() {
       console.error('[SERVER] Telemetry error:', err);
     }
   }, 100);
-
-  // Periodic broadcast of actual state to ensure all clients are synced
-  setInterval(() => {
-    io.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
-  }, 10000);
 
   findAndOpenPort();
 

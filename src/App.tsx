@@ -50,7 +50,8 @@ export default function App() {
   const [carrierBias, setCarrierBias] = useState(50); // 50% = Fundamental resonance (50GHz)
   const handleCarrierBiasChange = useCallback((val: number) => {
     setCarrierBias(val);
-    setHasReceivedSync(true); // Interaction forces sync mode
+    lastInteractionTimeRef.current = Date.now();
+    setHasReceivedSync(true);
   }, []);
   const socketRef = useRef<any>(null);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
@@ -107,16 +108,16 @@ export default function App() {
     localStorage.setItem('jar_system_version_v321', systemVersion.toString());
   }, [systemVersion]);
 
-  // Sync Hardware Settings to Backend
+  // v147: Robust sync logic
   const lastEmittedBiasRef = useRef(carrierBias);
   const lastEmittedOverdriveRef = useRef(isOverdrive);
+  const lastInteractionTimeRef = useRef(0);
 
   useEffect(() => {
     if (socketRef.current) {
-      // Direct comparison to avoid infinite loops without heavy debouncing
       if (carrierBias === lastEmittedBiasRef.current && isOverdrive === lastEmittedOverdriveRef.current) return;
       
-      console.log(`[JARS_CLIENT] Syncing: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
+      console.log(`[JARS_CLIENT] User Intent: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
       socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
       
       lastEmittedBiasRef.current = carrierBias;
@@ -453,12 +454,13 @@ export default function App() {
 
     const onHardwareState = (state: { bias?: number, overdrive?: boolean }) => {
       setHasReceivedSync(true);
-      if (state.bias !== undefined) {
-        // Only adopt if it's different from our current intention to avoid slider jitter
-        if (Math.abs(state.bias - carrierBiasRef.current) > 1) {
-          setCarrierBias(state.bias);
-          lastEmittedBiasRef.current = state.bias;
-        }
+      
+      // AUTHORITY LOCK: If we just touched the slider in the last 2 seconds, ignore server echoes
+      if (Date.now() - lastInteractionTimeRef.current < 2000) return;
+
+      if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 1) {
+        setCarrierBias(state.bias);
+        lastEmittedBiasRef.current = state.bias;
       }
       if (state.overdrive !== undefined && state.overdrive !== isOverdriveRef.current) {
         setIsOverdrive(state.overdrive);
