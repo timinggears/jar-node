@@ -27,7 +27,7 @@ export default function PetBay({ miningState, isOverdrive }: PetBayProps) {
   }, []);
 
   return (
-    <div className="fixed right-0 top-1/3 z-[100] flex items-center">
+    <div className="fixed right-0 top-1/4 z-[100] flex items-center">
       {/* Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}

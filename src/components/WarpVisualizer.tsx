@@ -28,14 +28,34 @@ export default function WarpVisualizer({
   isSolving = false
 }: WarpVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef<{x: number, y: number}[]>([]);
+  const dimensionsRef = useRef({ width: 0, height: 0 });
 
   useEffect(() => {
-    // Generate 250 random nodes for TSP visualization
-    nodesRef.current = Array.from({ length: 250 }, () => ({
-      x: Math.random() * 1000,
-      y: Math.random() * 400
+    // Generate 500 random nodes for TSP visualization (more for background density)
+    nodesRef.current = Array.from({ length: 500 }, () => ({
+      x: Math.random() * 2000,
+      y: Math.random() * 1000
     }));
+
+    const updateDimensions = () => {
+      if (containerRef.current && canvasRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvasRef.current.width = width * dpr;
+        canvasRef.current.height = height * dpr;
+        dimensionsRef.current = { width, height };
+        
+        // Re-generate nodes for new dimension if needed, or just scale drawing
+      }
+    };
+
+    const observer = new ResizeObserver(updateDimensions);
+    if (containerRef.current) observer.observe(containerRef.current);
+    updateDimensions();
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -49,8 +69,19 @@ export default function WarpVisualizer({
     const startTime = performance.now();
 
     const draw = (time: number) => {
-      const { width, height } = canvas;
-      ctx.clearRect(0, 0, width, height);
+      const { width, height } = dimensionsRef.current;
+      if (width === 0 || height === 0) {
+        animationId = requestAnimationFrame(draw);
+        return;
+      }
+
+      const dpr = window.devicePixelRatio || 1;
+      const drawWidth = width * dpr;
+      const drawHeight = height * dpr;
+      
+      ctx.clearRect(0, 0, drawWidth, drawHeight);
+      ctx.save();
+      ctx.scale(dpr, dpr);
 
       const centerX = width / 2;
       const centerY = height / 2;
@@ -94,15 +125,15 @@ export default function WarpVisualizer({
         ctx.restore();
       }
 
-      // 250 City Solve Mesh
+      // 500 City Solve Mesh
       if (isSolving) {
         ctx.save();
         ctx.strokeStyle = '#a855f7'; // Purple
-        ctx.lineWidth = 0.3;
+        ctx.lineWidth = 0.5;
         ctx.globalAlpha = 0.4 + (Math.sin(t * 10) * 0.1);
         
         // Draw partial connections to simulate optimization
-        const step = Math.floor(t * 10) % 250;
+        const step = Math.floor(t * 15) % 500;
         ctx.beginPath();
         for (let i = 0; i < nodesRef.current.length; i++) {
           const node = nodesRef.current[i];
@@ -121,7 +152,7 @@ export default function WarpVisualizer({
         for (let i = 0; i < nodesRef.current.length; i++) {
           const node = nodesRef.current[i];
           ctx.beginPath();
-          ctx.arc(node.x, node.y, 1, 0, Math.PI * 2);
+          ctx.arc(node.x, node.y, 1.2, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.restore();
@@ -129,15 +160,16 @@ export default function WarpVisualizer({
 
       for (let j = 0; j < 3; j++) {
         ctx.beginPath();
-        ctx.moveTo(0, height / 2);
-        const biasScale = bias / 50; 
-        for (let x = 0; x < width; x += 10) {
-          const intensity = isZeroPoint ? 2 : (isTachyonic ? (Math.random() * 5 + 5) : (isPhaseOut ? (Math.random() * 40 + 10) : (20 + jitter * 100) * biasScale));
+        ctx.moveTo(0, centerY);
+        // Improved bias scaling: 0.1 base ensures we always see a signal
+        const biasScale = 0.2 + (bias / 60); 
+        for (let x = 0; x < width + 10; x += 10) {
+          const intensity = isZeroPoint ? 2 : (isTachyonic ? (Math.random() * 5 + 5) : (isPhaseOut ? (Math.random() * 40 + 10) : (20 + jitter * 150) * biasScale));
           const y = centerY + Math.sin(x * (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) + t * (isZeroPoint ? 0.1 : (0.5 + j))) * intensity;
           ctx.lineTo(x, y);
         }
         ctx.strokeStyle = isZeroPoint ? '#3b82f6' : (isSingularity ? '#ffff00' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#cc5500' : (j === 0 ? '#00ffcc' : '#ff0088'))));
-        ctx.lineWidth = isZeroPoint ? 1.0 : (isSingularity ? 2.0 : (isPhaseOut ? 0.8 : 0.5));
+        ctx.lineWidth = isZeroPoint ? 1.0 : (isSingularity ? 3.0 : (isPhaseOut ? 1.5 : 1.0));
         ctx.stroke();
       }
 
@@ -186,6 +218,7 @@ export default function WarpVisualizer({
         }
       }
 
+      ctx.restore();
       animationId = requestAnimationFrame(draw);
     };
 
@@ -194,7 +227,7 @@ export default function WarpVisualizer({
   }, [coherence, jitter, frequency, bias, isInstalling, isAiActive, isSolving]);
 
   return (
-    <section className="relative w-full h-[400px] flex items-center justify-center bg-[#0a0a0a] rounded-xl border border-[#ffffff10] overflow-hidden shadow-inner font-mono">
+    <section ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-transparent overflow-hidden font-mono">
       {/* Decorative overlays from design */}
       <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
         <span className={`px-2 py-1 rounded text-[10px] border backdrop-blur-sm transition-colors ${
@@ -215,8 +248,6 @@ export default function WarpVisualizer({
       
       <canvas
         ref={canvasRef}
-        width={1000}
-        height={400}
         className={`w-full h-full transition-opacity duration-1000 ${(frequency/1000) >= 28 || frequency === 0 ? 'opacity-100' : 'opacity-80'}`}
       />
       
