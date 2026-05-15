@@ -361,12 +361,13 @@ export default function App() {
       const phaseOutVal = (vValue - 1.65) * 100;
       const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
       
-      const overdriveDrain = isOverdriveRef.current ? 0.02 : 0;
-      const qecBonus = isQecActiveRef.current ? 0.10 : -0.05; 
-      const biasStress = (Math.abs(carrierBiasRef.current - 125) / 500) * 0.05;
+      const overdriveDrain = isOverdriveRef.current ? 0.30 : 0;
+      const qecBonus = isQecActiveRef.current ? 0.15 : -0.15; 
+      const biasStress = (Math.abs(carrierBiasRef.current - 125) / 250) * 0.2;
       
-      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 1000) - overdriveDrain - biasStress + qecBonus;
-      const nextCoherence = Math.min(0.9999, Math.max(0.85, coherenceBase));
+      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress + qecBonus;
+      // UNLOCKED: No minimum floor. System can reach critical failure/destabilization.
+      const nextCoherence = Math.min(0.9999, Math.max(0.0001, coherenceBase));
       
       const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;

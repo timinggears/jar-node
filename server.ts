@@ -191,8 +191,8 @@ async function startServer() {
       // v147: Direct 1:1 representation. 1 Bias = 1000 Hz (1 GHz in UI display)
       const resonanceBase = 1000 * systemState.bias;
       
-      // Minimal jitter to feel alive but stay accurate to tuning
-      const jitterFlux = (Math.random() - 0.5) * 5;
+      // Increased flux to represent raw, unshielded sensor data
+      const jitterFlux = (Math.random() - 0.5) * 25 * (systemState.bias / 50);
       
       let currentFreq = resonanceBase + jitterFlux;
 
@@ -204,9 +204,9 @@ async function startServer() {
       // No excitement randomization - pure state representation
       
       // Safety clamp
-      currentFreq = Math.max(0, Math.min(500000, currentFreq));
+      currentFreq = Math.max(0, Math.min(1000000, currentFreq));
       
-      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(1)}|${systemState.latestHashRate.toFixed(2)}`;
+      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(8)}|${v.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}`;
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 

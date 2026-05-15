@@ -45,13 +45,13 @@ export default function SystemSettings({
             <input 
               type="range" 
               min="0.1" 
-              max="500.0" 
+              max="1000.0" 
               step="0.1"
               value={carrierBias}
               onChange={(e) => setCarrierBias(parseFloat(e.target.value))}
               className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Direct tuning: 0.1 to 500 GHz. Real-time substrate alignment active.</p>
+            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Direct tuning: 0.1 GHz to 1.0 THz. Real-time substrate alignment active.</p>
           </div>
 
           <div className="space-y-3">
@@ -62,10 +62,10 @@ export default function SystemSettings({
               </span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {[50, 100, 250, 500].map(h => {
+              {[125, 250, 500, 1000].map(h => {
                 // v147: Multiplier is 1000 per bias unit (1:1 GHz)
                 const target = 1000 * h;
-                const isActive = Math.abs(currentFreq - target) < 15000;
+                const isActive = Math.abs(currentFreq - target) < 25000;
                 return (
                    <button 
                     key={h} 
