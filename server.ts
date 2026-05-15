@@ -163,12 +163,13 @@ async function startServer() {
       // Harmonic Drive Modulation (v147 Match)
       // Frequency scales linearly: 1 bias = 1 GHz (1000 Hz in internal unit)
       // v147 Fix: Ensure the bias changes are impactful and immediately visible
-      const resonanceBase = 1000 * systemState.bias;
+      // We widen the resonance base from 1000 to 1500 per bias unit for more "drama"
+      const resonanceBase = 1500 * systemState.bias;
       
       // JARS_v147: We connect resonance to the hash rate (simulated or real)
-      const hashrateMod = (systemState.latestHashRate / 10000) * 8500;
+      const hashrateMod = (systemState.latestHashRate / 10000) * 12000;
       
-      let currentFreq = resonanceBase + (jitter * 8000) + hashrateMod;
+      let currentFreq = resonanceBase + (jitter * 10000) + hashrateMod;
 
       // Debug log every ~5 seconds
       if (Date.now() % 5000 < 100) {

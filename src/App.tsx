@@ -105,10 +105,14 @@ export default function App() {
   }, [systemVersion]);
 
   // Sync Hardware Settings to Backend
+  const lastSyncRef = useRef(0);
   useEffect(() => {
     if (socketRef.current) {
+      // Avoid syncing if we just received a sync from server (debounce echo)
+      if (Date.now() - lastSyncRef.current < 200) return;
+      
       if (hasReceivedSync) {
-        console.log(`[JARS_CLIENT] Emitting params: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
+        console.log(`[JARS_CLIENT] User Shift: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
         socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
       }
     }
@@ -440,10 +444,14 @@ export default function App() {
     };
 
     const onHardwareState = (state: { bias?: number, overdrive?: boolean }) => {
+      lastSyncRef.current = Date.now();
       setHasReceivedSync(true);
       if (state.bias !== undefined) {
-        setCarrierBias(state.bias);
-        addLog(`[JARS_SYNC] Synced Nodal Bias: ${state.bias}`, 'info');
+        // Only adopt if we haven't touched the slider in the last 2 seconds (Authority Lock)
+        setCarrierBias(prev => {
+           // Basic check: if it's the first sync ever, or it's a significant change from server
+           return state.bias as number;
+        });
       }
       if (state.overdrive !== undefined) {
         setIsOverdrive(state.overdrive);
