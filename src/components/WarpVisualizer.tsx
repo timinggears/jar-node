@@ -181,8 +181,12 @@ export default function WarpVisualizer({
           const noise = bias > 70 ? (Math.random() - 0.5) * (bias - 70) * 0.5 : 0;
           const intensity = baseIntensity * biasScale + noise;
           
-          const speedMulti = 1 + (b * 3);
-          const y = centerY + Math.sin(x * (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) + t * ((isZeroPoint ? 0.1 : (0.5 + j)) * speedMulti)) * intensity;
+          // v147: Drive wave speed and frequency strictly by the Hz value
+          const freqMulti = frequency / 35000;
+          const speedMulti = (1 + (b * 3)) * freqMulti;
+          const wavelength = (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) * (1 / Math.sqrt(freqMulti));
+          
+          const y = centerY + Math.sin(x * wavelength + t * ((isZeroPoint ? 0.1 : (0.5 + j)) * speedMulti)) * intensity;
           ctx.lineTo(x, y);
         }
 
@@ -356,10 +360,10 @@ export default function WarpVisualizer({
               QUBIT_GATES: {(frequency/1000) >= 28 && (frequency/1000) < 42 ? 'RESONATING' : 'IDLE'}
             </span>
             <span className="text-white/10 hidden sm:inline">|</span>
-            <span>NODAL FLUX FREQUENCY: 142.42 Hz</span>
+            <span>NODAL FLUX: {(frequency / 247).toFixed(2)} Hz</span>
             <span className="text-white/10 hidden sm:inline">|</span>
             <span className={(frequency) === 0 ? 'text-blue-500 font-mono tracking-widest' : (frequency/1000) >= 50 ? 'text-yellow-400 font-black animate-bounce' : (frequency/1000) >= 42 ? 'text-white font-bold' : (frequency/1000) >= 28 ? 'text-[#cc5500] animate-pulse' : ''}>
-              CARRIER: {(frequency/1000).toFixed(6)} GHz
+              CARRIER: {(frequency/1000).toFixed(4)} KHz
             </span>
           </>
         )}

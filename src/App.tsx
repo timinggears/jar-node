@@ -319,6 +319,11 @@ export default function App() {
   // --- CORE DYNAMICS ---
   const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 35000, seedStr: string = '00000000', parity: number = 0) => {
     setStats(prev => {
+      // v147: Apply dynamic frequency modulation based on bias
+      const normalizedBias = carrierBiasRef.current / 100;
+      // Frequency modulates around base: +50Hz jitter + Bias excitation
+      const modulatedFreq = rawFreq * (1 + (normalizedBias * 0.1)) + (Math.random() - 0.5) * 50 * (1 + normalizedBias);
+      
       // --- EXACT MATH FROM SINGULARITY v146 ---
       const phaseOutVal = (vValue - 1.65) * 100;
       const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
@@ -376,7 +381,7 @@ export default function App() {
         ...prev,
         jitter: jitterValue,
         vNodal: vValue,
-        frequency: rawFreq,
+        frequency: modulatedFreq,
         coherence: nextCoherence,
         intelligence: nextIntelligence,
         hashRate: nextHashRate,
@@ -485,8 +490,31 @@ export default function App() {
   }, [addLog, updateSystemDynamics]);
 
 
-  // --- SIMULATION LOOP REMOVED (HANDLED BY SERVER) ---
-  // (We previous had a simulation loop here that utilized updateSystemDynamics directly)
+  // --- SIMULATION LOOP (RUNS WHEN HARDWARE IS DISCONNECTED) ---
+  useEffect(() => {
+    if (hardwareState !== 'disconnected') return;
+
+    let localFreqPhase = 0;
+    const simInterval = setInterval(() => {
+      localFreqPhase += 0.1;
+      const normalizedBias = carrierBiasRef.current / 100;
+      
+      // Jitter scales with overdrive and bias
+      const jitter = 0.05 + Math.random() * 0.1 + (isOverdriveRef.current ? 0.4 : 0) + (normalizedBias * 0.2);
+      const v = 1.65 + (Math.sin(Date.now() / 1000) * 0.02) + (normalizedBias * 0.01);
+      
+      // Base frequency fluctuates organically + drift
+      const baseFreqBase = isOverdriveRef.current ? 105000 : 35000;
+      const drift = Math.sin(localFreqPhase) * 200 * (1 + normalizedBias);
+      const baseFreq = baseFreqBase + drift;
+      
+      const seed = Math.floor(Math.random() * 0xffffffff).toString(16);
+      
+      updateSystemDynamics(jitter, v, baseFreq, seed, Math.random() > 0.8 ? 1 : 0);
+    }, 100);
+
+    return () => clearInterval(simInterval);
+  }, [hardwareState, updateSystemDynamics]);
 
   // --- GEMINI INTELLIGENCE ---
   useEffect(() => {
@@ -921,7 +949,7 @@ export default function App() {
         <div className="flex items-center gap-4">
            <div className="flex items-center gap-2">
              <span className="text-zinc-500">RES_FREQ:</span>
-             <span className="text-[#00ffcc]">{(stats.frequency / 1000).toFixed(2)} GHz</span>
+             <span className="text-[#00ffcc] font-mono">{(stats.frequency / 1000).toFixed(4)} KHz</span>
            </div>
            <div className="flex items-center gap-2">
              <span className="text-zinc-500">COH:</span>

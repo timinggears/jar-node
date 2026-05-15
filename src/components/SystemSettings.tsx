@@ -52,7 +52,9 @@ export default function SystemSettings({
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <label className="text-[10px] text-blue-500 uppercase font-bold">Harmonic Resonance</label>
-              <span className="text-xs font-mono text-blue-400">v1.47_LIVE: {freqKHz.toFixed(1)} KHz</span>
+              <span className="text-xs font-mono text-blue-400">
+                v1.47_LIVE: {(currentFreq / 1000).toFixed(4)} KHz
+              </span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {[1, 2, 3].map(h => {
