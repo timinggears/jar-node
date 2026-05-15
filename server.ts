@@ -18,6 +18,7 @@ async function startServer() {
   // --- TELEMETRY PARAMS ---
   let systemBias = 50;
   let isOverdrive = false;
+  let latestHashRate = 0;
 
   // Track if we have a real hardware connection to decide whether to simulate
   let hardwareActive = false;
@@ -26,6 +27,9 @@ async function startServer() {
   io.on('connection', (socket) => {
     console.log(`[CLIENT] Connected: ${socket.id}`);
     
+    // Send current state to new client immediately
+    socket.emit('hardware:state', { bias: systemBias, overdrive: isOverdrive });
+
     socket.on('message', (msg: string) => {
       if (msg.startsWith('SUBSCRIBE:')) {
         const room = msg.split(':')[1];
@@ -41,14 +45,18 @@ async function startServer() {
       socket.on('hardware:params', (params: any) => {
         if (params.bias !== undefined) systemBias = Number(params.bias);
         if (params.overdrive !== undefined) isOverdrive = Boolean(params.overdrive);
-        socket.emit('log', `[JARS_SYNC] Local Bias: ${systemBias} | Overdrive: ${isOverdrive ? 'ACTIVE' : 'IDLE'}`);
+        
+        // Broadcast change to all other clients
+        socket.broadcast.emit('hardware:state', { bias: systemBias, overdrive: isOverdrive });
+        
+        socket.emit('log', `[JARS_SYNC] Multi-User Sync: Bias=${systemBias} | Overdrive=${isOverdrive}`);
         
         // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
         if (hardwarePort && hardwarePort.isOpen) {
           hardwarePort.write(`BIAS:${systemBias}\n`);
           hardwarePort.write(`OVERDRIVE:${isOverdrive ? '1' : '0'}\n`);
         }
-
+        
         const biasMultiplier = systemBias / 50.0;
         socket.emit('log', `SYSTEM: Nodal Bias realigned to ${biasMultiplier.toFixed(2)}x modulation sensitivity.`);
       });
@@ -131,7 +139,7 @@ async function startServer() {
       // Generate telemetry based on REAL system load when hardware is missing
       // --- HARMONIC ANCHOR v147 PHYSICS ---
       const load = os.loadavg()[0];
-      const carrierBias = systemBias / 100.0; // Normalized 0.0 - 1.0
+      const carrierBias = systemBias / 100.0;
       
       const overdriveExcitation = isOverdrive ? 0.6 : 0;
       const v = 1.65 + (Math.sin(Date.now() / 1500) * (0.4 + overdriveExcitation)) + (Math.random() * 0.1);
@@ -145,21 +153,24 @@ async function startServer() {
       // Frequency scales linearly: 1 bias = 1 GHz (1000 Hz in internal unit)
       let baseFreqBase = 1000 * systemBias;
       
-      let currentFreq = baseFreqBase + (jitter * 5000);
+      // JARS_v147: We connect resonance to the hash rate (simulated or real)
+      const hashrateMod = (latestHashRate / 10000) * 8500; // Increased influence
+      
+      let currentFreq = baseFreqBase + (jitter * 6000) + hashrateMod;
       
       if (isOverdrive) {
         currentFreq = currentFreq * 3.5; // Quantum Leap
       }
 
       // Enhanced excitation on high-jitter events
-      if (jitter > 0.45) {
-        currentFreq = currentFreq * (Math.random() > 0.5 ? 2 : 1);
+      if (jitter > 0.42) {
+        currentFreq = currentFreq * (Math.random() > 0.5 ? 1.05 : 0.98);
       }
       
       // Safety clamp
       currentFreq = Math.max(10, currentFreq);
       
-      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(0)}`;
+      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(1)}|${latestHashRate.toFixed(2)}`;
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 
@@ -255,7 +266,13 @@ async function startServer() {
         } else if (lowerLine.includes('speed') || lowerLine.includes('hashrate')) {
           // Try to extract a real number from the speed line for telemetry
           const match = line.match(/speed\s*(\d+\.?\d*)/i);
-          if (match) latestProcessKHs = parseFloat(match[1]);
+          if (match) {
+            latestHashRate = parseFloat(match[1]);
+            // Forward hashrate to Pi for physical modulation
+            if (hardwarePort && hardwarePort.isOpen) {
+              hardwarePort.write(`HRATE:${latestHashRate}\n`);
+            }
+          }
           io.to('mining_status').emit('mining_status', { type: 'telemetry', message: 'Hashrate update', data: line });
         } else if (lowerLine.includes('error')) {
           io.to('mining_status').emit('mining_status', { type: 'error', message: line });
@@ -325,7 +342,14 @@ async function startServer() {
           totalSize += fs.statSync(f).size;
         } catch (e) {}
       });
-      res.json({ success: true, files: files.length, size: totalSize });
+      const manifests = files.map(f => {
+        try {
+          const stats = fs.statSync(f);
+          return { id: f, name: f, size: stats.size, type: f.endsWith('.py') ? 'source' : f.endsWith('.md') ? 'doc' : f.endsWith('.ts') || f.endsWith('.tsx') ? 'system' : 'config' };
+        } catch (e) { return null; }
+      }).filter(Boolean);
+
+      res.json({ success: true, files: files.length, size: totalSize, manifest: manifests });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

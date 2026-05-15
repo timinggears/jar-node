@@ -316,11 +316,11 @@ export default function App() {
   }, [addLog]);
 
   // --- CORE DYNAMICS ---
-  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0) => {
+  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0) => {
     setStats(prev => {
       // v147: Apply dynamic frequency modulation based on rawFreq (which already includes bias from server if bridged)
       // If we are simulating locally, rawFreq comes from the local loop.
-      const modulatedFreq = rawFreq + (Math.random() - 0.5) * 20 * (1 + (carrierBiasRef.current / 50));
+      const modulatedFreq = rawFreq + (Math.random() - 0.5) * 40 * (1 + (carrierBiasRef.current / 40));
       
       // --- EXACT MATH FROM SINGULARITY v146 ---
       const phaseOutVal = (vValue - 1.65) * 100;
@@ -347,7 +347,12 @@ export default function App() {
       const baseKH = 8.5; 
       const jitterFactor = jitterValue * 4;
       const coherenceFactor = nextCoherence * 6;
-      const nextHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * resonanceBonus * harmonicMultiplier;
+      
+      // Use real hrate if available, otherwise mock it
+      let nextHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * resonanceBonus * harmonicMultiplier;
+      if (hrateFromServer > 0) {
+        nextHashRate = hrateFromServer;
+      }
       
       const seed = parseInt(seedStr, 16);
       let nextShares = prev.shares;
@@ -412,11 +417,18 @@ export default function App() {
       socket.send('SUBSCRIBE:system_stats');
       socket.emit('protocol', 'STATUS');
       
-      // Sync current state immediately upon connection
-      socket.emit('hardware:params', { 
-        bias: carrierBiasRef.current, 
-        overdrive: isOverdriveRef.current 
-      });
+      // We no longer blindly emit params here to avoid resetting the server's state.
+      // Instead, we wait for 'hardware:state' from the server.
+    };
+
+    const onHardwareState = (state: { bias?: number, overdrive?: boolean }) => {
+      if (state.bias !== undefined) {
+        setCarrierBias(state.bias);
+        addLog(`[JARS_SYNC] Synced Nodal Bias: ${state.bias}`, 'info');
+      }
+      if (state.overdrive !== undefined) {
+        setIsOverdrive(state.overdrive);
+      }
     };
 
     const onTelemetry = (line: string) => {
@@ -428,7 +440,8 @@ export default function App() {
           const v = parseFloat(parts[3]);
           const parity = parseInt(parts[4]);
           const freq = parseFloat(parts[5]);
-          updateSystemDynamics(jitter, v, freq, seedStr, parity);
+          const hrate = parts[6] ? parseFloat(parts[6]) : 0;
+          updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate);
         }
       }
     };
@@ -463,6 +476,7 @@ export default function App() {
     socket.on('connect', onConnect);
     socket.on('telemetry', onTelemetry);
     socket.on('mining_status', onMiningStatus);
+    socket.on('hardware:state', onHardwareState);
     socket.on('log', (msg: string) => addLog(msg, 'info'));
     socket.on('disconnect', () => {
       addLog('Hardware Bridge disconnected.', 'error');

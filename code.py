@@ -22,6 +22,7 @@ LED.direction = digitalio.Direction.OUTPUT
 # Modulated by the Web Interface via the JARS Serial Bridge
 system_bias = 50.0      # Fundamental resonance (50.0 = 50GHz Virtual)
 is_overdrive = False
+latest_hrate = 0.0
 base_hw_freq = 35000   # Hardware carrier freq
 
 # --- HARDWARE INIT ---
@@ -52,6 +53,9 @@ while True:
                 except: pass
             elif buffer.startswith("OVERDRIVE:"):
                 is_overdrive = (buffer.split(":")[1] == "1")
+            elif buffer.startswith("HRATE:"):
+                try: latest_hrate = float(buffer.split(":")[1])
+                except: pass
             buffer = ""
         else:
             buffer += char
@@ -63,11 +67,16 @@ while True:
     # Virtual frequency must match JARS Simulator: 1 Bias = 1 GHz
     overdrive_multi = 3.5 if is_overdrive else 1.0
     
+    # JARS v147: Hashrate Modulation
+    hashrate_mod = (latest_hrate / 10000.0) * 5000.0 # Up to 5GHz shift
+    
     # We include a jitter component for "Live" feedback on the dashboard
-    virtual_freq = ((system_bias * 1000) + (jitter * 5000)) * overdrive_multi
+    virtual_freq = ((system_bias * 1000) + (jitter * 5000) + hashrate_mod) * overdrive_multi
     
     # Real hardware excitation (PWM drive)
-    real_freq = int(base_hw_freq + (jitter * 45000))
+    # Hardware frequency depends on bias + jitter + hrate
+    hr_hw_mod = int((latest_hrate / 10000.0) * 10000)
+    real_freq = int(base_hw_freq + (jitter * 45000) + hr_hw_mod)
     base_duty = int(jitter * 65535 * 0.9)
     safe_duty = max(5000, min(58000, base_duty))
     
@@ -87,8 +96,8 @@ while True:
         parity = bin(seed_val).count('1') % 2
         v_nodal = (jitter * 3.3)
         
-        # JARS Unified Protocol: [!S|SEED|JITTER|V_NODAL|PARITY|VIRT_FREQ]
-        sys.stdout.write("!S|{}|{:.6f}|{:.4f}|{}|{:.1f}\r\n".format(seed_hex, jitter, v_nodal, parity, virtual_freq))
+        # JARS Unified Protocol: [!S|SEED|JITTER|V_NODAL|PARITY|VIRT_FREQ|HASHRATE]
+        sys.stdout.write("!S|{}|{:.6f}|{:.4f}|{}|{:.1f}|{:.2f}\r\n".format(seed_hex, jitter, v_nodal, parity, virtual_freq, latest_hrate))
         last_telemetry = t
         
         # Heartbeat (Rate scales with bias)

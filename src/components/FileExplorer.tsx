@@ -13,20 +13,8 @@ export default function FileExplorer() {
     try {
       const resp = await fetch('/api/system/scan');
       const data = await resp.json();
-      if (data.success) {
-        // Mocking some internal substrate structure
-        setFiles([
-          { id: 'f1', name: 'kernel_v3.bin', size: 1024 * 1024 * 4, type: 'system' },
-          { id: 'f2', name: 'neural_weights.dat', size: 1024 * 512, type: 'data' },
-          { id: 'f3', name: 'reservoir_config.json', size: 1024 * 4, type: 'config' },
-          { id: 'f4', name: 'telemetry_log.001', size: 1024 * 128, type: 'log' },
-          ...Array.from({ length: 5 }, (_, i) => ({
-            id: `nodal_artifact_${i + 1}`,
-            name: `nodal_artifact_${i + 1}.ghost`,
-            size: Math.random() * 1024,
-            type: 'ghost'
-          }))
-        ]);
+      if (data.success && data.manifest) {
+        setFiles(data.manifest);
       }
     } catch (e) {
       console.error(e);
@@ -129,7 +117,9 @@ export default function FileExplorer() {
                     file.type === 'system' ? 'text-red-400' : 
                     file.type === 'config' ? 'text-yellow-400' :
                     file.type === 'data' ? 'text-blue-400' : 
-                    file.type === 'log' ? 'text-zinc-400' : 'text-[#00ffcc]'
+                    file.type === 'log' ? 'text-zinc-400' : 
+                    file.type === 'source' ? 'text-[#00ffcc] drop-shadow-[0_0_5px_#00ffcc]' :
+                    file.type === 'doc' ? 'text-purple-400' : 'text-zinc-500'
                   } />
                   <span className="text-zinc-300 group-hover:text-white">{file.name}</span>
                 </div>
