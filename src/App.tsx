@@ -55,6 +55,7 @@ export default function App() {
   const socketRef = useRef<any>(null);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isEntangled, setIsEntangled] = useState(false);
   const [hasReceivedSync, setHasReceivedSync] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
     const canonical = 321.50;
@@ -73,6 +74,7 @@ export default function App() {
   const [openWindows, setOpenWindows] = useState<string[]>(['terminal', 'stats']);
   const [activeWindow, setActiveWindow] = useState<string | null>('terminal');
   const [isQecActive, setIsQecActive] = useState(true);
+  const [quantumShift, setQuantumShift] = useState(50);
 
   const statsRef = useRef(stats);
   statsRef.current = stats;
@@ -111,6 +113,14 @@ export default function App() {
       }
     }
   }, [carrierBias, isOverdrive, hasReceivedSync]);
+
+  // Quantum Entanglement Logic
+  useEffect(() => {
+    if (isEntangled) {
+      // Link carrierBias to quantumShift (multi-way linkage)
+      setQuantumShift(carrierBias);
+    }
+  }, [carrierBias, isEntangled]);
 
   const handleInstall = useCallback(async () => {
     if (isInstalling) return;
@@ -834,6 +844,42 @@ export default function App() {
         </motion.div>
       </div>
 
+      {/* QUANTUM ENTANGLEMENT VISUALS */}
+      <AnimatePresence>
+        {isEntangled && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[10] pointer-events-none"
+          >
+            <div className="absolute inset-0 bg-purple-500/5 mix-blend-overlay" />
+            <motion.div 
+              className="absolute inset-0 flex items-center justify-center"
+              initial={{ scale: 0.8, rotate: 0 }}
+              animate={{ 
+                scale: [0.8, 1.2, 0.8],
+                rotate: [0, 360],
+                opacity: [0.1, 0.3, 0.1]
+              }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            >
+              <div className="w-[800px] h-[800px] border border-purple-500/20 rounded-full blur-3xl" />
+            </motion.div>
+            
+            {/* Visual pulses reflecting the carrierBias in the entanglement */}
+            <motion.div 
+              className="absolute top-1/2 left-0 right-0 h-[2px] bg-purple-400/30 blur-sm"
+              animate={{
+                y: [0, (carrierBias - 50) * 4, 0],
+                opacity: [0.2, 0.8, 0.2]
+              }}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <PetBay miningState={miningState} isOverdrive={isOverdrive} bias={carrierBias} />
 
       {/* DESKTOP AREA */}
@@ -895,6 +941,8 @@ export default function App() {
                 setIsOverdrive={setIsOverdrive}
                 isAiActive={isAiAnalysisActive}
                 setIsAiActive={setIsAiAnalysisActive}
+                isEntangled={isEntangled}
+                setIsEntangled={setIsEntangled}
                 systemVersion={systemVersion}
                 currentFreq={stats.frequency}
               />
@@ -961,6 +1009,8 @@ export default function App() {
                 isQecActive={isQecActive}
                 onToggleQec={setIsQecActive}
                 systemModel="JAR_v3_SOVEREIGN"
+                isEntangled={isEntangled}
+                quantumShift={quantumShift}
               />
             </DesktopWindow>
           )}
@@ -976,6 +1026,16 @@ export default function App() {
           </div>
           <div className="text-zinc-600">/</div>
           <div className="text-zinc-400">Host: void.nodal_sys.local</div>
+          {isEntangled && (
+            <motion.div 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center gap-1 text-purple-400 font-bold border-l border-purple-500/50 pl-4 ml-4"
+            >
+              <RefreshCw size={10} className="animate-spin-slow" />
+              <span>ENTANGLED</span>
+            </motion.div>
+          )}
         </div>
 
         <div className="flex items-center gap-4">

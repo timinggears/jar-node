@@ -7,13 +7,17 @@ interface QuantumStabilizerProps {
   isQecActive: boolean;
   onToggleQec: (active: boolean) => void;
   systemModel: string;
+  isEntangled?: boolean;
+  quantumShift?: number;
 }
 
 export default function QuantumStabilizer({ 
   coherence, 
   isQecActive, 
   onToggleQec,
-  systemModel 
+  systemModel,
+  isEntangled,
+  quantumShift = 50
 }: QuantumStabilizerProps) {
   const [errorHistory, setErrorHistory] = useState<{id: string, val: number}[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -81,7 +85,16 @@ export default function QuantumStabilizer({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="p-4 bg-white/5 border border-white/5 rounded-lg flex flex-col gap-2 relative overflow-hidden">
+        <div className={`p-4 bg-white/5 border rounded-lg flex flex-col gap-2 relative overflow-hidden transition-all duration-500 ${isEntangled ? 'border-purple-500/50 bg-purple-500/5' : 'border-white/5'}`}>
+          {isEntangled && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="absolute top-1 right-1"
+            >
+              <RefreshCw size={8} className="text-purple-400 animate-spin-slow" />
+            </motion.div>
+          )}
           <span className="text-[8px] text-zinc-500 uppercase tracking-tighter">Current Coherence</span>
           <span className={`text-2xl font-black ${(coherence * 100) < 40 ? 'text-red-500' : 'text-white'}`}>
             {(coherence * 100).toFixed(2)}%
@@ -95,14 +108,23 @@ export default function QuantumStabilizer({
           </div>
         </div>
 
-        <div className="p-4 bg-white/5 border border-white/5 rounded-lg flex flex-col gap-2 relative overflow-hidden">
+        <div className={`p-4 bg-white/5 border rounded-lg flex flex-col gap-2 relative overflow-hidden transition-all duration-500 ${isEntangled ? 'border-purple-500/50 bg-purple-500/5' : 'border-white/5'}`}>
+          {isEntangled && (
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              <motion.div 
+                className="w-full h-full bg-purple-500/10"
+                animate={{ opacity: [0, 0.2, 0] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
+            </div>
+          )}
           <div className="absolute top-2 right-2 flex items-center gap-1">
             <GitBranch size={8} className="text-blue-400" />
             <span className="text-[6px] text-zinc-500 font-mono">HEAD/main</span>
           </div>
           <span className="text-[8px] text-zinc-500 uppercase tracking-tighter">Entropy Correction Rate</span>
-          <span className="text-2xl font-black text-blue-400">
-            {isQecActive ? '42.8 THz' : '0.0 THz'}
+          <span className={`text-2xl font-black ${isEntangled ? 'text-purple-400' : 'text-blue-400'}`}>
+            {isEntangled ? `${(quantumShift).toFixed(1)} GeV` : (isQecActive ? '42.8 THz' : '0.0 THz')}
           </span>
           <div className="flex gap-1 h-4 items-end">
             {errorHistory.map((item) => (

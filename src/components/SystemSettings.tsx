@@ -8,6 +8,8 @@ interface SystemSettingsProps {
   setIsOverdrive: (val: boolean) => void;
   isAiActive: boolean;
   setIsAiActive: (val: boolean) => void;
+  isEntangled: boolean;
+  setIsEntangled: (val: boolean) => void;
   systemVersion: number;
   currentFreq: number;
 }
@@ -19,6 +21,8 @@ export default function SystemSettings({
   setIsOverdrive,
   isAiActive,
   setIsAiActive,
+  isEntangled,
+  setIsEntangled,
   systemVersion,
   currentFreq
 }: SystemSettingsProps) {
@@ -120,6 +124,26 @@ export default function SystemSettings({
             <motion.div 
               initial={{ x: 4 }}
               animate={{ x: isAiActive ? 26 : 4 }}
+              className="absolute top-1 left-0 w-4 h-4 rounded-full bg-black shadow-lg"
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-lg">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Activity size={14} className={isEntangled ? "text-purple-400" : "text-zinc-600"} />
+              <span className="text-[10px] font-bold uppercase tracking-tight">Quantum Entanglement</span>
+            </div>
+            <p className="text-[9px] text-zinc-500">Links Resonance Bias with the Nodal Flux harmonics.</p>
+          </div>
+          <button 
+            onClick={() => setIsEntangled(!isEntangled)}
+            className={`w-12 h-6 rounded-full relative transition-colors ${isEntangled ? 'bg-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'bg-zinc-800'}`}
+          >
+            <motion.div 
+              initial={{ x: 4 }}
+              animate={{ x: isEntangled ? 26 : 4 }}
               className="absolute top-1 left-0 w-4 h-4 rounded-full bg-black shadow-lg"
             />
           </button>
