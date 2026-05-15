@@ -62,12 +62,16 @@ export default function SystemSettings({
                 const isActive = Math.abs(currentFreq - target) < 5000;
                 const isLocked = Math.abs(currentFreq - target) < 1000;
                 return (
-                  <div key={h} className={`border p-2 rounded text-center transition-all duration-300 ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5 opacity-40'} ${isLocked ? 'ring-1 ring-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)]' : ''}`}>
+                  <button 
+                    key={h} 
+                    onClick={() => setCarrierBias(h)}
+                    className={`border p-2 rounded text-center transition-all duration-300 ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5 opacity-40'} ${isLocked ? 'ring-1 ring-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)]' : 'hover:bg-white/10'}`}
+                  >
                     <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300 font-bold' : 'text-zinc-600'}`}>
                       {isLocked ? 'LOCKED' : `${h} GHz`}
                     </p>
                     <p className={`text-[9px] font-mono ${isActive ? (isLocked ? 'text-white' : 'text-blue-400') : 'text-zinc-400'}`}>{(target / 1000).toFixed(1)}G</p>
-                  </div>
+                  </button>
                 );
               })}
             </div>

@@ -51,6 +51,7 @@ export default function App() {
   const socketRef = useRef<any>(null);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasReceivedSync, setHasReceivedSync] = useState(false);
   const [systemVersion, setSystemVersion] = useState(() => {
     const canonical = 321.50;
     const saved = localStorage.getItem('jar_system_version_v321');
@@ -99,10 +100,10 @@ export default function App() {
 
   // Sync Hardware Settings to Backend
   useEffect(() => {
-    if (socketRef.current) {
+    if (socketRef.current && hasReceivedSync) {
       socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
     }
-  }, [carrierBias, isOverdrive]);
+  }, [carrierBias, isOverdrive, hasReceivedSync]);
 
   const handleInstall = useCallback(async () => {
     if (isInstalling) return;
@@ -422,6 +423,7 @@ export default function App() {
     };
 
     const onHardwareState = (state: { bias?: number, overdrive?: boolean }) => {
+      setHasReceivedSync(true);
       if (state.bias !== undefined) {
         setCarrierBias(state.bias);
         addLog(`[JARS_SYNC] Synced Nodal Bias: ${state.bias}`, 'info');
