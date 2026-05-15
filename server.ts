@@ -162,17 +162,18 @@ async function startServer() {
       const parity = (seedNum.toString(2).split('1').length - 1) % 2;
 
       // Harmonic Drive Modulation
-      // We widen the resonance base from 1000 to 1500 per bias unit for more "drama"
-      const resonanceBase = 1500 * systemState.bias;
+      // v147: Direct 1:1 representation for "tuning" as requested.
+      // 1 Bias = 1000 Hz (1 GHz in UI display)
+      const resonanceBase = 1000 * systemState.bias;
       
-      // Exact connection to measured hashrate
-      const hashrateMod = (systemState.latestHashRate / 10000) * 12000;
+      // Exact connection to measured hashrate (adds small flux to freq)
+      const hashrateMod = (systemState.latestHashRate / 10000) * 1000;
       
       let currentFreq = resonanceBase + hashrateMod;
 
       // Debug log every ~5 seconds
       if (Date.now() % 5000 < 100) {
-        console.log(`[JARS_SERVER_REPRESENTATION] Bias: ${systemState.bias} | Freq: ${currentFreq.toFixed(1)}`);
+        console.log(`[JARS_SERVER] STATE: Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(4)}GHz | HR=${systemState.latestHashRate}`);
       }
       
       if (systemState.overdrive) {

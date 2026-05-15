@@ -108,18 +108,21 @@ export default function App() {
   }, [systemVersion]);
 
   // Sync Hardware Settings to Backend
-  const lastSyncRef = useRef(0);
+  const lastEmittedBiasRef = useRef(carrierBias);
+  const lastEmittedOverdriveRef = useRef(isOverdrive);
+
   useEffect(() => {
     if (socketRef.current) {
-      // Avoid syncing if we just received a sync from server (debounce echo)
-      if (Date.now() - lastSyncRef.current < 200) return;
+      // Direct comparison to avoid infinite loops without heavy debouncing
+      if (carrierBias === lastEmittedBiasRef.current && isOverdrive === lastEmittedOverdriveRef.current) return;
       
-      if (hasReceivedSync) {
-        console.log(`[JARS_CLIENT] User Shift: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
-        socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
-      }
+      console.log(`[JARS_CLIENT] Syncing: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
+      socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
+      
+      lastEmittedBiasRef.current = carrierBias;
+      lastEmittedOverdriveRef.current = isOverdrive;
     }
-  }, [carrierBias, isOverdrive, hasReceivedSync]);
+  }, [carrierBias, isOverdrive]);
 
   // Quantum Entanglement Logic
   useEffect(() => {
@@ -449,17 +452,17 @@ export default function App() {
     };
 
     const onHardwareState = (state: { bias?: number, overdrive?: boolean }) => {
-      lastSyncRef.current = Date.now();
       setHasReceivedSync(true);
       if (state.bias !== undefined) {
-        // Only adopt if we haven't touched the slider in the last 2 seconds (Authority Lock)
-        setCarrierBias(prev => {
-           // Basic check: if it's the first sync ever, or it's a significant change from server
-           return state.bias as number;
-        });
+        // Only adopt if it's different from our current intention to avoid slider jitter
+        if (Math.abs(state.bias - carrierBiasRef.current) > 1) {
+          setCarrierBias(state.bias);
+          lastEmittedBiasRef.current = state.bias;
+        }
       }
-      if (state.overdrive !== undefined) {
+      if (state.overdrive !== undefined && state.overdrive !== isOverdriveRef.current) {
         setIsOverdrive(state.overdrive);
+        lastEmittedOverdriveRef.current = state.overdrive;
       }
     };
 

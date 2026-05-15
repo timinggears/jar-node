@@ -62,9 +62,9 @@ export default function SystemSettings({
             </div>
             <div className="grid grid-cols-3 gap-2">
               {[25, 50, 75].map(h => {
-                // v147: Multiplier is 1500 per bias unit
-                const target = 1500 * h;
-                const isActive = Math.abs(currentFreq - target) < 10000;
+                // v147: Multiplier is 1000 per bias unit (1:1 GHz)
+                const target = 1000 * h;
+                const isActive = Math.abs(currentFreq - target) < 15000;
                 const isLocked = Math.abs(currentFreq - target) < 2500;
                 return (
                   <button 
@@ -73,9 +73,9 @@ export default function SystemSettings({
                     className={`border p-2 rounded text-center transition-all duration-300 ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5 opacity-40'} ${isLocked ? 'ring-1 ring-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)]' : 'hover:bg-white/10'}`}
                   >
                     <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300 font-bold' : 'text-zinc-600'}`}>
-                      {isLocked ? 'LOCKED' : `${(target/1000).toFixed(0)} GHz`}
+                      {isLocked ? 'LOCKED' : `${h} GHz`}
                     </p>
-                    <p className={`text-[9px] font-mono ${isActive ? (isLocked ? 'text-white' : 'text-blue-400') : 'text-zinc-400'}`}>{(target / 1000).toFixed(1)}G</p>
+                    <p className={`text-[9px] font-mono ${isActive ? (isLocked ? 'text-white' : 'text-blue-400') : 'text-zinc-400'}`}>{h.toFixed(1)}G</p>
                   </button>
                 );
               })}
