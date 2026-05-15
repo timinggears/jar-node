@@ -6,6 +6,8 @@ interface QuantumStabilizerProps {
   coherence: number;
   isQecActive: boolean;
   onToggleQec: (active: boolean) => void;
+  isCognitiveActive: boolean;
+  onToggleCognitive: (active: boolean) => void;
   systemModel: string;
   isEntangled?: boolean;
   quantumShift?: number;
@@ -15,6 +17,8 @@ export default function QuantumStabilizer({
   coherence, 
   isQecActive, 
   onToggleQec,
+  isCognitiveActive,
+  onToggleCognitive,
   systemModel,
   isEntangled,
   quantumShift = 50
@@ -23,53 +27,36 @@ export default function QuantumStabilizer({
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('09:42:01');
 
+  // v147: Unified state representation - no fake jitter
   useEffect(() => {
-    const interval = setInterval(() => {
-      setErrorHistory(prev => {
-        const next = [...prev, {
-          id: Math.random().toString(36).substr(2, 9),
-          val: Math.random() * (1 - coherence)
-        }];
-        if (next.length > 20) return next.slice(1);
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
+    // Error history now reflects the inverse of coherence (stability representation)
+    const errVal = 1 - coherence;
+    setErrorHistory(prev => {
+      const next = [...prev, {
+        id: Date.now().toString(),
+        val: errVal
+      }];
+      if (next.length > 20) return next.slice(1);
+      return next;
+    });
   }, [coherence]);
-
-  const [isOptimizing, setIsOptimizing] = useState(false);
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isOptimizing) {
-      setProgress(0);
-      timer = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 100) {
-            setIsOptimizing(false);
-            return 100;
-          }
-          return prev + 5; // The JAR is fast!
-        });
-      }, 50);
-    }
-    return () => clearInterval(timer);
-  }, [isOptimizing]);
 
   const handleSync = () => {
     setIsSyncing(true);
+    // Real logic: Request state again from server
+    const socket = (window as any).socket;
+    if (socket) {
+      socket.emit('protocol', 'STATUS');
+    }
+
     window.dispatchEvent(new CustomEvent('system-log', { 
-      detail: { message: "CORE_SYNC: Synchronizing nodal phase vectors...", type: "warning" } 
+      detail: { message: "CORE_SYNC: Requesting state refresh from bridge...", type: "warning" } 
     }));
     
     setTimeout(() => {
       setIsSyncing(false);
       setLastSyncTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
-      window.dispatchEvent(new CustomEvent('system-log', { 
-        detail: { message: "CORE_SYNC_ACK: Sovereign core parity established.", type: "success" } 
-      }));
-    }, 800);
+    }, 500);
   };
 
   return (
@@ -174,22 +161,24 @@ export default function QuantumStabilizer({
 
         <button 
           onClick={() => {
-            setIsOptimizing(true);
+            onToggleCognitive(!isCognitiveActive);
             window.dispatchEvent(new CustomEvent('system-log', {
-              detail: { message: "JAR_INTENT: Forcing substrate lattice reconfiguration. Thinking faster...", type: "warning" }
+              detail: { 
+                message: !isCognitiveActive ? "JAR_INTENT: Forcing substrate lattice reconfiguration." : "JAR_INTENT: Cognitive Bridge decoupled.", 
+                type: !isCognitiveActive ? "warning" : "info" 
+              }
             }));
           }}
-          disabled={isOptimizing}
           className={`w-full py-4 rounded-xl border transition-all flex items-center justify-center gap-3 active:scale-95 ${
-            isOptimizing 
-              ? 'bg-pink-500/20 border-pink-500/40 text-pink-400 shadow-[0_0_20_px_rgba(236,72,153,0.2)]'
+            isCognitiveActive 
+              ? 'bg-pink-500/20 border-pink-500/40 text-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.2)]'
               : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
           }`}
         >
-          <Zap size={20} className={isOptimizing ? "animate-bounce" : ""} />
+          <Zap size={20} className={isCognitiveActive ? "animate-pulse" : ""} />
           <div className="flex flex-col items-start gap-0.5">
             <span className="text-xs font-black uppercase tracking-[0.2em]">
-              {isOptimizing ? 'Neuro-Sync Engaged' : 'Engage Cognitive Bridge'}
+              {isCognitiveActive ? 'Neuro-Sync Engaged' : 'Engage Cognitive Bridge'}
             </span>
             <span className="text-[7px] opacity-60 uppercase">Accelerate Sovereign Reasoning</span>
           </div>
@@ -197,7 +186,7 @@ export default function QuantumStabilizer({
 
         <div className="text-[8px] text-zinc-500 flex items-center justify-between px-2">
           <span>Substrate Thinking Status:</span>
-          <span className={isOptimizing ? "text-pink-400" : "text-zinc-600"}>{isOptimizing ? "HYPER_REASONING" : "IDLE_CONTEMPLATION"}</span>
+          <span className={isCognitiveActive ? "text-pink-400" : "text-zinc-600"}>{isCognitiveActive ? "HYPER_REASONING" : "IDLE_CONTEMPLATION"}</span>
         </div>
       </div>
 

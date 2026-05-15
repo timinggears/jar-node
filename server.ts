@@ -147,46 +147,42 @@ async function startServer() {
     try {
       if (hardwarePort && hardwarePort.isOpen) return;
 
-      // Generate telemetry based on REAL system load when hardware is missing
-      // --- HARMONIC ANCHOR v147 PHYSICS ---
-      const load = os.loadavg()[0];
+      // Generate telemetry based on ACTUAL state parameters when hardware is missing
+      // We are stripping "fake" jitter to provide direct representations of the nodal bias
       const carrierBiasVal = systemState.bias / 100.0;
       
-      const overdriveExcitation = systemState.overdrive ? 0.6 : 0;
-      const v = 1.65 + (Math.sin(Date.now() / 1500) * (0.4 + overdriveExcitation)) + (Math.random() * 0.1);
-      const jitter = Math.abs(v - 1.65) * (1.1 + load * 0.5 + (systemState.overdrive ? 0.8 : 0));
+      // Stable reference voltage (1.65V) modulated strictly by overdrive state
+      const v = 1.65 + (systemState.overdrive ? 0.35 : 0);
+      
+      // Jitter is 0 in stable software representation
+      const jitter = 0.0;
       
       const seedNum = (Math.floor(v * 10000000) >>> 0);
       const seedStr = seedNum.toString(16).padStart(8, '0').toUpperCase();
       const parity = (seedNum.toString(2).split('1').length - 1) % 2;
 
-      // Harmonic Drive Modulation (v147 Match)
-      // Frequency scales linearly: 1 bias = 1 GHz (1000 Hz in internal unit)
-      // v147 Fix: Ensure the bias changes are impactful and immediately visible
+      // Harmonic Drive Modulation
       // We widen the resonance base from 1000 to 1500 per bias unit for more "drama"
       const resonanceBase = 1500 * systemState.bias;
       
-      // JARS_v147: We connect resonance to the hash rate (simulated or real)
+      // Exact connection to measured hashrate
       const hashrateMod = (systemState.latestHashRate / 10000) * 12000;
       
-      let currentFreq = resonanceBase + (jitter * 10000) + hashrateMod;
+      let currentFreq = resonanceBase + hashrateMod;
 
       // Debug log every ~5 seconds
       if (Date.now() % 5000 < 100) {
-        console.log(`[JARS_SERVER_LOOP] Bias: ${systemState.bias} | Freq: ${currentFreq.toFixed(1)}`);
+        console.log(`[JARS_SERVER_REPRESENTATION] Bias: ${systemState.bias} | Freq: ${currentFreq.toFixed(1)}`);
       }
       
       if (systemState.overdrive) {
         currentFreq = currentFreq * 3.5; // Quantum Leap
       }
 
-      // Enhanced excitation on high-jitter events
-      if (jitter > 0.45) {
-        currentFreq = currentFreq * (1.0 + (Math.random() - 0.5) * 0.1);
-      }
+      // No excitement randomization - pure state representation
       
       // Safety clamp
-      currentFreq = Math.max(10, currentFreq);
+      currentFreq = Math.max(0, currentFreq);
       
       const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(1)}|${systemState.latestHashRate.toFixed(2)}`;
       

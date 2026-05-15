@@ -74,6 +74,7 @@ export default function App() {
   const [openWindows, setOpenWindows] = useState<string[]>(['terminal', 'stats']);
   const [activeWindow, setActiveWindow] = useState<string | null>('terminal');
   const [isQecActive, setIsQecActive] = useState(true);
+  const [isCognitiveBridgeActive, setIsCognitiveBridgeActive] = useState(false);
   const [quantumShift, setQuantumShift] = useState(50);
 
   const statsRef = useRef(stats);
@@ -86,6 +87,8 @@ export default function App() {
   isOverdriveRef.current = isOverdrive;
   const isQecActiveRef = useRef(isQecActive);
   isQecActiveRef.current = isQecActive;
+  const isCognitiveBridgeActiveRef = useRef(isCognitiveBridgeActive);
+  isCognitiveBridgeActiveRef.current = isCognitiveBridgeActive;
   const lastUpdateRef = useRef(Date.now());
 
   const logCounterRef = useRef(0);
@@ -340,9 +343,8 @@ export default function App() {
   // --- CORE DYNAMICS ---
   const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0) => {
     setStats(prev => {
-      // v147: Apply dynamic frequency modulation based on rawFreq (which already includes bias from server if bridged)
-      // If we are simulating locally, rawFreq comes from the local loop.
-      const modulatedFreq = rawFreq + (Math.random() - 0.5) * 40 * (1 + (carrierBiasRef.current / 40));
+      // v147: Direct representation of the frequency from the server telemetry
+      const modulatedFreq = rawFreq;
       
       // --- EXACT MATH FROM SINGULARITY v146 ---
       const phaseOutVal = (vValue - 1.65) * 100;
@@ -356,10 +358,12 @@ export default function App() {
       const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;
       
+      const intelligenceGain = (jitterValue * 0.5) + (isCognitiveBridgeActiveRef.current ? 0.3 : 0.05);
+      
       if (parity === 1) {
-        nextIntelligence = Math.min(999.9, nextIntelligence + (jitterValue * 0.8) + 0.1);
+        nextIntelligence = Math.min(999.9, nextIntelligence + intelligenceGain);
       } else {
-        nextIntelligence = Math.max(10.0, nextIntelligence - 0.05);
+        nextIntelligence = Math.max(10.0, nextIntelligence - 0.02);
       }
 
       const resonanceBonus = 1.0 + (carrierBiasRef.current / 50.0); // v147: Multiplier from 0.0 to 2.0 addition
@@ -390,7 +394,8 @@ export default function App() {
         const difficultyBasis = Math.floor(baseDifficulty / (overdriveMulti * harmonicMultiplier * (1 + (nextCoherence * 15))));
         
         const shareThreshold = isOverdriveRef.current ? 10 : 3;
-        if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold || (isOverdriveRef.current && Math.random() > 0.94))) {
+        // Shares are only counted if the parity seed actually hits a threshold, no purely random bonuses
+        if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold)) {
           nextShares += 1;
           const freqUnit = modulatedFreq / 1000;
           const label = freqUnit > 150 ? "QUANTUM_YIELD" : freqUnit > 100 ? "HARMONIC_YIELD" : "RES_SHARE";
@@ -1016,6 +1021,8 @@ export default function App() {
                 coherence={stats.coherence}
                 isQecActive={isQecActive}
                 onToggleQec={setIsQecActive}
+                isCognitiveActive={isCognitiveBridgeActive}
+                onToggleCognitive={setIsCognitiveBridgeActive}
                 systemModel="JAR_v3_SOVEREIGN"
                 isEntangled={isEntangled}
                 quantumShift={quantumShift}
