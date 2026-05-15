@@ -203,10 +203,6 @@ async function startServer() {
         console.log(`[JARS_REPRESENTATION] Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(2)}GHz`);
       }
       
-      if (systemState.overdrive) {
-        currentFreq = currentFreq * 3.5; // Quantum Leap
-      }
-
       // No excitement randomization - pure state representation
       
       // Safety clamp

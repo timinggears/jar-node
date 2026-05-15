@@ -40,17 +40,17 @@ export default function SystemSettings({
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <label className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">Resonance Drive (Tuning)</label>
-              <span className="text-xs font-mono text-[#00ffcc] animate-pulse">{(carrierBias / 50.0).toFixed(2)}x Drive</span>
+              <span className="text-xs font-mono text-[#00ffcc] animate-pulse">{carrierBias.toFixed(1)} GHz</span>
             </div>
             <input 
               type="range" 
               min="0" 
-              max="100" 
+              max="250" 
               value={carrierBias}
               onChange={(e) => setCarrierBias(parseInt(e.target.value))}
               className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Adjusts the fundamental resonance. 0 GHz to 100 GHz (Fundamental). Overdrive multiplies this into the Quantum band.</p>
+            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Adjusts the fundamental resonance. 0 GHz to 250 GHz. Frequency mapping is now 1:1.</p>
           </div>
 
           <div className="space-y-3">
@@ -61,21 +61,20 @@ export default function SystemSettings({
               </span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {[25, 50, 75, 100].map(h => {
+              {[50, 100, 150, 200].map(h => {
                 // v147: Multiplier is 1000 per bias unit (1:1 GHz)
                 const target = 1000 * h;
-                const isActive = Math.abs(currentFreq - target) < (isOverdrive ? 15000 : 8000);
-                const isLocked = Math.abs(currentFreq - target) < 2000;
+                const isActive = Math.abs(currentFreq - target) < 15000;
                 return (
                    <button 
                     key={h} 
                     onClick={() => setCarrierBias(h)}
                     className={`border p-2 rounded text-center transition-all duration-300 ${isActive ? 'bg-blue-900/40 border-blue-400/50 ring-1 ring-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)]' : 'bg-white/5 border-white/5 opacity-40 hover:bg-white/10'}`}
                   >
-                    <p className={`text-[7px] uppercase ${isLocked ? 'text-[#00ffcc] font-bold' : (isActive ? 'text-blue-300' : 'text-zinc-600')}`}>
-                      {isLocked ? 'LOCKED' : `${h} GHz`}
+                    <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300' : 'text-zinc-600'}`}>
+                      {`${h} GHz`}
                     </p>
-                    <p className={`text-[9px] font-mono ${isLocked ? 'text-white' : (isActive ? 'text-blue-400' : 'text-zinc-400')}`}>{h.toFixed(1)}G</p>
+                    <p className={`text-[9px] font-mono ${isActive ? 'text-white' : 'text-zinc-400'}`}>{h.toFixed(1)}G</p>
                   </button>
                 );
               })}

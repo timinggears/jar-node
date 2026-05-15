@@ -355,16 +355,15 @@ export default function App() {
       // v147: Direct representation of the frequency from the server telemetry
       const modulatedFreq = rawFreq;
       
-      // --- EXACT MATH FROM SINGULARITY v146 ---
       const phaseOutVal = (vValue - 1.65) * 100;
       const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
       
-      const overdriveDrain = isOverdriveRef.current ? 0.20 : 0;
-      const qecBonus = isQecActiveRef.current ? 0.20 : -0.30; 
-      const biasStress = (Math.abs(carrierBiasRef.current - 50) / 100) * 0.3;
+      const overdriveDrain = isOverdriveRef.current ? 0.05 : 0;
+      const qecBonus = isQecActiveRef.current ? 0.25 : -0.10; 
+      const biasStress = (Math.abs(carrierBiasRef.current - 50) / 250) * 0.1;
       
-      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250) - overdriveDrain - biasStress + qecBonus;
-      const nextCoherence = Math.min(0.9999, Math.max(0.01, coherenceBase));
+      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress + qecBonus;
+      const nextCoherence = Math.min(0.9999, Math.max(0.1, coherenceBase));
       
       const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;
@@ -557,10 +556,9 @@ export default function App() {
       // Base frequency scales linearly: 1 bias = 1 GHz
       const baseFreqBase = 1000 * rawBias; 
       
-      const overdriveMulti = isOverdriveRef.current ? 3.5 : 1.0;
       const drift = Math.sin(localFreqPhase) * 150 * (rawBias / 100);
       
-      const baseFreq = (baseFreqBase * overdriveMulti) + drift;
+      const baseFreq = baseFreqBase + drift;
       
       const seed = Math.floor(Math.random() * 0xffffffff).toString(16);
       
