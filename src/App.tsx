@@ -359,10 +359,12 @@ export default function App() {
       const phaseOutVal = (vValue - 1.65) * 100;
       const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
       
-      const overdriveDrain = isOverdriveRef.current ? 0.15 : 0;
-      const qecBonus = isQecActiveRef.current ? 0.25 : -0.15; 
-      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250) - overdriveDrain + qecBonus;
-      const nextCoherence = Math.min(1.0, Math.max(0.1, coherenceBase));
+      const overdriveDrain = isOverdriveRef.current ? 0.20 : 0;
+      const qecBonus = isQecActiveRef.current ? 0.20 : -0.30; 
+      const biasStress = (Math.abs(carrierBiasRef.current - 50) / 100) * 0.3;
+      
+      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 250) - overdriveDrain - biasStress + qecBonus;
+      const nextCoherence = Math.min(0.9999, Math.max(0.01, coherenceBase));
       
       const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;
@@ -861,10 +863,10 @@ export default function App() {
         >
           <h1 className="text-[#00ffcc] text-2xl font-black tracking-[0.4em] uppercase drop-shadow-[0_0_15px_rgba(0,255,204,0.6)] flex items-center gap-4">
             <Cpu className="w-8 h-8 animate-pulse" />
-            Singularity_v147
+            Sovereign_Singularity_v147
           </h1>
           <p className="text-[#00ffcc]/40 text-[9px] tracking-[0.6em] font-mono uppercase mt-1">
-            Fundamental (50GHz) + Quantum Carrier Modulation | v147 Anchor
+            Fundamental ({(stats.frequency / 1000).toFixed(1)} GHz) + Quantum Carrier Modulation | v147 Anchor
           </p>
         </motion.div>
       </div>

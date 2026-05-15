@@ -60,21 +60,22 @@ export default function SystemSettings({
                 v1.47_LIVE: {(currentFreq / 1000).toFixed(4)} GHz
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {[25, 50, 75].map(h => {
+            <div className="grid grid-cols-4 gap-2">
+              {[25, 50, 75, 100].map(h => {
                 // v147: Multiplier is 1000 per bias unit (1:1 GHz)
                 const target = 1000 * h;
-                const isActive = Math.abs(currentFreq - target) < 8000;
+                const isActive = Math.abs(currentFreq - target) < (isOverdrive ? 15000 : 8000);
+                const isLocked = Math.abs(currentFreq - target) < 2000;
                 return (
-                  <button 
+                   <button 
                     key={h} 
                     onClick={() => setCarrierBias(h)}
                     className={`border p-2 rounded text-center transition-all duration-300 ${isActive ? 'bg-blue-900/40 border-blue-400/50 ring-1 ring-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)]' : 'bg-white/5 border-white/5 opacity-40 hover:bg-white/10'}`}
                   >
-                    <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300 font-bold' : 'text-zinc-600'}`}>
-                      {`${h} GHz`}
+                    <p className={`text-[7px] uppercase ${isLocked ? 'text-[#00ffcc] font-bold' : (isActive ? 'text-blue-300' : 'text-zinc-600')}`}>
+                      {isLocked ? 'LOCKED' : `${h} GHz`}
                     </p>
-                    <p className={`text-[9px] font-mono ${isActive ? 'text-white' : 'text-zinc-400'}`}>{h.toFixed(1)}G</p>
+                    <p className={`text-[9px] font-mono ${isLocked ? 'text-white' : (isActive ? 'text-blue-400' : 'text-zinc-400')}`}>{h.toFixed(1)}G</p>
                   </button>
                 );
               })}

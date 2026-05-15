@@ -85,9 +85,9 @@ async function startServer() {
     }
     
     // Broadcast change to all other clients
-    socket.broadcast.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
+    io.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
     
-    socket.emit('log', `[JARS_SYNC] State acknowledged: Bias=${systemState.bias}`);
+    socket.emit('log', `[JARS_SYNC] State synchronized: Bias=${systemState.bias} | Overdrive=${systemState.overdrive}`);
     
     // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
     if (hardwarePort && hardwarePort.isOpen) {
