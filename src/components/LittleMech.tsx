@@ -7,12 +7,12 @@ export default function LittleMech({ miningState, isBoosted, isStatic, bias = 50
   
   // Classic SNES Palette (Vibrant & High Contrast)
   const colors = isOverdrive ? {
-    // Berserk Mode (Dark/Red Shift)
-    primary: "#303038",      // Dark Armor
-    secondary: "#902020",    // Crimson trim
+    // Berserk Mode (Dark/Red Shift) - v147 Extreme
+    primary: "#202028",      // Darker Armor
+    secondary: "#c01010",    // Brighter Crimson trim
     accent: "#ff0000",       // Glow
-    detail: "#505060",       // Shadow
-    frame: "#101018",        // Outline
+    detail: "#404050",       // Shadow
+    frame: "#08080c",        // Outline
   } : {
     // Classic Mode (Gundam/Weltall inspired)
     primary: "#ffffff",      // White Armor
@@ -75,27 +75,45 @@ export default function LittleMech({ miningState, isBoosted, isStatic, bias = 50
             />
           )}
 
-          {/* Energy Trail Particles */}
+          {/* Energy Trail Particles (Floating Embers) */}
           {isOverdrive && (
-            <div className="absolute inset-0 z-[-1]">
-              {[...Array(3)].map((_, i) => (
+            <div className="absolute inset-0 z-[-1] flex items-center justify-center">
+              {[...Array(6)].map((_, i) => (
                 <motion.div
                   key={i}
-                  className="absolute left-1/2 w-[2px] h-12 bg-gradient-to-t from-red-600 to-transparent"
-                  initial={{ opacity: 0, scaleY: 0, y: 0 }}
+                  className="absolute w-[2px] h-[2px] bg-red-500 rounded-full shadow-[0_0_8px_#ff0000]"
+                  initial={{ opacity: 0, scale: 0, x: 0, y: 0 }}
                   animate={{
-                    opacity: [0, 0.8, 0],
-                    scaleY: [0, 1.5, 0.5],
-                    y: [0, -40 - (i * 10)],
-                    x: [-2, 2, -2]
+                    opacity: [0, 1, 0],
+                    scale: [0, 1.5, 0],
+                    x: [(Math.random() - 0.5) * 40, (Math.random() - 0.5) * 80],
+                    y: [0, -60 - (Math.random() * 40)],
                   }}
                   transition={{
-                    duration: 0.6,
+                    duration: 1 + Math.random(),
                     repeat: Infinity,
-                    delay: i * 0.2,
+                    delay: i * 0.3,
                     ease: "easeOut"
                   }}
-                  style={{ marginLeft: `${(i - 1) * 12}px` }}
+                />
+              ))}
+              {/* Vertical Pulse Streams */}
+              {[...Array(2)].map((_, i) => (
+                <motion.div
+                  key={`pulse-${i}`}
+                  className="absolute w-px h-24 bg-gradient-to-t from-red-600/0 via-red-500/40 to-red-600/0"
+                  animate={{
+                    y: [60, -60],
+                    opacity: [0, 1, 1, 0],
+                    scaleX: [1, 2, 1]
+                  }}
+                  transition={{
+                    duration: 0.8,
+                    repeat: Infinity,
+                    delay: i * 0.4,
+                    ease: "linear"
+                  }}
+                  style={{ left: i === 0 ? '20%' : '80%' }}
                 />
               ))}
             </div>

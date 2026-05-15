@@ -190,6 +190,16 @@ export default function WarpVisualizer({
         if (bias > 80) {
           ctx.shadowBlur = 15;
           ctx.shadowColor = color;
+          
+          // v147: Chromatic Aberration Glitch
+          if (Math.random() > 0.8) {
+            ctx.save();
+            ctx.translate((Math.random() - 0.5) * 10, 0);
+            ctx.globalAlpha = 0.5;
+            ctx.strokeStyle = '#ff0088'; // Magenta shift
+            ctx.stroke();
+            ctx.restore();
+          }
         } else {
           ctx.shadowBlur = 0;
         }
