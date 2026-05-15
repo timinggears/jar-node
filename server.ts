@@ -16,9 +16,11 @@ async function startServer() {
   });
 
   // --- TELEMETRY PARAMS ---
-  let systemBias = 50;
-  let isOverdrive = false;
-  let latestHashRate = 0;
+  const systemState = {
+    bias: 50,
+    overdrive: false,
+    latestHashRate: 0
+  };
 
   // Track if we have a real hardware connection to decide whether to simulate
   let hardwareActive = false;
@@ -28,7 +30,7 @@ async function startServer() {
     console.log(`[CLIENT] Connected: ${socket.id}`);
     
     // Send current state to new client immediately
-    socket.emit('hardware:state', { bias: systemBias, overdrive: isOverdrive });
+    socket.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
 
     socket.on('message', (msg: string) => {
       if (msg.startsWith('SUBSCRIBE:')) {
@@ -43,21 +45,23 @@ async function startServer() {
     });
 
       socket.on('hardware:params', (params: any) => {
-        if (params.bias !== undefined) systemBias = Number(params.bias);
-        if (params.overdrive !== undefined) isOverdrive = Boolean(params.overdrive);
+        if (params.bias !== undefined) systemState.bias = Number(params.bias);
+        if (params.overdrive !== undefined) systemState.overdrive = Boolean(params.overdrive);
         
+        console.log(`[JARS_SYNC] NEW_PARAMS: Bias=${systemState.bias} | Overdrive=${systemState.overdrive}`);
+
         // Broadcast change to all other clients
-        socket.broadcast.emit('hardware:state', { bias: systemBias, overdrive: isOverdrive });
+        socket.broadcast.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
         
-        socket.emit('log', `[JARS_SYNC] Multi-User Sync: Bias=${systemBias} | Overdrive=${isOverdrive}`);
+        socket.emit('log', `[JARS_SYNC] Multi-User Sync: Bias=${systemState.bias} | Overdrive=${systemState.overdrive}`);
         
         // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
         if (hardwarePort && hardwarePort.isOpen) {
-          hardwarePort.write(`BIAS:${systemBias}\n`);
-          hardwarePort.write(`OVERDRIVE:${isOverdrive ? '1' : '0'}\n`);
+          hardwarePort.write(`BIAS:${systemState.bias}\n`);
+          hardwarePort.write(`OVERDRIVE:${systemState.overdrive ? '1' : '0'}\n`);
         }
         
-        const biasMultiplier = systemBias / 50.0;
+        const biasMultiplier = systemState.bias / 50.0;
         socket.emit('log', `SYSTEM: Nodal Bias realigned to ${biasMultiplier.toFixed(2)}x modulation sensitivity.`);
       });
 
@@ -139,11 +143,11 @@ async function startServer() {
       // Generate telemetry based on REAL system load when hardware is missing
       // --- HARMONIC ANCHOR v147 PHYSICS ---
       const load = os.loadavg()[0];
-      const carrierBias = systemBias / 100.0;
+      const carrierBiasVal = systemState.bias / 100.0;
       
-      const overdriveExcitation = isOverdrive ? 0.6 : 0;
+      const overdriveExcitation = systemState.overdrive ? 0.6 : 0;
       const v = 1.65 + (Math.sin(Date.now() / 1500) * (0.4 + overdriveExcitation)) + (Math.random() * 0.1);
-      const jitter = Math.abs(v - 1.65) * (1.1 + load * 0.5 + (isOverdrive ? 0.8 : 0));
+      const jitter = Math.abs(v - 1.65) * (1.1 + load * 0.5 + (systemState.overdrive ? 0.8 : 0));
       
       const seedNum = (Math.floor(v * 10000000) >>> 0);
       const seedStr = seedNum.toString(16).padStart(8, '0').toUpperCase();
@@ -151,26 +155,27 @@ async function startServer() {
 
       // Harmonic Drive Modulation (v147 Match)
       // Frequency scales linearly: 1 bias = 1 GHz (1000 Hz in internal unit)
-      let baseFreqBase = 1000 * systemBias;
+      // v147 Fix: Ensure the bias changes are impactful and immediately visible
+      const resonanceBase = 1000 * systemState.bias;
       
       // JARS_v147: We connect resonance to the hash rate (simulated or real)
-      const hashrateMod = (latestHashRate / 10000) * 8500; // Increased influence
+      const hashrateMod = (systemState.latestHashRate / 10000) * 8500;
       
-      let currentFreq = baseFreqBase + (jitter * 6000) + hashrateMod;
+      let currentFreq = resonanceBase + (jitter * 8000) + hashrateMod;
       
-      if (isOverdrive) {
+      if (systemState.overdrive) {
         currentFreq = currentFreq * 3.5; // Quantum Leap
       }
 
       // Enhanced excitation on high-jitter events
-      if (jitter > 0.42) {
-        currentFreq = currentFreq * (Math.random() > 0.5 ? 1.05 : 0.98);
+      if (jitter > 0.45) {
+        currentFreq = currentFreq * (1.0 + (Math.random() - 0.5) * 0.1);
       }
       
       // Safety clamp
       currentFreq = Math.max(10, currentFreq);
       
-      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(1)}|${latestHashRate.toFixed(2)}`;
+      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(6)}|${v.toFixed(4)}|${parity}|${currentFreq.toFixed(1)}|${systemState.latestHashRate.toFixed(2)}`;
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 
@@ -267,10 +272,10 @@ async function startServer() {
           // Try to extract a real number from the speed line for telemetry
           const match = line.match(/speed\s*(\d+\.?\d*)/i);
           if (match) {
-            latestHashRate = parseFloat(match[1]);
+            systemState.latestHashRate = parseFloat(match[1]);
             // Forward hashrate to Pi for physical modulation
             if (hardwarePort && hardwarePort.isOpen) {
-              hardwarePort.write(`HRATE:${latestHashRate}\n`);
+              hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
             }
           }
           io.to('mining_status').emit('mining_status', { type: 'telemetry', message: 'Hashrate update', data: line });

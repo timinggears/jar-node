@@ -433,6 +433,7 @@ export default function App() {
 
     const onTelemetry = (line: string) => {
       if (line.startsWith('!S|')) {
+        setHardwareState('connected');
         const parts = line.split('|');
         if (parts.length >= 6) {
           const seedStr = parts[1];
