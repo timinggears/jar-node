@@ -118,12 +118,13 @@ export default function App() {
       if (carrierBias === lastEmittedBiasRef.current && isOverdrive === lastEmittedOverdriveRef.current) return;
       
       console.log(`[JARS_CLIENT] User Intent: Bias=${carrierBias}, Overdrive=${isOverdrive}`);
+      addLog(`SYSTEM: Intent updated to Bias=${carrierBias}`, 'info');
       socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
       
       lastEmittedBiasRef.current = carrierBias;
       lastEmittedOverdriveRef.current = isOverdrive;
     }
-  }, [carrierBias, isOverdrive]);
+  }, [carrierBias, isOverdrive, addLog]);
 
   // Quantum Entanglement Logic
   useEffect(() => {
@@ -456,9 +457,11 @@ export default function App() {
       setHasReceivedSync(true);
       
       // AUTHORITY LOCK: If we just touched the slider in the last 2 seconds, ignore server echoes
-      if (Date.now() - lastInteractionTimeRef.current < 2000) return;
+      const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
+      if (timeSinceInteraction < 2000) return;
 
-      if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 1) {
+      if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 0.5) {
+        console.log(`[JARS_CLIENT] Adopting Server Bias: ${state.bias}`);
         setCarrierBias(state.bias);
         lastEmittedBiasRef.current = state.bias;
       }

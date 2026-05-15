@@ -50,11 +50,11 @@ async function startServer() {
   socket.on('hardware:params', (params: any) => {
     if (params.bias !== undefined) {
       systemState.bias = Number(params.bias);
-      console.log(`[JARS_SERVER] BIAS_UPDATE: ${systemState.bias}`);
+      console.log(`[JARS_SERVER] BIAS_SYNC: ${systemState.bias}`);
     }
     if (params.overdrive !== undefined) {
       systemState.overdrive = Boolean(params.overdrive);
-      console.log(`[JARS_SERVER] OVERDRIVE_UPDATE: ${systemState.overdrive}`);
+      console.log(`[JARS_SERVER] OVERDRIVE_SYNC: ${systemState.overdrive}`);
     }
     
     // Broadcast change to all other clients
@@ -213,11 +213,55 @@ async function startServer() {
   let xmrigProcess: ChildProcess | null = null;
   let miningEnabled = true;
   let restartCount = 0;
-  const MAX_RESTARTS = 999; // Essentially infinite retries for persistence
+  const MAX_RESTARTS = 999; 
   let lastRestartTime = 0;
+  let lastApiPollTime = 0;
 
-  // Track the latest speed from the process to feed back into telemetry
-  let latestProcessKHs = 0;
+  async function checkMinerHealth() {
+    if (!xmrigProcess && miningEnabled) {
+      console.log('[MINER] Process dead. Reanimating substrate...');
+      startMining();
+      return;
+    }
+
+    if (xmrigProcess) {
+      try {
+        // Poll XMRig HTTP API for status (Every 10s approximately)
+        const now = Date.now();
+        if (now - lastApiPollTime > 10000) {
+          lastApiPollTime = now;
+          const response = await fetch('http://127.0.0.1:6000/1/summary');
+          if (response.ok) {
+            const data: any = await response.json();
+            const hashrate = data.hashrate?.total?.[0] || 0;
+            if (hashrate > 0) {
+              systemState.latestHashRate = hashrate;
+              if (hardwarePort && hardwarePort.isOpen) {
+                hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
+              }
+              io.to('mining_status').emit('mining_status', { type: 'telemetry', message: `API_SCAN: ${hashrate.toFixed(1)} H/s detected.` });
+            }
+          }
+        }
+      } catch (e) {
+        // API might not be ready yet or process is hung
+        if (Date.now() - lastRestartTime > 60000) {
+          console.warn('[MINER] API unresponsive for 60s. Forcing reboot...');
+          restartMiner();
+        }
+      }
+    }
+  }
+
+  function restartMiner() {
+    if (xmrigProcess) {
+      xmrigProcess.kill('SIGKILL');
+      xmrigProcess = null;
+    }
+    setTimeout(startMining, 2000);
+  }
+
+  setInterval(checkMinerHealth, 5000);
 
   async function startMining() {
     if (!miningEnabled) return;
@@ -309,11 +353,11 @@ async function startServer() {
 
       xmrigProcess.on('close', (code) => {
         console.log(`[MINER] Process exited with code ${code}`);
+        const wasExpected = !miningEnabled;
         xmrigProcess = null;
         
-        if (code !== 0 && code !== null) {
-          io.to('mining_status').emit('mining_status', { type: 'error', message: `Miner exited unexpectedly (code ${code}).`, code: 'EXIT_FAILURE' });
-          // Attempt restart
+        if (!wasExpected) {
+          io.to('mining_status').emit('mining_status', { type: 'error', message: `Miner exited unexpectedly (code ${code}). Attempting re-anchor.`, code: 'EXIT_FAILURE' });
           setTimeout(startMining, 5000);
         } else {
           io.to('mining_status').emit('mining_status', { type: 'info', message: 'Miner stopped.' });
