@@ -46,25 +46,25 @@ export default function SystemSettings({
               onChange={(e) => setCarrierBias(parseInt(e.target.value))}
               className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Adjusts the harmonic pump frequency. Shift to 1.00x (Bias: 50) for fundamental stability, or 2.00x for superposition.</p>
+            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Adjusts the fundamental resonance. 0 GHz to 100 GHz (Fundamental). Overdrive multiplies this into the Quantum band.</p>
           </div>
 
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] text-blue-500 uppercase font-bold">Resonance Spectrum Analysis</label>
+              <label className="text-[10px] text-blue-500 uppercase font-bold">Resonance Octaves</label>
               <span className="text-xs font-mono text-blue-400">
                 v1.47_LIVE: {(currentFreq / 1000).toFixed(4)} GHz
               </span>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {[1, 2, 3].map(h => {
-                const target = 50000 * h;
-                const isActive = Math.abs(currentFreq - target) < 8000;
-                const isLocked = Math.abs(currentFreq - target) < 2000;
+              {[25, 50, 75].map(h => {
+                const target = 1000 * h;
+                const isActive = Math.abs(currentFreq - target) < 5000;
+                const isLocked = Math.abs(currentFreq - target) < 1000;
                 return (
                   <div key={h} className={`border p-2 rounded text-center transition-all duration-300 ${isActive ? 'bg-blue-900/40 border-blue-400/50' : 'bg-white/5 border-white/5 opacity-40'} ${isLocked ? 'ring-1 ring-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.3)]' : ''}`}>
                     <p className={`text-[7px] uppercase ${isActive ? 'text-blue-300 font-bold' : 'text-zinc-600'}`}>
-                      {isLocked ? 'LOCKED' : `H_${h}`}
+                      {isLocked ? 'LOCKED' : `${h} GHz`}
                     </p>
                     <p className={`text-[9px] font-mono ${isActive ? (isLocked ? 'text-white' : 'text-blue-400') : 'text-zinc-400'}`}>{(target / 1000).toFixed(1)}G</p>
                   </div>

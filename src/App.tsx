@@ -366,7 +366,8 @@ export default function App() {
         const shareThreshold = isOverdriveRef.current ? 10 : 3;
         if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold || (isOverdriveRef.current && Math.random() > 0.94))) {
           nextShares += 1;
-          const label = harmonicMultiplier > 1 ? `HARMONIC_YIELD` : `RES_SHARE`;
+          const freqUnit = modulatedFreq / 1000;
+          const label = freqUnit > 150 ? "QUANTUM_YIELD" : freqUnit > 100 ? "HARMONIC_YIELD" : "RES_SHARE";
           setTimeout(() => addLog(`[${label}] #${String(nextShares).padStart(4, '0')}: Block sealed @ ${freqUnit.toFixed(1)} GHz.`, 'success'), 0);
         }
         
@@ -499,11 +500,11 @@ export default function App() {
       const rawBias = carrierBiasRef.current;
       
       // Jitter scales with overdrive and bias
-      const jitter = 0.05 + Math.random() * 0.1 + (isOverdriveRef.current ? 0.4 : 0) + (rawBias / 500);
+      const jitter = 0.05 + Math.random() * 0.1 + (isOverdriveRef.current ? 0.4 : 0);
       const v = 1.65 + (Math.sin(Date.now() / 1000) * 0.02);
       
-      // Base frequency scales linearly with bias
-      const baseFreqBase = 1000 * rawBias; // 100 bias = 100,000 = 100 GHz
+      // Base frequency scales linearly: 1 bias = 1 GHz
+      const baseFreqBase = 1000 * rawBias; 
       
       const overdriveMulti = isOverdriveRef.current ? 3.5 : 1.0;
       const drift = Math.sin(localFreqPhase) * 150 * (rawBias / 100);
