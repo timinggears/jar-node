@@ -9,11 +9,34 @@ import { spawn, ChildProcess } from 'child_process';
 import os from 'os';
 
 // --- GLOBAL SYSTEM STATE (v147) ---
-const systemState = {
+const STATE_FILE = path.join(process.cwd(), 'system_state.json');
+let systemState = {
   bias: 50,
   overdrive: false,
   latestHashRate: 0
 };
+
+// Load state if exists
+try {
+  const fs = require('fs');
+  if (fs.existsSync(STATE_FILE)) {
+    const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    systemState = { ...systemState, ...saved };
+    console.log('[SYSTEM] Loaded persisted state:', systemState);
+  }
+} catch (e) {
+  console.warn('[SYSTEM] Failed to load state');
+}
+
+function saveState() {
+  try {
+    const fs = require('fs');
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ 
+      bias: systemState.bias, 
+      overdrive: systemState.overdrive 
+    }));
+  } catch (e) {}
+}
 
 async function startServer() {
   const app = express();
@@ -49,18 +72,22 @@ async function startServer() {
 
   socket.on('hardware:params', (params: any) => {
     if (params.bias !== undefined) {
+      const oldBias = systemState.bias;
       systemState.bias = Number(params.bias);
-      console.log(`[JARS_SERVER] BIAS_SYNC: ${systemState.bias}`);
+      console.log(`[JARS_SERVER] BIAS_SYNC: ${oldBias} -> ${systemState.bias} (from ${socket.id})`);
+      saveState();
     }
     if (params.overdrive !== undefined) {
+      const oldOverdrive = systemState.overdrive;
       systemState.overdrive = Boolean(params.overdrive);
-      console.log(`[JARS_SERVER] OVERDRIVE_SYNC: ${systemState.overdrive}`);
+      console.log(`[JARS_SERVER] OVERDRIVE_SYNC: ${oldOverdrive} -> ${systemState.overdrive}`);
+      saveState();
     }
     
     // Broadcast change to all other clients
     socket.broadcast.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
     
-    socket.emit('log', `[JARS_SYNC] Multi-User Sync: Bias=${systemState.bias} | Overdrive=${systemState.overdrive}`);
+    socket.emit('log', `[JARS_SYNC] State acknowledged: Bias=${systemState.bias}`);
     
     // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
     if (hardwarePort && hardwarePort.isOpen) {
@@ -213,42 +240,38 @@ async function startServer() {
   let xmrigProcess: ChildProcess | null = null;
   let miningEnabled = true;
   let restartCount = 0;
-  const MAX_RESTARTS = 999; 
   let lastRestartTime = 0;
   let lastApiPollTime = 0;
 
   async function checkMinerHealth() {
-    if (!xmrigProcess && miningEnabled) {
+    if (!miningEnabled) return;
+
+    if (!xmrigProcess) {
       console.log('[MINER] Process dead. Reanimating substrate...');
       startMining();
       return;
     }
 
-    if (xmrigProcess) {
-      try {
-        // Poll XMRig HTTP API for status (Every 10s approximately)
-        const now = Date.now();
-        if (now - lastApiPollTime > 10000) {
-          lastApiPollTime = now;
-          const response = await fetch('http://127.0.0.1:6000/1/summary');
-          if (response.ok) {
-            const data: any = await response.json();
-            const hashrate = data.hashrate?.total?.[0] || 0;
-            if (hashrate > 0) {
-              systemState.latestHashRate = hashrate;
-              if (hardwarePort && hardwarePort.isOpen) {
-                hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
-              }
-              io.to('mining_status').emit('mining_status', { type: 'telemetry', message: `API_SCAN: ${hashrate.toFixed(1)} H/s detected.` });
+    try {
+      const now = Date.now();
+      if (now - lastApiPollTime > 5000) {
+        lastApiPollTime = now;
+        const response = await fetch('http://127.0.0.1:6000/1/summary');
+        if (response.ok) {
+          const data: any = await response.json();
+          const hashrate = data.hashrate?.total?.[0] || 0;
+          if (hashrate > 0) {
+            systemState.latestHashRate = hashrate;
+            if (hardwarePort && hardwarePort.isOpen) {
+              hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
             }
           }
         }
-      } catch (e) {
-        // API might not be ready yet or process is hung
-        if (Date.now() - lastRestartTime > 60000) {
-          console.warn('[MINER] API unresponsive for 60s. Forcing reboot...');
-          restartMiner();
-        }
+      }
+    } catch (e) {
+      if (Date.now() - lastRestartTime > 45000) {
+        console.warn('[MINER] API unresponsive. Cycling process...');
+        restartMiner();
       }
     }
   }
@@ -269,103 +292,52 @@ async function startServer() {
     const xmrigPath = path.join(process.cwd(), 'xmrig');
     const fs = await import('fs');
     
-    // Check if binary exists
     if (!fs.existsSync(xmrigPath)) {
-      console.log('[MINER] XMRig binary not found at ' + xmrigPath);
-      io.to('mining_status').emit('mining_status', { type: 'error', message: 'Binary not found. Reservoir-only mode.', code: 'ENOENT' });
+      console.log('[MINER] XMRig binary missing.');
       return;
     }
 
-    // Check for execution permissions
     try {
       await fs.promises.access(xmrigPath, fs.constants.X_OK);
     } catch (err) {
-      console.warn('[MINER] No execution permission. Attempting chmod +x...');
       try {
         const { exec } = await import('child_process');
         const { promisify } = await import('util');
         await promisify(exec)(`chmod +x ${xmrigPath}`);
-      } catch (chmodErr) {
-        console.error('[MINER] Failed to set permissions:', chmodErr);
-        io.to('mining_status').emit('mining_status', { type: 'error', message: 'Execution permission denied.', code: 'EACCES' });
-        return;
-      }
+      } catch (e) {}
     }
 
-    // Rate limit restarts
     const now = Date.now();
-    if (now - lastRestartTime < 5000) {
-      restartCount++;
-    } else {
-      restartCount = 0;
-    }
+    if (now - lastRestartTime < 10000) restartCount++;
+    else restartCount = 0;
+    
     lastRestartTime = now;
 
-    if (restartCount >= 10) { // Limit tight loops, but don't halt permanently
-      console.error('[MINER] Restart loop detected. Cooling down substrate...');
-      io.to('mining_status').emit('mining_status', { type: 'error', message: 'Thermal throttling: Cooling substrate nodes...', code: 'THROTTLE' });
-      setTimeout(startMining, 30000); // 30s cooldown
+    if (restartCount > 5) {
+      console.error('[MINER] Rapid restart cycle. Throttling...');
+      setTimeout(startMining, 15000);
       return;
     }
 
     try {
-      console.log('[MINER] Spawning XMRig...');
-      // Use more aggressive flags for VMR/Huge Pages
+      console.log('[MINER] Spawning XMRig substrate...');
       xmrigProcess = spawn(xmrigPath, ["-o", POOL_URL, "-u", USER, "-p", PASS, "--http-enabled", "--http-port", "6000", "--hugepages"]);
       
-      io.to('mining_status').emit('mining_status', { type: 'info', message: 'Sovereign process spawned. Attaching JAR substrate...' });
-
       xmrigProcess.stdout?.on('data', (data) => {
         const line = data.toString().trim();
-        const lowerLine = line.toLowerCase();
-        
-        // Structure the output
-        if (lowerLine.includes('accepted')) {
-          io.to('mining_status').emit('mining_status', { type: 'success', message: 'Block accepted by unmineable pool.', data: line });
-        } else if (lowerLine.includes('speed') || lowerLine.includes('hashrate')) {
-          // Try to extract a real number from the speed line for telemetry
+        if (line.toLowerCase().includes('speed')) {
           const match = line.match(/speed\s*(\d+\.?\d*)/i);
-          if (match) {
-            systemState.latestHashRate = parseFloat(match[1]);
-            // Forward hashrate to Pi for physical modulation
-            if (hardwarePort && hardwarePort.isOpen) {
-              hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
-            }
-          }
-          io.to('mining_status').emit('mining_status', { type: 'telemetry', message: 'Hashrate update', data: line });
-        } else if (lowerLine.includes('error')) {
-          io.to('mining_status').emit('mining_status', { type: 'error', message: line });
-        } else if (lowerLine.includes('miner') || lowerLine.includes('ready')) {
-          io.to('mining_status').emit('mining_status', { type: 'info', message: line });
+          if (match) systemState.latestHashRate = parseFloat(match[1]);
         }
-      });
-
-      xmrigProcess.stderr?.on('data', (data) => {
-        const errStr = data.toString().trim();
-        console.error('[MINER] STDERR:', errStr);
-        io.to('mining_status').emit('mining_status', { type: 'error', message: `STDERR: ${errStr}` });
-      });
-
-      xmrigProcess.on('error', (err) => {
-        console.error('[MINER] Process error:', err.message);
-        io.to('mining_status').emit('mining_status', { type: 'error', message: `Execution error: ${err.message}` });
       });
 
       xmrigProcess.on('close', (code) => {
-        console.log(`[MINER] Process exited with code ${code}`);
-        const wasExpected = !miningEnabled;
+        console.log(`[MINER] Terminated (code ${code})`);
         xmrigProcess = null;
-        
-        if (!wasExpected) {
-          io.to('mining_status').emit('mining_status', { type: 'error', message: `Miner exited unexpectedly (code ${code}). Attempting re-anchor.`, code: 'EXIT_FAILURE' });
-          setTimeout(startMining, 5000);
-        } else {
-          io.to('mining_status').emit('mining_status', { type: 'info', message: 'Miner stopped.' });
-        }
+        if (miningEnabled) setTimeout(startMining, 5000);
       });
-    } catch (err: any) {
-      console.error('[MINER] Unexpected error:', err);
-      io.to('mining_status').emit('mining_status', { type: 'error', message: `Critical fault: ${err.message}` });
+    } catch (err) {
+      console.error('[MINER] Spawn error:', err);
     }
   }
 

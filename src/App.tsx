@@ -47,9 +47,13 @@ export default function App() {
   const [isMining, setIsMining] = useState(true);
   const [isInstalling, setIsInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState(0);
-  const [carrierBias, setCarrierBias] = useState(50); // 50% = Fundamental resonance (50GHz)
+  const [carrierBias, setCarrierBias] = useState(() => {
+    const saved = localStorage.getItem('jar_bias_v147');
+    return saved ? parseInt(saved) : 50;
+  });
   const handleCarrierBiasChange = useCallback((val: number) => {
     setCarrierBias(val);
+    localStorage.setItem('jar_bias_v147', val.toString());
     lastInteractionTimeRef.current = Date.now();
     setHasReceivedSync(true);
   }, []);
@@ -456,11 +460,11 @@ export default function App() {
     const onHardwareState = (state: { bias?: number, overdrive?: boolean }) => {
       setHasReceivedSync(true);
       
-      // AUTHORITY LOCK: If we just touched the slider in the last 2 seconds, ignore server echoes
+      // Only adopt server state if we aren't currently interacting with the slider
       const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
-      if (timeSinceInteraction < 2000) return;
+      if (timeSinceInteraction < 1000) return;
 
-      if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 0.5) {
+      if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 0.1) {
         console.log(`[JARS_CLIENT] Adopting Server Bias: ${state.bias}`);
         setCarrierBias(state.bias);
         lastEmittedBiasRef.current = state.bias;
