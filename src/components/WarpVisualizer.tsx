@@ -33,8 +33,8 @@ export default function WarpVisualizer({
   const dimensionsRef = useRef({ width: 0, height: 0 });
 
   useEffect(() => {
-    // Generate 500 random nodes for TSP visualization (more for background density)
-    nodesRef.current = Array.from({ length: 500 }, () => ({
+    // Reduced background node count to 150 for efficiency
+    nodesRef.current = Array.from({ length: 150 }, () => ({
       x: Math.random() * 2000,
       y: Math.random() * 1000
     }));
@@ -42,12 +42,11 @@ export default function WarpVisualizer({
     const updateDimensions = () => {
       if (containerRef.current && canvasRef.current) {
         const { width, height } = containerRef.current.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
+        // Capped DPR to 1.2 to reduce render overhead while maintaining sharp text
+        const dpr = Math.min(1.2, window.devicePixelRatio || 1);
         canvasRef.current.width = width * dpr;
         canvasRef.current.height = height * dpr;
         dimensionsRef.current = { width, height };
-        
-        // Re-generate nodes for new dimension if needed, or just scale drawing
       }
     };
 
@@ -75,7 +74,7 @@ export default function WarpVisualizer({
         return;
       }
 
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(1.2, window.devicePixelRatio || 1);
       const drawWidth = width * dpr;
       const drawHeight = height * dpr;
       
@@ -94,11 +93,11 @@ export default function WarpVisualizer({
       const isSingularity = freqUnit >= 50;
 
       // Draw Reservoir Resonance (Liquid State Background)
-      ctx.globalAlpha = 0.3 * (isZeroPoint ? 0.05 : (isPhaseOut ? 1.0 : coherence));
-      if (isSingularity && Math.random() > 0.8) ctx.globalAlpha = 1.0; 
+      ctx.globalAlpha = 0.15 * (isZeroPoint ? 0.05 : (isPhaseOut ? 0.5 : coherence));
+      if (isSingularity && Math.random() > 0.8) ctx.globalAlpha = 0.5; 
       
       if (isInstalling) {
-        ctx.globalAlpha = 0.1;
+        ctx.globalAlpha = 0.05;
         ctx.fillStyle = '#00ffcc';
         ctx.fillRect(0, (t * 200) % height, width, 2); // Scanning laser
       }
@@ -115,7 +114,7 @@ export default function WarpVisualizer({
         ctx.globalAlpha = 0.4 + (Math.sin(t * 10) * 0.1);
         
         // Draw partial connections to simulate optimization
-        const step = Math.floor(t * 15) % 500;
+        const step = Math.floor(t * 15) % 150;
         ctx.beginPath();
         for (let i = 0; i < nodesRef.current.length; i++) {
           const node = nodesRef.current[i];
@@ -134,7 +133,7 @@ export default function WarpVisualizer({
         for (let i = 0; i < nodesRef.current.length; i++) {
           const node = nodesRef.current[i];
           ctx.beginPath();
-          ctx.arc(node.x, node.y, 1.2, 0, Math.PI * 2);
+          ctx.arc(node.x, node.y, 1.0, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.restore();
@@ -151,9 +150,9 @@ export default function WarpVisualizer({
           ? 0.2 + (bias / 50) * 0.8 
           : 1.0 + ((bias - 50) / 50) * 2.5; // Reduced from 5.0 to 2.5
 
-        for (let x = 0; x < width + 25; x += 25) { // Increased step from 10 to 25 to reduce segments
-          let baseIntensity = 15 + jitter * 80; // Reduced base intensity
-          if (isZeroPoint) baseIntensity = 2;
+        for (let x = 0; x < width + 40; x += 40) { // Increased step to 40 for max efficiency
+          let baseIntensity = 10 + jitter * 60; // Further reduced base intensity
+          if (isZeroPoint) baseIntensity = 1;
           else if (isSingularity) baseIntensity = 25 + Math.random() * 15; // Reduced from 80+40
           else if (isTachyonic) baseIntensity = 20 + Math.random() * 10; // Reduced from 40+20
           else if (isPhaseOut) baseIntensity = 30 + Math.random() * 15; // Reduced from 50+20
@@ -222,16 +221,16 @@ export default function WarpVisualizer({
       }
       ctx.globalAlpha = 1.0;
 
-      // Draw 12 rings
-      const ringCount = isPhaseOut ? (isTachyonic ? 1 : 3) : 12;
-      for (let i = 0; i < 12; i++) {
+      // Draw 6 rings (Reduced from 12)
+      const ringCount = isPhaseOut ? (isTachyonic ? 1 : 2) : 6;
+      for (let i = 0; i < 6; i++) {
         if (isPhaseOut && i >= ringCount) continue;
-        const r = 20 + i * 15;
+        const r = 20 + i * 20;
         let col = coherence > 0.7 ? '#00ffcc' : '#ff0088';
         if (isPhaseOut) col = '#cc5500';
         if (isTachyonic) col = '#ffffff';
         
-        ctx.globalAlpha = (0.2 + (i / 12) * 0.8) * (isPhaseOut ? 0.1 : coherence + 0.1);
+        ctx.globalAlpha = (0.15 + (i / 6) * 0.5) * (isPhaseOut ? 0.05 : coherence * 0.5);
         
         // At 28GHz (phase out), the orbit becomes chaotic
         const chaos = freqUnit >= 28 ? Math.random() * 50 : 0;

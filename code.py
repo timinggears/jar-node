@@ -116,10 +116,12 @@ while True:
     # v150: Metric is derived from Nodal stability and Resonance intensity
     intelligence_depth = (system_bias * coherence * (5.5 if is_overdrive else 1.0)) / 10.0
     
-    # 3. HARMONIC DRIVE
+    # Enforce bias ceiling logic: higher freqs for harmonics (overdrive) only
+    clamped_bias = min(system_bias, 79.0 if is_overdrive else 48.0)
+    
     overdrive_factor = 12.0 if is_overdrive else 1.0
     substrate_mod = (latest_hrate / 2500.0) * 5000.0
-    virtual_freq = ((system_bias * 1000) + (noise * 25000) + substrate_mod) * overdrive_factor
+    virtual_freq = ((clamped_bias * 1000) + (noise * 25000) + substrate_mod) * overdrive_factor
     
     drive_freq = int(base_hw_freq + (virtual_freq / 15.0) + (resonance_drift * 5000))
     drive_freq = max(50, min(1500000, drive_freq))

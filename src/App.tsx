@@ -717,6 +717,12 @@ export default function App() {
         setIsOverdrive(prev => {
           const next = !prev;
           addLog(next ? 'CRITICAL: Overdrive sequence engaged. Coherence stability at risk.' : 'Overdrive disengaged. System normalization in progress.', next ? 'warning' : 'success');
+          
+          // Auto-clamp if disengaging
+          if (!next && carrierBiasRef.current > 48.0) {
+            setCarrierBias(48.0);
+            addLog('SYSTEM: Frequency normalized to 48.0 GHz (Base Limit)', 'info');
+          }
           return next;
         });
         break;

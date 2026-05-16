@@ -47,13 +47,15 @@ export default function SystemSettings({
             <input 
               type="range" 
               min="0.1" 
-              max="79.0" 
+              max={isOverdrive ? "79.0" : "48.0"} 
               step="0.1"
-              value={carrierBias}
+              value={carrierBias > (isOverdrive ? 79.0 : 48.0) ? (isOverdrive ? 79.0 : 48.0) : carrierBias}
               onChange={(e) => setCarrierBias(parseFloat(e.target.value))}
               className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
-            <p className="text-[9px] text-zinc-600 italic leading-relaxed">Direct tuning: 0.1 to 79.0 GHz. Real-time substrate alignment active.</p>
+            <p className="text-[9px] text-zinc-600 italic leading-relaxed">
+              {isOverdrive ? "Tachyonic Harmonics Unlocked: 0.1 to 79.0 GHz." : "Base Substrate Limit: 48.0 GHz. Enable Overdrive for harmonics."}
+            </p>
           </div>
 
           <div className="space-y-3">
