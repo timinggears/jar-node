@@ -625,17 +625,23 @@ export default function App() {
     const interval = setInterval(triggerAnalysis, 30000);
 
     const gateInt = setInterval(() => {
-      const currentBias = carrierBiasRef.current;
+      const { coherence, intelligence, frequency } = statsRef.current;
       const isOver = isOverdriveRef.current;
       
-      // LOGIC: High-depth monitoring only triggers when bias is in range AND overdrive is pushing the substrate
-      if (currentBias >= 49 && currentBias <= 79 && isOver) {
+      // LOGIC: Quantum gate resonance triggers when system metrics align logically
+      const isLogicalAlignment = coherence > 0.96 && intelligence > 200 && frequency > 40000;
+
+      if (isLogicalAlignment) {
         const messages = [
-          "QUBIT_GATE: Tachyonic logic throughput accelerated via Overdrive.",
-          "QUBIT_GATE: Nodal flux parity verified in non-linear resonance band."
+          "QUBIT_GATE: Logic alignment detected. Nodal flux stabilizing at peak coherence.",
+          "QUBIT_GATE: Sovereign depth threshold cleared. Tachyonic logic active.",
+          "QUBIT_GATE: Quantum logic bridge holding via automated resonance parity."
         ];
         const msg = messages[Math.floor(Math.random() * messages.length)];
-        addLog(msg, "info");
+        addLog(msg, "success");
+      } else if (isOver && frequency > 60000) {
+        // High-frequency "Force" feedback
+        addLog("QUBIT_GATE: Substrate stress detected. Logic parity diverging due to high-freq force.", "warning");
       }
       
       // Periodic HashRate Report
@@ -704,12 +710,13 @@ export default function App() {
         addLog('HELP - List system protocols', 'info');
         addLog('CLEAR - Flush temporal buffers', 'info');
         addLog('STATUS - Core health diagnostics', 'info');
-        addLog('SYNC - Force git substrate realignment', 'info');
-        addLog('RESET - Stash-based substrate pull', 'info');
+        addLog('GT_REMOTE - Patch substrate via origin sync', 'info');
         addLog('RESET_HARD - DESTRUCTIVE origin realignment', 'error');
         addLog('SOLVE - Run 250 nodal city optimization', 'info');
+        addLog('SAVE - Persist JAR state to NVM (On-device)', 'warning');
+        addLog('LOAD - Restore JAR state from NVM (On-device)', 'info');
         addLog('CALIBRATE - Stabilize nodal coherence', 'info');
-        addLog('OVERDRIVE - Toggle high-frequency compute (3.5x Hashrate)', 'warning');
+        addLog('OVERDRIVE - Toggle high-frequency compute', 'warning');
         addLog('MINER_START - Initialize liquid compute', 'info');
         addLog('MINER_STOP - Halt liquid compute', 'info');
         break;
@@ -741,7 +748,16 @@ export default function App() {
         addLog(`PHASE_OUT: ${stats.phaseOut.toFixed(2)} Φ`, 'info');
         addLog(`LINK_STATE: ${hardwareState.toUpperCase()}`, 'info');
         break;
+      case 'save':
+        sendHardwareCommand('SAVE');
+        break;
+      case 'load':
+        sendHardwareCommand('LOAD');
+        break;
       case 'sync':
+        handleGitPull(true);
+        break;
+      case 'gt_remote':
         handleGitPull(true);
         break;
       case 'reset':
