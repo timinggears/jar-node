@@ -125,8 +125,10 @@ export default function App() {
       const needsSync = isFirstSyncRef.current || carrierBias !== lastEmittedBiasRef.current || isOverdrive !== lastEmittedOverdriveRef.current;
       if (!needsSync) return;
       
-      console.log(`[JARS_CLIENT] Syncing Intent: Bias=${carrierBias}, Overdrive=${isOverdrive} (FirstSync=${isFirstSyncRef.current})`);
-      addLog(`SYSTEM: Substrate aligned to ${carrierBias} GHz`, 'info');
+      // console.log(`[JARS_CLIENT] Syncing Intent: Bias=${carrierBias}, Overdrive=${isOverdrive} (FirstSync=${isFirstSyncRef.current})`);
+      if (!isFirstSyncRef.current) {
+        addLog(`SYSTEM: Substrate realigned to ${carrierBias.toFixed(1)} GHz`, 'info');
+      }
       socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
       
       lastEmittedBiasRef.current = carrierBias;

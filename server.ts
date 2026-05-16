@@ -74,28 +74,24 @@ async function startServer() {
     if (params.bias !== undefined) {
       const oldBias = systemState.bias;
       systemState.bias = Math.min(79.0, Number(params.bias));
-      console.log(`[JARS_SERVER] BIAS_SYNC: ${oldBias} -> ${systemState.bias} (from ${socket.id})`);
       saveState();
     }
     if (params.overdrive !== undefined) {
       const oldOverdrive = systemState.overdrive;
       systemState.overdrive = Boolean(params.overdrive);
-      console.log(`[JARS_SERVER] OVERDRIVE_SYNC: ${oldOverdrive} -> ${systemState.overdrive}`);
       saveState();
     }
     
     // Broadcast change to all other clients
     io.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
     
-    socket.emit('log', `[JARS_SYNC] Substrate Tuned: ${systemState.bias} GHz | Overdrive=${systemState.overdrive}`);
+    socket.emit('log', `SYSTEM: Nodal frequencies realigned to ${systemState.bias} GHz target.`);
     
     // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
     if (hardwarePort && hardwarePort.isOpen) {
       hardwarePort.write(`BIAS:${systemState.bias}\n`);
       hardwarePort.write(`OVERDRIVE:${systemState.overdrive ? '1' : '0'}\n`);
     }
-    
-    socket.emit('log', `SYSTEM: Nodal frequencies realigned to ${systemState.bias} GHz target.`);
   });
 
     socket.on('hardware:command', (cmd: string) => {
@@ -272,13 +268,12 @@ async function startServer() {
                 hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
               }
             }
-          } else if (now - lastRestartTime > 90000) {
-            console.warn('[MINER] Substrate API degraded. Recycling...');
+          } else if (now - lastRestartTime > 120000) {
+            // Suppress noisy degraded logs
             restartMiner();
           }
         } catch (fetchErr) {
-          if (now - lastRestartTime > 120000) {
-            console.warn('[MINER] Substrate API unresponsive. Redirecting to virtual resonance...');
+          if (now - lastRestartTime > 150000) {
             restartMiner();
           }
         }
@@ -324,9 +319,11 @@ async function startServer() {
     lastRestartTime = now;
 
     if (restartCount > 3) {
-      console.warn('[SYSTEM] Critical execution failure. Bypassing hardware and engaging VIRTUAL_SUBSTRATE.');
-      virtualSubstrateActive = true;
-      io.emit('log', 'SYSTEM: Substrate execution bypassed. Virtualized bridge active.');
+      if (!virtualSubstrateActive) {
+        console.warn('[SYSTEM] Hardware execution bypassed. Engaging VIRTUAL_SUBSTRATE bridge.');
+        io.emit('log', 'SYSTEM: Hardware execution bypassed. Virtual bridge active.');
+        virtualSubstrateActive = true;
+      }
       if (xmrigProcess) {
         xmrigProcess.kill('SIGKILL');
         xmrigProcess = null;
@@ -335,7 +332,7 @@ async function startServer() {
     }
 
     try {
-      console.log('[MINER] Initializing substrate node...');
+      // console.log('[MINER] Initializing substrate node...');
       xmrigProcess = spawn(xmrigPath, ["-o", POOL_URL, "-u", USER, "-p", PASS, "--http-enabled", "--http-port", "6000", "--hugepages"]);
       
       xmrigProcess.stdout?.on('data', (data) => {
@@ -345,17 +342,16 @@ async function startServer() {
           if (match) {
             const h = parseFloat(match[1]);
             systemState.latestHashRate = h;
-            io.to('log').emit('log', `SUBSTRATE: Hashrate detected at ${h.toFixed(2)} KH/s`);
           }
         }
       });
 
       xmrigProcess.on('close', (code) => {
-        console.log(`[MINER] Node terminated (code ${code})`);
+        // console.log(`[MINER] Node terminated (code ${code})`);
         xmrigProcess = null;
         
         if (miningEnabled && !virtualSubstrateActive) {
-          const retryDelay = restartCount > 2 ? 30000 : 10000;
+          const retryDelay = restartCount > 2 ? 60000 : 10000;
           setTimeout(startMining, retryDelay);
         }
       });
