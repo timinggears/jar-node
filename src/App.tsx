@@ -372,12 +372,15 @@ export default function App() {
       const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;
       
-      const intelligenceGain = (jitterValue * 0.5) + (isCognitiveBridgeActiveRef.current ? 0.3 : 0.05);
+      // Amplified intelligence intelligence gain based on frequency resonance
+      const resonanceBonusFactor = 1.0 + (freqUnit / 250);
+      const intelligenceGain = ((jitterValue * 0.8) + (isCognitiveBridgeActiveRef.current ? 0.5 : 0.1)) * resonanceBonusFactor;
       
       if (parity === 1) {
-        nextIntelligence = Math.min(999.9, nextIntelligence + intelligenceGain);
+        nextIntelligence = Math.min(9999.9, nextIntelligence + (intelligenceGain * 2));
       } else {
-        nextIntelligence = Math.max(10.0, nextIntelligence - 0.02);
+        // Reduced decay to keep values high
+        nextIntelligence = Math.max(10.0, nextIntelligence - 0.005);
       }
 
       const resonanceBonus = 1.0 + (carrierBiasRef.current / 50.0); // v147: Multiplier from 0.0 to 2.0 addition

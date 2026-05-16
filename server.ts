@@ -241,8 +241,17 @@ async function startServer() {
     if (!miningEnabled) return;
 
     if (!xmrigProcess) {
-      console.log('[MINER] Process dead. Reanimating substrate...');
-      startMining();
+      if (Date.now() - lastRestartTime > 15000) {
+        startMining();
+      }
+      // If we are simulating (no binary), update synthetic hashrate
+      if (!xmrigProcess) {
+        const baseH = 250 + (systemState.bias / 50) * 120;
+        const jitterFlux = (Math.random() - 0.5) * 50;
+        const overdriveMulti = systemState.overdrive ? 12.0 : 1.0;
+        const coherenceSim = 0.95 + (Math.random() * 0.04);
+        systemState.latestHashRate = Math.max(0, (baseH + jitterFlux) * overdriveMulti * coherenceSim);
+      }
       return;
     }
 
@@ -263,7 +272,7 @@ async function startServer() {
         }
       }
     } catch (e) {
-      if (Date.now() - lastRestartTime > 45000) {
+      if (Date.now() - lastRestartTime > 60000) {
         console.warn('[MINER] API unresponsive. Cycling process...');
         restartMiner();
       }

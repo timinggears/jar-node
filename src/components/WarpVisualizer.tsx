@@ -216,7 +216,7 @@ export default function WarpVisualizer({
         for (let p = 0; p < pCount; p++) {
           const rx = Math.random() * width;
           const ry = Math.random() * height;
-          ctx.fillStyle = isSingularity ? (Math.random() > 0.5 ? '#ffff00' : '#ffffff') : (isTachyonic ? '#ffffff' : '#cc5500');
+          ctx.fillStyle = isSingularity ? (Math.random() > 0.5 ? '#00ffcc' : '#ffffff') : (isTachyonic ? '#ffffff' : '#cc5500');
           const pw = isSingularity ? Math.random() * 400 : (isTachyonic ? Math.random() * 200 : Math.random() * 80 + 20);
           ctx.fillRect(rx, ry, pw, isSingularity ? Math.random() * 2 : 1);
         }
@@ -279,7 +279,7 @@ export default function WarpVisualizer({
       <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
         <span className={`px-2 py-1 rounded text-[10px] border backdrop-blur-sm transition-colors ${
           (frequency) === 0 ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' :
-          (frequency/1000) >= 150 ? 'bg-yellow-500 text-black border-yellow-400 font-black animate-pulse' :
+          (frequency/1000) >= 150 ? 'bg-[#00ffcc] text-black border-[#00ffcc] font-black animate-pulse' :
           (frequency/1000) >= 100 ? 'bg-white text-black border-white' :
           (frequency/1000) >= 50 ? 'bg-[#cc5500]/20 text-[#cc5500] border-[#cc5500]/40' : 
           'bg-[#00ffcc20] text-[#00ffcc] border-[#00ffcc40]'
@@ -302,7 +302,7 @@ export default function WarpVisualizer({
       <div className="absolute w-32 h-32 rounded-full bg-gradient-to-br from-[#00ffcc15] to-transparent flex items-center justify-center pointer-events-none">
         <div className={`w-8 h-8 rounded-full shadow-[0_0_30px_#00ffcc90] transition-all duration-300 ${
           (frequency) === 0 ? 'bg-blue-900 border border-blue-400/50 shadow-[0_0_20px_#3b82f644] scale-[0.5]' :
-          (frequency/1000) >= 50 ? 'bg-yellow-400 shadow-[0_0_100px_#ffff00] scale-[5] animate-ping' :
+          (frequency/1000) >= 50 ? 'bg-[#00ffcc] shadow-[0_0_100px_#00ffcc] scale-[5] animate-ping' :
           (frequency/1000) >= 42 ? 'bg-white shadow-[0_0_60px_#fff] scale-[2.5] blur-[2px]' :
           (frequency/1000) >= 28 ? 'bg-[#cc5500] shadow-[0_0_40px_#cc5500] scale-150 animate-ping' : 
           'bg-[#00ffcc] shadow-[0_0_30px_#00ffcc90] animate-pulse'
