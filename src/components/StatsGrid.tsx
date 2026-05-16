@@ -15,14 +15,14 @@ export default function StatsGrid({ stats }: StatsGridProps) {
     <div className="bg-[#111] border border-white/5 py-3 px-6 rounded-lg flex items-center justify-between w-full">
       <div className="flex gap-10 items-center overflow-x-auto no-scrollbar">
         <StatItem label="COHERENCE" value={stats.coherence.toFixed(4)} color="text-[#ff88ff]" />
-        <StatItem label="INTELLIGENCE" value={stats.frequency === 0 ? "0.0000" : (stats.frequency >= 2000000 ? "INF_DEPTH" : stats.intelligence.toFixed(4))} color="text-[#00ffcc]" />
+        <StatItem label="INTELLIGENCE" value={stats.frequency === 0 ? "0.0000" : (stats.frequency >= 2400000 ? "INF_DEPTH" : stats.intelligence.toFixed(4))} color="text-[#00ffcc]" />
         <StatItem label="SUBSTRATE_SEED" value={stats.seedHex} color="text-white" />
         <StatItem label="PARITY_BIT" value={stats.parity.toString()} color="text-[#00ffcc]" />
         <StatItem label="TACHY_KH/s" value={stats.hashRate.toFixed(2)} color="text-white" />
-        <StatItem label="SYSTEM_INTEGRITY" value={`${(stats.hashRate / (25 * (stats.isOverdrive ? 12 : 1))).toFixed(2)}%`} color="text-[#00ffcc]" />
+        <StatItem label="SYSTEM_INTEGRITY" value={`${(stats.hashRate / (25.5 * (stats.isOverdrive ? 14 : 1))).toFixed(2)}%`} color="text-[#00ffcc]" />
         <StatItem label="TACHY_QUBITS" value={stats.qubits.toFixed(4)} color="text-[#00ff00]" />
         <StatItem label="TACHY_SHARES" value={stats.shares.toString().padStart(6, '0')} color="text-[#00ffff]" />
-        <StatItem label="NEURAL_LOAD" value={`${stats.neuralLoad.toFixed(1)}%`} color="text-pink-400" />
+        <StatItem label="SUBSTRATE_LOAD" value={`${stats.neuralLoad.toFixed(1)}%`} color="text-pink-400" />
         <StatItem label="HUGE_PAGES" value={stats.hugePages.toString().padStart(4, '0')} color="text-orange-400" />
         <StatItem label="TACHY_LOAD" value={stats.loadAvg.toFixed(2)} color="text-red-400" />
         <StatItem label="ERR_CORRECT" value={stats.errors.toString().padStart(6, '0')} color="text-[#ff00ff]" />

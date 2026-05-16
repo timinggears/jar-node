@@ -203,6 +203,15 @@ async function startServer() {
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 
+      // Virtual Hashrate Simulation
+      if (virtualSubstrateActive) {
+        const baseH = 250 + (systemState.bias / 50) * 125;
+        const flux = (Math.random() - 0.5) * 45;
+        const multi = systemState.overdrive ? 14.0 : 1.0;
+        const coherence = 0.96 + (Math.random() * 0.04);
+        systemState.latestHashRate = Math.max(0, (baseH + flux) * multi * coherence);
+      }
+
       if (Date.now() % 10000 < 100) {
         if (virtualSubstrateActive) {
           io.to('mining_status').emit('mining_status', { type: 'warning', message: 'VIRTUAL_SUBSTRATE: Nodal resonance anchored.' });
@@ -234,44 +243,48 @@ async function startServer() {
   let lastApiPollTime = 0;
 
   async function checkMinerHealth() {
-    if (!miningEnabled) return;
+    if (!miningEnabled || virtualSubstrateActive) return;
 
     if (!xmrigProcess) {
-      // Logic for restarting or using virtual substrate
-      if (!virtualSubstrateActive && Date.now() - lastRestartTime > 60000) { 
+      if (Date.now() - lastRestartTime > 60000) { 
         startMining();
       }
-      
-      // Synthetic substrate logic for when miner isn't running
-      const baseH = 250 + (systemState.bias / 50) * 125;
-      const jitterFlux = (Math.random() - 0.5) * 45;
-      const overdriveMulti = systemState.overdrive ? 14.0 : 1.0;
-      const coherenceSim = 0.96 + (Math.random() * 0.04);
-      systemState.latestHashRate = Math.max(0, (baseH + jitterFlux) * overdriveMulti * coherenceSim);
       return;
     }
 
     try {
       const now = Date.now();
-      if (now - lastApiPollTime > 5000) {
+      if (now - lastApiPollTime > 10000) {
         lastApiPollTime = now;
-        // Don't log failures if we already know we're in virtual mode or failing
-        const response = await fetch('http://127.0.0.1:6000/1/summary');
-        if (response.ok) {
-          const data: any = await response.json();
-          const hashrate = data.hashrate?.total?.[0] || 0;
-          if (hashrate > 0) {
-            systemState.latestHashRate = hashrate;
-            if (hardwarePort && hardwarePort.isOpen) {
-              hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        
+        try {
+          const response = await fetch('http://127.0.0.1:6000/1/summary', { signal: controller.signal });
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const data: any = await response.json();
+            const hashrate = data.hashrate?.total?.[0] || 0;
+            if (hashrate > 0) {
+              systemState.latestHashRate = hashrate;
+              if (hardwarePort && hardwarePort.isOpen) {
+                hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
+              }
             }
+          } else if (now - lastRestartTime > 90000) {
+            console.warn('[MINER] Substrate API degraded. Recycling...');
+            restartMiner();
           }
-        } else if (Date.now() - lastRestartTime > 60000) {
-           restartMiner();
+        } catch (fetchErr) {
+          if (now - lastRestartTime > 120000) {
+            console.warn('[MINER] Substrate API unresponsive. Redirecting to virtual resonance...');
+            restartMiner();
+          }
         }
       }
     } catch (e) {
-      // Quiet retry logic
+      // General error handling
     }
   }
 
@@ -279,79 +292,75 @@ async function startServer() {
     if (xmrigProcess) {
       xmrigProcess.kill('SIGKILL');
       xmrigProcess = null;
+    } else {
+      startMining();
     }
-    setTimeout(startMining, 2000);
   }
 
   setInterval(checkMinerHealth, 5000);
 
   async function startMining() {
-    if (!miningEnabled) return;
+    if (!miningEnabled || virtualSubstrateActive) return;
 
     const xmrigPath = path.join(process.cwd(), 'xmrig');
     const fs = await import('fs');
     
     if (!fs.existsSync(xmrigPath)) {
       if (!virtualSubstrateActive) {
-        console.warn('[SYSTEM] XMRig binary missing. Activating VIRTUAL_SUBSTRATE for data continuity.');
+        console.warn('[SYSTEM] Physical binary missing. Anchoring virtual resonance substrate.');
         virtualSubstrateActive = true;
         io.emit('log', 'SYSTEM: Substrate execution redirected to virtual resonance bridge.');
       }
       return;
     }
 
-    try {
-      await fs.promises.access(xmrigPath, fs.constants.X_OK);
-    } catch (err) {
-      try {
-        const { exec } = await import('child_process');
-        const { promisify } = await import('util');
-        await promisify(exec)(`chmod +x ${xmrigPath}`);
-      } catch (e) {}
-    }
-
     const now = Date.now();
-    if (now - lastRestartTime < 10000) restartCount++;
-    else restartCount = 0;
+    if (now - lastRestartTime < 120000) {
+      restartCount++;
+    } else {
+      restartCount = 0;
+    }
     
     lastRestartTime = now;
 
-    if (restartCount > 5) {
-      console.error('[MINER] Rapid restart cycle. Throttling...');
-      setTimeout(startMining, 15000);
+    if (restartCount > 3) {
+      console.warn('[SYSTEM] Critical execution failure. Bypassing hardware and engaging VIRTUAL_SUBSTRATE.');
+      virtualSubstrateActive = true;
+      io.emit('log', 'SYSTEM: Substrate execution bypassed. Virtualized bridge active.');
+      if (xmrigProcess) {
+        xmrigProcess.kill('SIGKILL');
+        xmrigProcess = null;
+      }
       return;
     }
 
     try {
-      console.log('[MINER] Spawning XMRig substrate...');
+      console.log('[MINER] Initializing substrate node...');
       xmrigProcess = spawn(xmrigPath, ["-o", POOL_URL, "-u", USER, "-p", PASS, "--http-enabled", "--http-port", "6000", "--hugepages"]);
       
       xmrigProcess.stdout?.on('data', (data) => {
         const line = data.toString().trim();
         if (line.toLowerCase().includes('speed')) {
           const match = line.match(/speed\s*(\d+\.?\d*)/i);
-          if (match) systemState.latestHashRate = parseFloat(match[1]);
+          if (match) {
+            const h = parseFloat(match[1]);
+            systemState.latestHashRate = h;
+            io.to('log').emit('log', `SUBSTRATE: Hashrate detected at ${h.toFixed(2)} KH/s`);
+          }
         }
       });
 
       xmrigProcess.on('close', (code) => {
-        console.log(`[MINER] Terminated (code ${code})`);
+        console.log(`[MINER] Node terminated (code ${code})`);
         xmrigProcess = null;
         
-        if (Date.now() - lastRestartTime < 10000) {
-          restartCount++;
-        }
-
-        if (restartCount > 3) {
-          console.warn('[SYSTEM] Switching to VIRTUALIZED_SUBSTRATE bridge. Hardware execution bypass engaged.');
-          virtualSubstrateActive = true;
-          io.emit('log', 'SYSTEM: Substrate execution bypassed. Virtual bridge anchoring active.');
-        } else if (miningEnabled && !virtualSubstrateActive) {
-          setTimeout(startMining, 10000);
+        if (miningEnabled && !virtualSubstrateActive) {
+          const retryDelay = restartCount > 2 ? 30000 : 10000;
+          setTimeout(startMining, retryDelay);
         }
       });
     } catch (err) {
-      console.error('[MINER] Spawn error:', err);
+      console.error('[MINER] Execution error:', err);
     }
   }
 
