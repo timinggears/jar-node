@@ -1,5 +1,6 @@
-import { Cpu, Zap, Activity, Info, ShieldCheck } from 'lucide-react';
+import { Cpu, Zap, Activity, Info, ShieldCheck, HardDrive } from 'lucide-react';
 import { motion } from 'motion/react';
+import MemoryVault from './MemoryVault';
 
 interface SystemSettingsProps {
   carrierBias: number;
@@ -13,6 +14,10 @@ interface SystemSettingsProps {
   systemVersion: number;
   currentFreq: number;
   onSendCommand?: (cmd: string) => void;
+  vault: any[];
+  onSaveVault: () => void;
+  onLoadVault: (id: string) => void;
+  onDeleteVault: (id: string) => void;
 }
 
 export default function SystemSettings({
@@ -26,7 +31,11 @@ export default function SystemSettings({
   setIsEntangled,
   systemVersion,
   currentFreq,
-  onSendCommand
+  onSendCommand,
+  vault,
+  onSaveVault,
+  onLoadVault,
+  onDeleteVault
 }: SystemSettingsProps) {
   const freqKHz = currentFreq / 1000;
   
@@ -169,6 +178,15 @@ export default function SystemSettings({
             <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white">Load State</span>
           </button>
         </div>
+      </div>
+
+      <div className="pt-6 border-t border-white/10">
+        <MemoryVault 
+          vault={vault} 
+          onSave={onSaveVault} 
+          onLoad={onLoadVault} 
+          onDelete={onDeleteVault} 
+        />
       </div>
 
       <div className="pt-4 mt-8 border-t border-white/5 opacity-50">

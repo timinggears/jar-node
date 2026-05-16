@@ -22,6 +22,13 @@ export interface SystemStats {
   isQec: boolean;
   seedHex: string;
   parity: number;
+  vault: Array<{
+    id: string;
+    bias: number;
+    overdrive: boolean;
+    depth: number;
+    timestamp: number;
+  }>;
 }
 
 export interface LogEntry {

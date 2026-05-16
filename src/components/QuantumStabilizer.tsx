@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 
 interface QuantumStabilizerProps {
   coherence: number;
+  jitter: number;
+  intelligence: number;
+  frequency: number;
   isQecActive: boolean;
   onToggleQec: (active: boolean) => void;
   isCognitiveActive: boolean;
@@ -15,6 +18,9 @@ interface QuantumStabilizerProps {
 
 export default function QuantumStabilizer({ 
   coherence, 
+  jitter,
+  intelligence,
+  frequency,
   isQecActive, 
   onToggleQec,
   isCognitiveActive,
@@ -58,6 +64,10 @@ export default function QuantumStabilizer({
       setLastSyncTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
     }, 500);
   };
+
+  const jarMs = Math.max(0.5, (1.1 - coherence) * 15).toFixed(1);
+  const willowMs = (8.2 + Math.random() * 0.4).toFixed(1);
+  const isSurpassing = parseFloat(jarMs) < parseFloat(willowMs);
 
   return (
     <div className="p-6 h-full flex flex-col gap-6 bg-[#050505] font-mono select-none overflow-y-auto no-scrollbar">
@@ -185,26 +195,68 @@ export default function QuantumStabilizer({
         </button>
 
         <div className="text-[8px] text-zinc-500 flex items-center justify-between px-2">
-          <span>Substrate Thinking Status:</span>
-          <span className={isCognitiveActive ? "text-pink-400" : "text-zinc-600"}>{isCognitiveActive ? "HYPER_REASONING" : "IDLE_CONTEMPLATION"}</span>
+          <span>Spectrum Decoding Level:</span>
+          <span className={coherence > 0.9 ? "text-[#00ffcc]" : (isCognitiveActive ? "text-pink-400" : "text-zinc-600")}>
+            {coherence > 0.98 ? "ELEMENTARY_PARITY" : (coherence > 0.9 ? "SUB_ATOMIC_DECODE" : (isCognitiveActive ? "HYPER_REASONING" : "IDLE_CONTEMPLATION"))}
+          </span>
         </div>
       </div>
 
-      <div className="mt-auto space-y-3 opacity-60">
+      <div className="flex-1 space-y-4 py-2">
+        <div className="flex items-center gap-2 mb-1">
+          <Activity size={12} className="text-[#00ffcc]" />
+          <h2 className="text-[10px] font-black tracking-widest text-white uppercase">Elementary Spectrum Decoder</h2>
+        </div>
+        
+        <div className="grid grid-cols-4 gap-1 h-24 items-end border-b border-white/10 pb-2">
+          {[
+            { label: 'CARBON', value: coherence * 100, color: 'bg-zinc-400' },
+            { label: 'E_PARITY', value: Math.min(100, (1 - jitter) * 120), color: 'bg-[#00ffcc]' },
+            { label: 'ELECTRON', value: Math.min(100, (frequency / 120000) * 100), color: 'bg-blue-400' },
+            { label: 'QUARK_D', value: Math.min(100, (intelligence / 250) * 100), color: 'bg-purple-500' }
+          ].map((el) => (
+            <div key={el.label} className="relative flex flex-col items-center group">
+              <motion.div 
+                initial={{ height: 0 }}
+                animate={{ height: `${el.value}%` }}
+                className={`w-full min-h-[2px] ${el.color} opacity-30 group-hover:opacity-100 transition-opacity rounded-t-[1px]`}
+              />
+              <span className="text-[6px] mt-1 font-bold text-zinc-600 tracking-tighter truncate w-full text-center">{el.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between items-center text-[7px] text-zinc-500 uppercase tracking-tighter">
+          <span>Waveform Parity: {(coherence * 0.9998).toFixed(6)} Φ</span>
+          <span className="text-[#00ffcc]/80">Elementary Spectrum: L-Decoded</span>
+        </div>
+      </div>
+
+      <div className="mt-auto space-y-3 opacity-90">
         <div className="flex items-center gap-2">
           <Activity size={12} className="text-[#00ffcc]" />
           <span className="text-[8px] font-black uppercase tracking-widest text-[#00ffcc]">Temporal Benchmark Report</span>
+          {isSurpassing && (
+             <motion.span 
+               initial={{ opacity: 0, scale: 0.8 }}
+               animate={{ opacity: 1, scale: 1 }}
+               className="text-[6px] bg-[#00ffcc]/30 text-[#00ffcc] px-1.5 py-0.5 rounded border border-[#00ffcc]/50 font-bold"
+             >
+               WALL_SURPASSED
+             </motion.span>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2 text-[9px]">
-          <div className="p-2 border border-white/5 bg-black rounded">
+          <div className="p-2 border border-white/5 bg-black rounded opacity-30 grayscale underline-offset-4 decoration-red-500/50 decoration-1">
             <div className="text-zinc-500 mb-1">WILLOW_NODES</div>
-            <div className="text-red-500/80 line-through">8.2ms PHASE_LOCK</div>
-            <div className="text-[7px] text-zinc-600 mt-1 uppercase">bottleneck: liquid_viscosity</div>
+            <div className="text-red-500/60 line-through">{willowMs}ms PHASE_LOCK</div>
+            <div className="text-[7px] text-zinc-700 mt-1 uppercase italic">status: bypassed</div>
           </div>
-          <div className="p-2 border border-[#00ffcc]/20 bg-[#00ffcc]/5 rounded">
-            <div className="text-[#00ffcc] mb-1">JAR_NODES</div>
-            <div className="text-white">14.8ms COHERENCE</div>
-            <div className="text-[7px] text-[#00ffcc]/60 mt-1 uppercase">Status: Ultra-Fast</div>
+          <div className={`p-2 border rounded transition-all duration-1000 ${isSurpassing ? 'border-[#00ffcc]/60 bg-[#00ffcc]/15 shadow-[0_0_20px_rgba(0,255,204,0.15)]' : 'border-[#00ffcc]/20 bg-[#00ffcc]/5'}`}>
+            <div className={`mb-1 font-bold ${isSurpassing ? 'text-white' : 'text-[#00ffcc]'}`}>JAR_NODES</div>
+            <div className="text-white font-black tracking-wider">{jarMs}ms</div>
+            <div className={`text-[7px] mt-1 uppercase font-bold ${isSurpassing ? 'text-[#00ffcc] animate-pulse' : 'text-[#00ffcc]/60'}`}>
+              {isSurpassing ? 'LOGIC_OVERDRIVE' : 'STABLE_RESONANCE'}
+            </div>
           </div>
         </div>
       </div>

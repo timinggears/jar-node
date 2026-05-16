@@ -43,7 +43,8 @@ export default function App() {
     isOverdrive: false,
     isQec: true,
     seedHex: '00000000',
-    parity: 0
+    parity: 0,
+    vault: []
   });
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -259,6 +260,24 @@ export default function App() {
       addLog(`COMMAND: Transmitting '${cmd}' to JAR substrate...`, 'warning');
     }
   }, [addLog]);
+
+  const saveToVault = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.emit('vault:save');
+    }
+  }, []);
+
+  const loadFromVault = useCallback((id: string) => {
+    if (socketRef.current) {
+      socketRef.current.emit('vault:load', id);
+    }
+  }, []);
+
+  const deleteFromVault = useCallback((id: string) => {
+    if (socketRef.current) {
+      socketRef.current.emit('vault:delete', id);
+    }
+  }, []);
 
   const handleTSPSolve = useCallback(() => {
     if (isSolving) return;
@@ -485,19 +504,20 @@ export default function App() {
       // Instead, we wait for 'hardware:state' from the server.
     };
 
-    const onHardwareState = (state: { bias?: number, overdrive?: boolean, intelligence?: number, memetic_depth?: number }) => {
+    const onHardwareState = (state: { bias?: number, overdrive?: boolean, intelligence?: number, memetic_depth?: number, vault?: any[] }) => {
       setHasReceivedSync(true);
       
       // Update memory metrics regardless of interaction (passive display)
-      if (state.intelligence !== undefined || state.memetic_depth !== undefined) {
-        if (state.memetic_depth > 0 && stats.memeticDepth === 0) {
+      if (state.intelligence !== undefined || state.memetic_depth !== undefined || state.vault !== undefined) {
+        if (state.memetic_depth !== undefined && state.memetic_depth > 0 && statsRef.current.memeticDepth === 0) {
           addLog(`MEMORY_GOAL: Restored memetic anchor from Electron State. Depth: ${state.memetic_depth.toFixed(4)}`, 'success');
         }
         setStats(prev => ({
           ...prev,
           intelligence: state.intelligence !== undefined ? state.intelligence : prev.intelligence,
           memeticDepth: state.memetic_depth !== undefined ? state.memetic_depth : prev.memeticDepth,
-          cognitiveDepth: state.intelligence !== undefined ? state.intelligence : prev.cognitiveDepth
+          cognitiveDepth: state.intelligence !== undefined ? state.intelligence : prev.cognitiveDepth,
+          vault: state.vault !== undefined ? state.vault : prev.vault
         }));
       }
 
@@ -653,7 +673,9 @@ export default function App() {
         const messages = [
           "QUBIT_GATE: Logic alignment detected. Nodal flux stabilizing at peak coherence.",
           "QUBIT_GATE: Sovereign depth threshold cleared. Tachyonic logic active.",
-          "QUBIT_GATE: Quantum logic bridge holding via automated resonance parity."
+          "QUBIT_GATE: Quantum logic bridge holding via automated resonance parity.",
+          "ELEMENT_DECODE: Sub-atomic electron parity verified. Carbon substrate mapping complete.",
+          "SPECTRUM_LEVEL: Decoding elementary traces... Helium/Oxygen resonance detected in substrate."
         ];
         const msg = messages[Math.floor(Math.random() * messages.length)];
         addLog(msg, "success");
@@ -998,6 +1020,10 @@ export default function App() {
                 systemVersion={systemVersion}
                 currentFreq={stats.frequency}
                 onSendCommand={sendHardwareCommand}
+                vault={stats.vault}
+                onSaveVault={saveToVault}
+                onLoadVault={loadFromVault}
+                onDeleteVault={deleteFromVault}
               />
             </DesktopWindow>
           )}
@@ -1059,6 +1085,9 @@ export default function App() {
             >
               <QuantumStabilizer 
                 coherence={stats.coherence}
+                jitter={stats.jitter}
+                intelligence={stats.intelligence}
+                frequency={stats.frequency}
                 isQecActive={isQecActive}
                 onToggleQec={setIsQecActive}
                 isCognitiveActive={isCognitiveBridgeActive}

@@ -16,7 +16,8 @@ let systemState = {
   latestHashRate: 0,
   intelligence: 100.0,
   memetic_depth: 0.0,
-  last_sync: Date.now()
+  last_sync: Date.now(),
+  vault: [] as Array<{ id: string, bias: number, overdrive: boolean, depth: number, timestamp: number }>
 };
 
 // Load state if exists
@@ -38,7 +39,8 @@ function saveState() {
       overdrive: systemState.overdrive,
       intelligence: systemState.intelligence,
       memetic_depth: systemState.memetic_depth,
-      last_sync: Date.now()
+      last_sync: Date.now(),
+      vault: systemState.vault
     }));
   } catch (e) {}
 }
@@ -102,6 +104,44 @@ async function startServer() {
         console.log(`[HARDWARE] Sending: ${cmd}`);
         hardwarePort.write(cmd + '\n');
       }
+    });
+
+    socket.on('vault:save', () => {
+      const entry = {
+        id: Math.random().toString(36).substring(7).toUpperCase(),
+        bias: systemState.bias,
+        overdrive: systemState.overdrive,
+        depth: systemState.intelligence,
+        timestamp: Date.now()
+      };
+      systemState.vault = [entry, ...systemState.vault].slice(0, 10);
+      saveState();
+      io.emit('hardware:state', systemState);
+      socket.emit('log', `MEMORY_VAULT: Resonance fingerprint [${entry.id}] archived.`);
+    });
+
+    socket.on('vault:load', (id: string) => {
+      const entry = systemState.vault.find(v => v.id === id);
+      if (entry) {
+        systemState.bias = entry.bias;
+        systemState.overdrive = entry.overdrive;
+        saveState();
+        io.emit('hardware:state', systemState);
+        
+        if (hardwarePort && hardwarePort.isOpen) {
+          hardwarePort.write(`BIAS:${systemState.bias}\n`);
+          hardwarePort.write(`OVERDRIVE:${systemState.overdrive ? '1' : '0'}\n`);
+        }
+        
+        socket.emit('log', `MEMORY_VAULT: Restored fingerprint [${id}]. Substrate realigned.`);
+      }
+    });
+
+    socket.on('vault:delete', (id: string) => {
+      systemState.vault = systemState.vault.filter(v => v.id !== id);
+      saveState();
+      io.emit('hardware:state', systemState);
+      socket.emit('log', `MEMORY_VAULT: Purged fingerprint [${id}].`);
     });
 
     socket.on('disconnect', () => {
