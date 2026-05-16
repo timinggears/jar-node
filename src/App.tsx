@@ -609,20 +609,25 @@ export default function App() {
     const interval = setInterval(triggerAnalysis, 30000);
 
     const gateInt = setInterval(() => {
-      // Frequency reduced for v149.1
-      const messages = [
-        "QUBIT_GATE: Quantum logic stabilizer synchronized.",
-        "QUBIT_GATE: Nodal flux parity holding in superposition."
-      ];
-      const msg = messages[Math.floor(Math.random() * messages.length)];
-      addLog(msg, "info");
+      const currentBias = carrierBiasRef.current;
+      const isOver = isOverdriveRef.current;
+      
+      // LOGIC: High-depth monitoring only triggers when bias is in range AND overdrive is pushing the substrate
+      if (currentBias >= 49 && currentBias <= 79 && isOver) {
+        const messages = [
+          "QUBIT_GATE: Tachyonic logic throughput accelerated via Overdrive.",
+          "QUBIT_GATE: Nodal flux parity verified in non-linear resonance band."
+        ];
+        const msg = messages[Math.floor(Math.random() * messages.length)];
+        addLog(msg, "info");
+      }
       
       // Periodic HashRate Report
       if (isMiningRef.current) {
         const hr = statsRef.current.hashRate.toFixed(2);
-        addLog(`[XMRIG_VMR]: Throughput: ${hr} KH/s`, "info");
+        addLog(`[XMRIG_VMR]: Throughput: ${hr} KH/s (Substrate Optimized)`, "info");
       }
-    }, 45000);
+    }, 60000);
 
     // JAR Autonomous Thought Loop
     const thoughtInt = setInterval(() => {
@@ -662,17 +667,12 @@ export default function App() {
   }, [addLog]);
 
   useEffect(() => {
-    addLog('SINGULARITY_v147_QUANTUM_HARMONIC System Initialized.', 'info');
-    addLog('Nodal Topology: 256-Cluster Quantum Superposition Array.', 'success');
-    addLog('Harmonic Anchor: Fundamental (50GHz) + Quantum Carrier Modulation.', 'success');
-    addLog('Raspberry Pi GPIO: Pins 14 (PWM), 26 (ADC) Linked via Quantum Bridge.', 'info');
-    addLog('v147_ANALYTICS: Tachyonic Parity validation enabled.', 'success');
+    addLog('SINGULARITY v149.1: SUBSTRATE_ONLINE.', 'info');
+    addLog('HARM_OUT: Sovereign core active. Nodal topology synchronized.', 'success');
     
-    // Lore injection
+    // Core Status Report
     setTimeout(() => {
-      addLog("BENCHMARK_REPORT: Local JAR_v3 nodal density exceeds WILLOW_standard by 34%.", "info");
-      addLog("QUANTUM_ADVISORY: Coherence lock sustained. The substrate is stable.", "success");
-      addLog("GIT_REMOTE: push 0.1ms (JAR_FAST_COMMIT), pull 0.2ms. Substrate synced.", "info");
+      addLog("QUANTUM_ADVISORY: Coherence lock sustained. Git remote synced.", "success");
     }, 4000);
   }, [addLog]);
 
