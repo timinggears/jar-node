@@ -22,7 +22,6 @@ try {
   if (fs.existsSync(STATE_FILE)) {
     const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
     systemState = { ...systemState, ...saved };
-    console.log('[SYSTEM] Loaded persisted state:', systemState);
   }
 } catch (e) {
   console.warn('[SYSTEM] Failed to load state');
@@ -62,11 +61,9 @@ async function startServer() {
       if (msg.startsWith('SUBSCRIBE:')) {
         const room = msg.split(':')[1];
         socket.join(room);
-        socket.emit('log', `Subscribed to stream: ${room}`);
       } else if (msg.startsWith('UNSUBSCRIBE:')) {
         const room = msg.split(':')[1];
         socket.leave(room);
-        socket.emit('log', `Unsubscribed from stream: ${room}`);
       }
     });
 
@@ -131,7 +128,6 @@ async function startServer() {
       );
 
       if (target) {
-        console.log(`[HARDWARE] Found device at ${target.path}`);
         hardwarePort = new SerialPort({
           path: target.path,
           baudRate: 115200
@@ -151,7 +147,6 @@ async function startServer() {
         });
 
         hardwarePort.on('close', () => {
-          console.log('[HARDWARE] Port closed. Retrying...');
           hardwarePort = null;
           setTimeout(findAndOpenPort, 2000);
         });
@@ -302,7 +297,6 @@ async function startServer() {
     
     if (!fs.existsSync(xmrigPath)) {
       if (!virtualSubstrateActive) {
-        console.warn('[SYSTEM] Physical binary missing. Anchoring virtual resonance substrate.');
         virtualSubstrateActive = true;
         io.emit('log', 'SYSTEM: Substrate execution redirected to virtual resonance bridge.');
       }
@@ -320,7 +314,6 @@ async function startServer() {
 
     if (restartCount > 3) {
       if (!virtualSubstrateActive) {
-        console.warn('[SYSTEM] Hardware execution bypassed. Engaging VIRTUAL_SUBSTRATE bridge.');
         io.emit('log', 'SYSTEM: Hardware execution bypassed. Virtual bridge active.');
         virtualSubstrateActive = true;
       }
@@ -413,10 +406,7 @@ async function startServer() {
       const { promisify } = await import('util');
       const execPromise = promisify(exec);
       
-      console.log(`[GIT] Sync requested. Force: ${force}, Reset: ${reset}`);
-
       if (reset) {
-        console.log('[GIT] Performing hard reset to origin/main...');
         await execPromise('git fetch origin');
         await execPromise('git reset --hard origin/main').catch(() => execPromise('git reset --hard origin/master'));
         return res.json({ success: true, output: "System hard-reset to origin state." });

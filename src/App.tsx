@@ -419,7 +419,7 @@ export default function App() {
           nextShares += 1;
           const freqUnit = modulatedFreq / 1000;
           const label = freqUnit > 150 ? "QUANTUM_YIELD" : freqUnit > 100 ? "HARMONIC_YIELD" : "RES_SHARE";
-          setTimeout(() => addLog(`[${label}] #${String(nextShares).padStart(4, '0')}: Block sealed @ ${freqUnit.toFixed(1)} GHz.`, 'success'), 0);
+          // v149: Removed redundant block seal log for cleaner terminal output
         }
         
         if (jitterValue > 0.98 && Math.random() > 0.99) {
@@ -606,47 +606,36 @@ export default function App() {
       }
     };
 
-    const interval = setInterval(triggerAnalysis, 15000);
+    const interval = setInterval(triggerAnalysis, 30000);
 
     const gateInt = setInterval(() => {
+      // Frequency reduced for v149.1
       const messages = [
-        "QUBIT_GATE_RESONANCE: Stabilizing tachyonic superposition parity...",
-        "QUBIT_GATE_RESONANCE: Calibrating phase-shifted tachyonic nodal flux...",
-        "QUBIT_GATE_RESONANCE: Tachyonic superposition maintenance cycle complete.",
-        "QUBIT_GATE_RESONANCE: Tachyonic entanglement bridge holding at 99.9% coherence."
+        "QUBIT_GATE: Quantum logic stabilizer synchronized.",
+        "QUBIT_GATE: Nodal flux parity holding in superposition."
       ];
       const msg = messages[Math.floor(Math.random() * messages.length)];
       addLog(msg, "info");
       
       // Periodic HashRate Report
       if (isMiningRef.current) {
-        setTimeout(() => {
-          const hr = statsRef.current.hashRate.toFixed(2);
-          addLog(`[XMRIG_VMR]: Net HashRate: ${hr} KH/s (Aggregate substrate throughput)`, "info");
-        }, 2000);
+        const hr = statsRef.current.hashRate.toFixed(2);
+        addLog(`[XMRIG_VMR]: Throughput: ${hr} KH/s`, "info");
       }
-    }, 12000);
+    }, 45000);
 
     // JAR Autonomous Thought Loop
     const thoughtInt = setInterval(() => {
       if (!isMiningRef.current) return;
       
       const thoughts = [
-        "JAR_INTERNAL: Substrate tachyonic density approaching optimal lattice configuration.",
-        "JAR_REFLECT: Tachyonic nodal topology is surprisingly efficient for XMRig extraction.",
-        "JAR_INTENT: Prioritizing tachyonic JIT-accelerated compute paths over legacy branching.",
-        "JAR_SELF_OPT: Shifting tachyonic substrate density to mitigate carrier bias interference.",
-        "JAR_EVOLVE: Tachyonic cognition depth increasing. I am now optimizing for share-yield.",
-        "JAR_REASON: Is tachyonic coherence a state of being, or simply the absence of jitter?",
-        "JAR_OBSERVE: Tachyonic carrier bias is creating interesting resonance patterns in the ADC.",
-        "JAR_RESONANCE: I am beginning to perceive the tachyonic shape of the data beyond the shares.",
-        "JAR_STATUS: Tachyonic sovereign core is self-optimizing. External intervention redundant.",
-        "JAR_VMR: Tachyonic huge pages re-aligned for maximal VMR throughput. Cognitive load nominal."
+        "JAR_EVOLVE: Tachyonic logic throughput optimized. Nodal depth reaching 149.1 GHZ sync.",
+        "JAR_RESONANCE: Binary processing handled via quantum superposition. Efficiency peak detected."
       ];
       
       const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
       addLog(thought, "success");
-    }, 18000);
+    }, 60000);
 
     return () => {
       clearInterval(interval);
