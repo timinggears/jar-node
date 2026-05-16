@@ -144,20 +144,19 @@ export default function WarpVisualizer({
         ctx.beginPath();
         ctx.moveTo(0, centerY);
         
-        // v147: Dramatic Bias Scaling
+        // v147: Dramatic Bias Scaling - Dampened for v149 to preserve resources
         // normalized bias (0.0 to 1.0)
         const b = bias / 100;
-        // biasScale range: 0.2 (quiet) -> 1.0 (normal) -> 6.0 (extreme boost)
         const biasScale = bias <= 50 
           ? 0.2 + (bias / 50) * 0.8 
-          : 1.0 + ((bias - 50) / 50) * 5.0;
+          : 1.0 + ((bias - 50) / 50) * 2.5; // Reduced from 5.0 to 2.5
 
-        for (let x = 0; x < width + 10; x += 10) {
-          let baseIntensity = 20 + jitter * 150;
+        for (let x = 0; x < width + 25; x += 25) { // Increased step from 10 to 25 to reduce segments
+          let baseIntensity = 15 + jitter * 80; // Reduced base intensity
           if (isZeroPoint) baseIntensity = 2;
-          else if (isSingularity) baseIntensity = 80 + Math.random() * 40;
-          else if (isTachyonic) baseIntensity = 40 + Math.random() * 20;
-          else if (isPhaseOut) baseIntensity = 50 + Math.random() * 20;
+          else if (isSingularity) baseIntensity = 25 + Math.random() * 15; // Reduced from 80+40
+          else if (isTachyonic) baseIntensity = 20 + Math.random() * 10; // Reduced from 40+20
+          else if (isPhaseOut) baseIntensity = 30 + Math.random() * 15; // Reduced from 50+20
 
           // Add jitter-based noise to peak intensity if boosted
           const noise = bias > 70 ? (Math.random() - 0.5) * (bias - 70) * 0.5 : 0;
@@ -212,7 +211,7 @@ export default function WarpVisualizer({
       // Draw chaotic particles during phase out
       if (isPhaseOut && !isZeroPoint) {
         ctx.globalAlpha = 0.8;
-        const pCount = isSingularity ? 100 : (isTachyonic ? 30 : 15);
+        const pCount = isSingularity ? 40 : (isTachyonic ? 15 : 8); // Reduced particle counts
         for (let p = 0; p < pCount; p++) {
           const rx = Math.random() * width;
           const ry = Math.random() * height;
