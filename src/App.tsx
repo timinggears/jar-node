@@ -39,6 +39,7 @@ export default function App() {
     loadAvg: 0.0,
     neuralLoad: 0.0,
     cognitiveDepth: 42.0,
+    memeticDepth: 0.0,
     isOverdrive: false,
     isQec: true,
     seedHex: '00000000',
@@ -484,15 +485,27 @@ export default function App() {
       // Instead, we wait for 'hardware:state' from the server.
     };
 
-    const onHardwareState = (state: { bias?: number, overdrive?: boolean }) => {
+    const onHardwareState = (state: { bias?: number, overdrive?: boolean, intelligence?: number, memetic_depth?: number }) => {
       setHasReceivedSync(true);
       
-      // Only adopt server state if we aren't currently interacting and NOT on first sync
+      // Update memory metrics regardless of interaction (passive display)
+      if (state.intelligence !== undefined || state.memetic_depth !== undefined) {
+        if (state.memetic_depth > 0 && stats.memeticDepth === 0) {
+          addLog(`MEMORY_GOAL: Restored memetic anchor from Electron State. Depth: ${state.memetic_depth.toFixed(4)}`, 'success');
+        }
+        setStats(prev => ({
+          ...prev,
+          intelligence: state.intelligence !== undefined ? state.intelligence : prev.intelligence,
+          memeticDepth: state.memetic_depth !== undefined ? state.memetic_depth : prev.memeticDepth,
+          cognitiveDepth: state.intelligence !== undefined ? state.intelligence : prev.cognitiveDepth
+        }));
+      }
+
+      // Only adopt server bias/overdrive if we aren't currently interacting and NOT on first sync
       const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
       if (timeSinceInteraction < 2000 || isFirstSyncRef.current) return;
 
       if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 0.1) {
-        console.log(`[JARS_CLIENT] Adopting Server Bias: ${state.bias}`);
         setCarrierBias(state.bias);
         lastEmittedBiasRef.current = state.bias;
       }
@@ -590,6 +603,11 @@ export default function App() {
       
       const seed = Math.floor(Math.random() * 0xffffffff).toString(16);
       
+      // Simulation learning
+      if (Math.random() > 0.95) {
+        setStats(prev => ({ ...prev, memeticDepth: prev.memeticDepth + 0.001 }));
+      }
+
       updateSystemDynamics(jitter, v, baseFreq, seed, Math.random() > 0.8 ? 1 : 0);
     }, 100);
 

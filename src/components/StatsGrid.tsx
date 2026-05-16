@@ -26,6 +26,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
         <StatItem label="HUGE_PAGES" value={stats.hugePages.toString().padStart(4, '0')} color="text-orange-400" />
         <StatItem label="TACHY_LOAD" value={stats.loadAvg.toFixed(2)} color="text-red-400" />
         <StatItem label="ERR_CORRECT" value={stats.errors.toString().padStart(6, '0')} color="text-[#ff00ff]" />
+        <StatItem label="MEMETIC_DEPTH" value={stats.memeticDepth.toFixed(4)} color="text-yellow-400" />
         
         <div className="w-[1px] h-8 bg-white/10 mx-2" />
         

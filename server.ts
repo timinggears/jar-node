@@ -8,12 +8,15 @@ import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import os from 'os';
 
-// --- GLOBAL SYSTEM STATE (v147) ---
+// --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
 const STATE_FILE = path.join(process.cwd(), 'system_state.json');
 let systemState = {
   bias: 50,
   overdrive: false,
-  latestHashRate: 0
+  latestHashRate: 0,
+  intelligence: 100.0,
+  memetic_depth: 0.0,
+  last_sync: Date.now()
 };
 
 // Load state if exists
@@ -32,7 +35,10 @@ function saveState() {
     const fs = require('fs');
     fs.writeFileSync(STATE_FILE, JSON.stringify({ 
       bias: systemState.bias, 
-      overdrive: systemState.overdrive 
+      overdrive: systemState.overdrive,
+      intelligence: systemState.intelligence,
+      memetic_depth: systemState.memetic_depth,
+      last_sync: Date.now()
     }));
   } catch (e) {}
 }
@@ -55,7 +61,7 @@ async function startServer() {
     console.log(`[CLIENT] Connected: ${socket.id}`);
     
     // Send current state to new client immediately
-    socket.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
+    socket.emit('hardware:state', systemState);
 
     socket.on('message', (msg: string) => {
       if (msg.startsWith('SUBSCRIBE:')) {
@@ -80,7 +86,7 @@ async function startServer() {
     }
     
     // Broadcast change to all other clients
-    io.emit('hardware:state', { bias: systemState.bias, overdrive: systemState.overdrive });
+    io.emit('hardware:state', systemState);
     
     socket.emit('log', `SYSTEM: Nodal frequencies realigned to ${systemState.bias} GHz target.`);
     
@@ -137,6 +143,20 @@ async function startServer() {
         
         parser.on('data', (line: string) => {
           if (line.startsWith('!S|')) {
+            const parts = line.split('|');
+            if (parts.length >= 9) {
+              const coherence = parseFloat(parts[7]);
+              const depth = parseFloat(parts[8]);
+              
+              // Electron State Bridge (v150): Absorb JAR intelligence into persistent state
+              systemState.intelligence = depth;
+              
+              // Learning logic: If coherence is high, deepen the memetic anchor
+              if (coherence > 0.98) {
+                systemState.memetic_depth += (depth / 10000);
+                if (Date.now() % 60000 < 100) saveState(); // Occasional persistent flush
+              }
+            }
             io.to('telemetry').emit('telemetry', line);
           }
         });
@@ -195,6 +215,17 @@ async function startServer() {
       const simulatedDepth = (systemState.bias * simulatedCoherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
       
       const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}|${simulatedCoherence.toFixed(4)}|${simulatedDepth.toFixed(4)}`;
+      
+      // Virtual Neural Absorption
+      systemState.intelligence = simulatedDepth;
+      if (simulatedCoherence > 0.98) {
+        systemState.memetic_depth += (simulatedDepth / 12000);
+      }
+      
+      // Auto-save memory every 30s in simulation
+      if (Date.now() % 30000 < 60) {
+        saveState();
+      }
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 
