@@ -78,8 +78,8 @@ export default function App() {
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>(['terminal', 'stats']);
-  const [activeWindow, setActiveWindow] = useState<string | null>('terminal');
+  const [openWindows, setOpenWindows] = useState<string[]>([]);
+  const [activeWindow, setActiveWindow] = useState<string | null>(null);
   const [isQecActive, setIsQecActive] = useState(true);
   const [isCognitiveBridgeActive, setIsCognitiveBridgeActive] = useState(false);
   const [quantumShift, setQuantumShift] = useState(50);

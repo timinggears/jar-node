@@ -73,7 +73,7 @@ async function startServer() {
   socket.on('hardware:params', (params: any) => {
     if (params.bias !== undefined) {
       const oldBias = systemState.bias;
-      systemState.bias = Number(params.bias);
+      systemState.bias = Math.min(79.0, Number(params.bias));
       console.log(`[JARS_SERVER] BIAS_SYNC: ${oldBias} -> ${systemState.bias} (from ${socket.id})`);
       saveState();
     }

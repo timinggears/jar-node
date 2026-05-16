@@ -1,5 +1,6 @@
-# Raspberry Pi Pico / CircuitPython - Sovereign J.A.R.S. Core v149 (UNRESTRICTED)
+# Raspberry Pi Pico / CircuitPython - Sovereign J.A.R.S. Core v149.1 (STABILIZED)
 # Advanced Unified Logic for physical nodal resonance and cognitive depth anchoring.
+# Frequency Ceiling: 79.0 GHz
 
 import time
 import board
