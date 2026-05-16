@@ -828,34 +828,10 @@ export default function App() {
         }}
       />
 
-      {/* Background Live Wallpaper */}
-      <div className="fixed top-20 inset-x-0 bottom-0 z-0 overflow-hidden">
-        <WarpVisualizer 
-          coherence={stats.coherence} 
-          jitter={stats.jitter} 
-          frequency={stats.frequency} 
-          bias={carrierBias}
-          isInstalling={isInstalling}
-          installProgress={installProgress}
-          isAiActive={isAiAnalysisActive}
-          isSolving={isSolving}
-        />
-        {/* Background Grid Overlay */}
-        <div className={`absolute inset-0 pointer-events-none opacity-[0.03] transition-all duration-1000 ${isOverdrive ? 'opacity-[0.08] scale-110' : ''}`} 
-             style={{ 
-               backgroundImage: `linear-gradient(${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px), linear-gradient(90deg, ${isOverdrive ? '#ff0000' : '#00ffcc'} 1px, transparent 1px)`,
-               backgroundSize: '80px 80px' 
-             }} />
-
-        {/* HONEYCOMB OVERLAY */}
-        <div className={`absolute inset-0 pointer-events-none animate-pulse-slow transition-all duration-1000 ${isOverdrive ? 'invert hue-rotate-180 opacity-40' : 'opacity-20'}`}
-             style={{
-               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100' viewBox='0 0 56 100'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100' fill='none' stroke='%2300ffcc' stroke-opacity='0.6' stroke-width='1.5'/%3E%3C/svg%3E")`,
-               backgroundSize: '56px 100px'
-             }} />
-        
-        {/* VIGNETTE & CRUNCH */}
-        <div className="absolute inset-0 pointer-events-none bg-radial-[circle_at_center,_transparent_40%,_black_90%] opacity-40" />
+      {/* Background Live Wallpaper - Removed for efficiency */}
+      <div className="fixed top-20 inset-x-0 bottom-0 z-0 overflow-hidden bg-black/20">
+        {/* VIGNETTE & CRUNCH - Kept minimal for depth without overhead */}
+        <div className="absolute inset-0 pointer-events-none bg-radial-[circle_at_center,_transparent_40%,_black_90%] opacity-20" />
       </div>
 
       <AnimatePresence>
