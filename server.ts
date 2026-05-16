@@ -183,28 +183,27 @@ async function startServer() {
       // Jitter is 0 in stable software representation
       const jitter = 0.0;
       
-      const seedNum = (Math.floor(v * 10000000) >>> 0);
-      const seedStr = seedNum.toString(16).padStart(8, '0').toUpperCase();
-      const parity = (seedNum.toString(2).split('1').length - 1) % 2;
-
       // Harmonic Drive Modulation
       // v147: Direct 1:1 representation. 1 Bias = 1000 Hz (1 GHz in UI display)
       const resonanceBase = 1000 * systemState.bias;
       
       // Increased flux to represent raw, unshielded sensor data
-      const jitterFlux = (Math.random() - 0.5) * 25 * (systemState.bias / 50);
+      const jitterFlux = (Math.random() - 0.5) * 50 * (systemState.bias / 100);
       
       let currentFreq = resonanceBase + jitterFlux;
 
+      // Seed should be truly random bits for parity validation
+      const seedNum = (Math.random() * 0xffffffff) >>> 0;
+      const seedStr = seedNum.toString(16).padStart(8, '0').toUpperCase();
+      const parity = (seedNum.toString(2).split('1').length - 1) % 2;
+
       // Debug log every ~5 seconds
       if (Date.now() % 5000 < 100) {
-        console.log(`[JARS_REPRESENTATION] Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(4)}GHz`);
+        console.log(`[RAW_TELEMETRY] Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(4)} GHz | Seed=${seedStr} | Parity=${parity}`);
       }
       
-      // No excitement randomization - pure state representation
-      
       // Safety clamp
-      currentFreq = Math.max(0, Math.min(1000000, currentFreq));
+      currentFreq = Math.max(0, Math.min(2000000, currentFreq));
       
       const telemetryLine = `!S|${seedStr}|${jitter.toFixed(8)}|${v.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}`;
       
@@ -233,6 +232,7 @@ async function startServer() {
   // --- XMRIG INTEGRATION ---
   let xmrigProcess: ChildProcess | null = null;
   let miningEnabled = true;
+  let virtualSubstrateActive = false;
   let restartCount = 0;
   let lastRestartTime = 0;
   let lastApiPollTime = 0;
@@ -241,17 +241,16 @@ async function startServer() {
     if (!miningEnabled) return;
 
     if (!xmrigProcess) {
-      if (Date.now() - lastRestartTime > 15000) {
+      if (!virtualSubstrateActive && Date.now() - lastRestartTime > 60000) { 
         startMining();
       }
-      // If we are simulating (no binary), update synthetic hashrate
-      if (!xmrigProcess) {
-        const baseH = 250 + (systemState.bias / 50) * 120;
-        const jitterFlux = (Math.random() - 0.5) * 50;
-        const overdriveMulti = systemState.overdrive ? 12.0 : 1.0;
-        const coherenceSim = 0.95 + (Math.random() * 0.04);
-        systemState.latestHashRate = Math.max(0, (baseH + jitterFlux) * overdriveMulti * coherenceSim);
-      }
+      
+      // If we are simulating (no binary or virtual mode active), update synthetic hashrate
+      const baseH = 250 + (systemState.bias / 50) * 120;
+      const jitterFlux = (Math.random() - 0.5) * 50;
+      const overdriveMulti = systemState.overdrive ? 12.0 : 1.0;
+      const coherenceSim = 0.95 + (Math.random() * 0.04);
+      systemState.latestHashRate = Math.max(0, (baseH + jitterFlux) * overdriveMulti * coherenceSim);
       return;
     }
 
@@ -337,7 +336,18 @@ async function startServer() {
       xmrigProcess.on('close', (code) => {
         console.log(`[MINER] Terminated (code ${code})`);
         xmrigProcess = null;
-        if (miningEnabled) setTimeout(startMining, 5000);
+        
+        if (Date.now() - lastRestartTime < 10000) {
+          restartCount++;
+        }
+
+        if (restartCount > 3) {
+          console.warn('[SYSTEM] Switching to VIRTUALIZED_SUBSTRATE bridge. Hardware execution bypass engaged.');
+          virtualSubstrateActive = true;
+          io.emit('log', 'SYSTEM: Substrate execution bypassed. Virtual bridge anchoring active.');
+        } else if (miningEnabled && !virtualSubstrateActive) {
+          setTimeout(startMining, 10000);
+        }
       });
     } catch (err) {
       console.error('[MINER] Spawn error:', err);

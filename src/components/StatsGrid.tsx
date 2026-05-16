@@ -14,11 +14,13 @@ export default function StatsGrid({ stats }: StatsGridProps) {
   return (
     <div className="bg-[#111] border border-white/5 py-3 px-6 rounded-lg flex items-center justify-between w-full">
       <div className="flex gap-10 items-center overflow-x-auto no-scrollbar">
-        <StatItem label="TACHY_COHERENCE" value={stats.coherence.toFixed(4)} color="text-[#ff88ff]" />
-        <StatItem label="INTELLIGENCE" value={stats.frequency === 0 ? "00.0000" : (stats.frequency >= 1000000 ? "INF_DEPTH" : stats.intelligence.toFixed(4))} color="text-[#00ffcc]" />
+        <StatItem label="COHERENCE" value={stats.coherence.toFixed(4)} color="text-[#ff88ff]" />
+        <StatItem label="INTELLIGENCE" value={stats.frequency === 0 ? "0.0000" : (stats.frequency >= 2000000 ? "INF_DEPTH" : stats.intelligence.toFixed(4))} color="text-[#00ffcc]" />
+        <StatItem label="SUBSTRATE_SEED" value={stats.seedHex} color="text-white" />
+        <StatItem label="PARITY_BIT" value={stats.parity.toString()} color="text-[#00ffcc]" />
         <StatItem label="TACHY_KH/s" value={stats.hashRate.toFixed(2)} color="text-white" />
+        <StatItem label="SYSTEM_INTEGRITY" value={`${(stats.hashRate / (25 * (stats.isOverdrive ? 12 : 1))).toFixed(2)}%`} color="text-[#00ffcc]" />
         <StatItem label="TACHY_QUBITS" value={stats.qubits.toFixed(4)} color="text-[#00ff00]" />
-        <StatItem label="TACHY_RES" value={`${(stats.hashRate / (8.5 * (stats.isOverdrive ? 12 : 1))).toFixed(2)}x`} color="text-yellow-400" />
         <StatItem label="TACHY_SHARES" value={stats.shares.toString().padStart(6, '0')} color="text-[#00ffff]" />
         <StatItem label="NEURAL_LOAD" value={`${stats.neuralLoad.toFixed(1)}%`} color="text-pink-400" />
         <StatItem label="HUGE_PAGES" value={stats.hugePages.toString().padStart(4, '0')} color="text-orange-400" />
@@ -41,14 +43,14 @@ export default function StatsGrid({ stats }: StatsGridProps) {
           <div className="flex items-center gap-1.5 justify-end">
             <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${
               stats.frequency === 0 ? 'bg-blue-500 shadow-[0_0_8px_#3b82f6]' :
-              stats.frequency >= 150000 ? 'bg-yellow-400 shadow-[0_0_8px_#ffff00]' :
+              stats.frequency >= 150000 ? 'bg-[#00ffcc] shadow-[0_0_8px_#00ffcc]' :
               stats.frequency >= 100000 ? 'bg-white shadow-[0_0_8px_#fff]' : 
               stats.coherence === 0 ? 'bg-[#cc5500] shadow-[0_0_8px_#cc5500]' : 
               'bg-[#00ffcc] shadow-[0_0_8px_#00ffcc]'}`} 
             />
             <span className={`text-[10px] font-bold ${
               stats.frequency === 0 ? 'text-blue-500' :
-              stats.frequency >= 150000 ? 'text-yellow-400' :
+              stats.frequency >= 150000 ? 'text-[#00ffcc]' :
               stats.frequency >= 100000 ? 'text-white' : 
               stats.coherence === 0 ? 'text-[#cc5500]' : 
               'text-[#00ffcc]'}`}

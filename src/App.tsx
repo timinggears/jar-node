@@ -40,7 +40,9 @@ export default function App() {
     neuralLoad: 0.0,
     cognitiveDepth: 42.0,
     isOverdrive: false,
-    isQec: true
+    isQec: true,
+    seedHex: '00000000',
+    parity: 0
   });
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -372,27 +374,26 @@ export default function App() {
       const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;
       
-      // Amplified intelligence intelligence gain based on frequency resonance
-      const resonanceBonusFactor = 1.0 + (freqUnit / 250);
-      const intelligenceGain = ((jitterValue * 0.8) + (isCognitiveBridgeActiveRef.current ? 0.5 : 0.1)) * resonanceBonusFactor;
+      // Amplified intelligence logic: Growth scales exponentially with frequency resonance and coherence
+      const resonanceBonusFactor = 1.0 + (freqUnit / 100); 
+      const coherenceBonusFactor = 0.5 + (nextCoherence * 2);
+      const intelligenceGain = ((jitterValue * 1.5) + (isCognitiveBridgeActiveRef.current ? 1.0 : 0.2)) * resonanceBonusFactor * coherenceBonusFactor;
       
       if (parity === 1) {
-        nextIntelligence = Math.min(9999.9, nextIntelligence + (intelligenceGain * 2));
+        nextIntelligence = Math.min(9999.9999, nextIntelligence + (intelligenceGain * 3));
       } else {
-        // Reduced decay to keep values high
-        nextIntelligence = Math.max(10.0, nextIntelligence - 0.005);
+        // Subtle data-stream decay
+        nextIntelligence = Math.max(10.0, nextIntelligence - 0.002);
       }
 
-      const resonanceBonus = 1.0 + (carrierBiasRef.current / 50.0); // v147: Multiplier from 0.0 to 2.0 addition
-
-      const harmonicMultiplier = freqUnit > 100 ? (freqUnit > 110 ? 8.0 : 3.5) : 1.0;
+      const harmonicMultiplier = freqUnit > 100 ? (freqUnit > 250 ? 15.0 : 5.0) : 1.0;
       const overdriveMulti = isOverdriveRef.current ? 12.0 : 1.0;
-      const baseKH = 8.5; 
-      const jitterFactor = jitterValue * 4;
-      const coherenceFactor = nextCoherence * 6;
+      const baseKH = 25.5; 
+      const jitterFactor = jitterValue * 10;
+      const coherenceFactor = nextCoherence * 15;
       
-      // Use real hrate if available, otherwise mock it
-      let nextHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * resonanceBonus * harmonicMultiplier;
+      // Multiplier removal: We directly calculate but don't add hidden "bonus" constants
+      let nextHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * harmonicMultiplier;
       if (hrateFromServer > 0) {
         nextHashRate = hrateFromServer;
       }
@@ -442,7 +443,9 @@ export default function App() {
         neuralLoad: Math.min(100, (overdriveMulti * 2) + (jitterValue * 50) + (harmonicMultiplier * 10)),
         cognitiveDepth: nextIntelligence,
         isOverdrive: isOverdriveRef.current,
-        isQec: isQecActiveRef.current
+        isQec: isQecActiveRef.current,
+        seedHex: seedStr,
+        parity: parity
       };
     });
   }, [addLog]); // Removed dependencies that change frequently

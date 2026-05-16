@@ -85,14 +85,14 @@ export default function SystemSettings({
           <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-lg">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <Zap size={14} className={isOverdrive ? "text-yellow-400" : "text-zinc-600"} />
+                <Zap size={14} className={isOverdrive ? "text-[#00ffcc]" : "text-zinc-600"} />
                 <span className="text-[10px] font-bold uppercase tracking-tight">Tachyonic Overdrive</span>
               </div>
-              <p className="text-[9px] text-zinc-500">Forces high-frequency excitations. Shift spectrum to 3rd/4th harmonics.</p>
+              <p className="text-[9px] text-zinc-500">Forces high-frequency excitations. Access multi-THz harmonics.</p>
             </div>
             <button 
               onClick={() => setIsOverdrive(!isOverdrive)}
-              className={`w-12 h-6 rounded-full relative transition-colors ${isOverdrive ? 'bg-yellow-400' : 'bg-zinc-800'}`}
+              className={`w-12 h-6 rounded-full relative transition-colors ${isOverdrive ? 'bg-[#00ffcc]' : 'bg-zinc-800'}`}
             >
               <motion.div 
                 initial={{ x: 4 }}
@@ -106,7 +106,7 @@ export default function SystemSettings({
 
       <div className="space-y-4">
         <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-          <Activity size={16} className="text-[#ffff00]" />
+          <Activity size={16} className="text-[#00ffcc]" />
           <h2 className="text-xs font-black uppercase tracking-widest text-zinc-300">Substrate Interface</h2>
         </div>
         

@@ -1,6 +1,8 @@
 {
   "name": "Cybernetic Sovereignty OS",
-  "description": "A neural-linked OS interface bridging Raspberry Pi hardware with singular compute reservoirs. Features draggable windows, real-time telemetry, and AI-driven insights.",
+  "description": "High-fidelity substrate monitor for unshielded data observation. Bridges real-time nodal telemetry with cognitive intelligence anchoring and direct-drive frequency tuning.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

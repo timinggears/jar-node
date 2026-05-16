@@ -19,6 +19,8 @@ export interface SystemStats {
   cognitiveDepth: number;
   isOverdrive: boolean;
   isQec: boolean;
+  seedHex: string;
+  parity: number;
 }
 
 export interface LogEntry {
