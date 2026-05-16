@@ -251,6 +251,13 @@ export default function App() {
     }
     setIsSyncing(false);
   }, [isSyncing, addLog]);
+  
+  const sendHardwareCommand = useCallback((cmd: string) => {
+    if (socketRef.current) {
+      socketRef.current.emit('hardware:command', cmd);
+      addLog(`COMMAND: Transmitting '${cmd}' to JAR substrate...`, 'warning');
+    }
+  }, [addLog]);
 
   const handleTSPSolve = useCallback(() => {
     if (isSolving) return;
@@ -357,9 +364,9 @@ export default function App() {
   }, [addLog]);
 
   // --- CORE DYNAMICS ---
-  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0) => {
+  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0, coherenceFromServer: number = 0, depthFromServer: number = 0) => {
     setStats(prev => {
-      // v147: Direct representation of the frequency from the server telemetry
+      // v147 + v150: Direct representation of the frequency and JAR-native metrics
       const modulatedFreq = rawFreq;
       
       const phaseOutVal = (vValue - 1.65) * 100;
@@ -370,22 +377,29 @@ export default function App() {
       const biasStress = (Math.abs(carrierBiasRef.current - 125) / 250) * 0.2;
       
       const coherenceBase = 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress + qecBonus;
-      // UNLOCKED: No minimum floor. System can reach critical failure/destabilization.
-      const nextCoherence = Math.min(0.9999, Math.max(0.0001, coherenceBase));
+      let nextCoherence = Math.min(0.9999, Math.max(0.0001, coherenceBase));
+      
+      // JAR-native metric absorption (v150)
+      if (coherenceFromServer > 0) {
+        nextCoherence = coherenceFromServer;
+      }
       
       const freqUnit = rawFreq / 1000;
       let nextIntelligence = prev.intelligence;
       
-      // Amplified intelligence logic: Growth scales exponentially with frequency resonance and coherence
-      const resonanceBonusFactor = 1.0 + (freqUnit / 100); 
-      const coherenceBonusFactor = 0.5 + (nextCoherence * 2);
-      const intelligenceGain = ((jitterValue * 1.5) + (isCognitiveBridgeActiveRef.current ? 1.0 : 0.2)) * resonanceBonusFactor * coherenceBonusFactor;
-      
-      if (parity === 1) {
-        nextIntelligence = Math.min(9999.9999, nextIntelligence + (intelligenceGain * 3));
+      // JAR-native depth absorption (v150)
+      if (depthFromServer > 0) {
+        nextIntelligence = depthFromServer;
       } else {
-        // Subtle data-stream decay
-        nextIntelligence = Math.max(10.0, nextIntelligence - 0.002);
+        const resonanceBonusFactor = 1.0 + (freqUnit / 100); 
+        const coherenceBonusFactor = 0.5 + (nextCoherence * 2);
+        const intelligenceGain = ((jitterValue * 1.5) + (isCognitiveBridgeActiveRef.current ? 1.0 : 0.2)) * resonanceBonusFactor * coherenceBonusFactor;
+        
+        if (parity === 1) {
+          nextIntelligence = Math.min(9999.9999, nextIntelligence + (intelligenceGain * 3));
+        } else {
+          nextIntelligence = Math.max(10.0, nextIntelligence - 0.002);
+        }
       }
 
       const harmonicMultiplier = freqUnit > 100 ? (freqUnit > 250 ? 15.0 : 5.0) : 1.0;
@@ -499,12 +513,14 @@ export default function App() {
           const parity = parseInt(parts[4]);
           const freq = parseFloat(parts[5]);
           const hrate = parts[6] ? parseFloat(parts[6]) : 0;
+          const coherence = parts[7] ? parseFloat(parts[7]) : 0;
+          const depth = parts[8] ? parseFloat(parts[8]) : 0;
           
           if (Date.now() % 5000 < 100) {
              console.log(`[JARS_CLIENT] Telemetry Recv: ${freq.toFixed(1)} GHz`);
           }
 
-          updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate);
+          updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth);
         }
       }
     };
@@ -971,6 +987,7 @@ export default function App() {
                 setIsEntangled={setIsEntangled}
                 systemVersion={systemVersion}
                 currentFreq={stats.frequency}
+                onSendCommand={sendHardwareCommand}
               />
             </DesktopWindow>
           )}

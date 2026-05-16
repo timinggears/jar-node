@@ -12,6 +12,7 @@ interface SystemSettingsProps {
   setIsEntangled: (val: boolean) => void;
   systemVersion: number;
   currentFreq: number;
+  onSendCommand?: (cmd: string) => void;
 }
 
 export default function SystemSettings({
@@ -24,7 +25,8 @@ export default function SystemSettings({
   isEntangled,
   setIsEntangled,
   systemVersion,
-  currentFreq
+  currentFreq,
+  onSendCommand
 }: SystemSettingsProps) {
   const freqKHz = currentFreq / 1000;
   
@@ -146,6 +148,23 @@ export default function SystemSettings({
               animate={{ x: isEntangled ? 26 : 4 }}
               className="absolute top-1 left-0 w-4 h-4 rounded-full bg-black shadow-lg"
             />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={() => onSendCommand?.('SAVE')}
+            className="flex items-center justify-center gap-2 p-3 bg-white/5 border border-white/5 rounded-lg hover:bg-[#00ffcc]/10 group transition-all"
+          >
+            <ShieldCheck size={14} className="text-zinc-500 group-hover:text-[#00ffcc]" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white">Save State</span>
+          </button>
+          <button 
+            onClick={() => onSendCommand?.('LOAD')}
+            className="flex items-center justify-center gap-2 p-3 bg-white/5 border border-white/5 rounded-lg hover:bg-blue-500/10 group transition-all"
+          >
+            <Activity size={14} className="text-zinc-500 group-hover:text-blue-400" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white">Load State</span>
           </button>
         </div>
       </div>

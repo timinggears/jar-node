@@ -189,8 +189,12 @@ async function startServer() {
       // Safety clamp
       currentFreq = Math.max(100, Math.min(2500000, currentFreq));
       
-      // PROTOCOL: [!S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ|HASHRATE]
-      const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}`;
+      // PROTOCOL v150: [!S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ|HRATE|COHERENCE|DEPTH]
+      
+      const simulatedCoherence = 0.95 + (Math.random() * 0.05);
+      const simulatedDepth = (systemState.bias * simulatedCoherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
+      
+      const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}|${simulatedCoherence.toFixed(4)}|${simulatedDepth.toFixed(4)}`;
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 
