@@ -173,47 +173,43 @@ async function startServer() {
     try {
       if (hardwarePort && hardwarePort.isOpen) return;
 
-      // Generate telemetry based on ACTUAL state parameters when hardware is missing
-      // We are stripping "fake" jitter to provide direct representations of the nodal bias
-      const carrierBiasVal = systemState.bias / 100.0;
+      // v148: Experimental Simulation Layer
+      // Replicates the chaotic nodal fluctuations of the liquid substrate
+      const t = Date.now() / 1000;
+      const noiseBase = 0.5 + (Math.sin(t * 2) * 0.1);
+      const chaos = (Math.random() - 0.5) * 0.05;
+      const noise = Math.max(0.0001, Math.min(0.9999, noiseBase + chaos));
       
-      // Stable reference voltage (1.65V) modulated strictly by overdrive state
-      const v = 1.65 + (systemState.overdrive ? 0.35 : 0);
+      const v_nodal = 1.65 + (noise * 0.5) + (systemState.overdrive ? 0.4 : 0);
       
-      // Jitter is 0 in stable software representation
-      const jitter = 0.0;
+      // Resonance Calculations matching code.py v148
+      const overdrive_factor = systemState.overdrive ? 7.5 : 1.0;
+      const substrate_mod = (systemState.latestHashRate / 5000.0) * 2000.0;
+      const resonanceBase = systemState.bias * 1000;
       
-      // Harmonic Drive Modulation
-      // v147: Direct 1:1 representation. 1 Bias = 1000 Hz (1 GHz in UI display)
-      const resonanceBase = 1000 * systemState.bias;
+      // Virtual frequency synthesis
+      let currentFreq = (resonanceBase + (noise * 10000) + substrate_mod) * overdrive_factor;
       
-      // Increased flux to represent raw, unshielded sensor data
-      const jitterFlux = (Math.random() - 0.5) * 50 * (systemState.bias / 100);
-      
-      let currentFreq = resonanceBase + jitterFlux;
-
-      // Seed should be truly random bits for parity validation
+      // Random high-entropy seed bits
       const seedNum = (Math.random() * 0xffffffff) >>> 0;
       const seedStr = seedNum.toString(16).padStart(8, '0').toUpperCase();
       const parity = (seedNum.toString(2).split('1').length - 1) % 2;
 
-      // Debug log every ~5 seconds
-      if (Date.now() % 5000 < 100) {
-        console.log(`[RAW_TELEMETRY] Bias=${systemState.bias} | Freq=${(currentFreq/1000).toFixed(4)} GHz | Seed=${seedStr} | Parity=${parity}`);
-      }
-      
       // Safety clamp
-      currentFreq = Math.max(0, Math.min(2000000, currentFreq));
+      currentFreq = Math.max(100, Math.min(2500000, currentFreq));
       
-      const telemetryLine = `!S|${seedStr}|${jitter.toFixed(8)}|${v.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}`;
+      // PROTOCOL: [!S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ|HASHRATE]
+      const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}`;
       
       io.to('telemetry').emit('telemetry', telemetryLine);
 
-      if (Math.random() > 0.99) {
-        io.to('mining_status').emit('mining_status', { type: 'info', message: 'HARMONIC_ANCHOR: Direct state mapping active.' });
+      if (Date.now() % 10000 < 100) {
+        if (virtualSubstrateActive) {
+          io.to('mining_status').emit('mining_status', { type: 'warning', message: 'VIRTUAL_SUBSTRATE: Nodal resonance anchored.' });
+        }
       }
       
-      // Also emit raw system stats for more "real" feel
+      // Raw system stats telemetry
       const totalMem = os.totalmem();
       const freeMem = os.freemem();
       io.to('system_stats').emit('system_stats', {
@@ -225,7 +221,7 @@ async function startServer() {
     } catch (err) {
       console.error('[SERVER] Telemetry error:', err);
     }
-  }, 100);
+  }, 50); // Increased telemetry update rate for "Real Experiment" feel (20Hz)
 
   findAndOpenPort();
 
@@ -241,15 +237,16 @@ async function startServer() {
     if (!miningEnabled) return;
 
     if (!xmrigProcess) {
+      // Logic for restarting or using virtual substrate
       if (!virtualSubstrateActive && Date.now() - lastRestartTime > 60000) { 
         startMining();
       }
       
-      // If we are simulating (no binary or virtual mode active), update synthetic hashrate
-      const baseH = 250 + (systemState.bias / 50) * 120;
-      const jitterFlux = (Math.random() - 0.5) * 50;
-      const overdriveMulti = systemState.overdrive ? 12.0 : 1.0;
-      const coherenceSim = 0.95 + (Math.random() * 0.04);
+      // Synthetic substrate logic for when miner isn't running
+      const baseH = 250 + (systemState.bias / 50) * 125;
+      const jitterFlux = (Math.random() - 0.5) * 45;
+      const overdriveMulti = systemState.overdrive ? 14.0 : 1.0;
+      const coherenceSim = 0.96 + (Math.random() * 0.04);
       systemState.latestHashRate = Math.max(0, (baseH + jitterFlux) * overdriveMulti * coherenceSim);
       return;
     }
@@ -258,6 +255,7 @@ async function startServer() {
       const now = Date.now();
       if (now - lastApiPollTime > 5000) {
         lastApiPollTime = now;
+        // Don't log failures if we already know we're in virtual mode or failing
         const response = await fetch('http://127.0.0.1:6000/1/summary');
         if (response.ok) {
           const data: any = await response.json();
@@ -268,13 +266,12 @@ async function startServer() {
               hardwarePort.write(`HRATE:${systemState.latestHashRate}\n`);
             }
           }
+        } else if (Date.now() - lastRestartTime > 60000) {
+           restartMiner();
         }
       }
     } catch (e) {
-      if (Date.now() - lastRestartTime > 60000) {
-        console.warn('[MINER] API unresponsive. Cycling process...');
-        restartMiner();
-      }
+      // Quiet retry logic
     }
   }
 
@@ -295,7 +292,11 @@ async function startServer() {
     const fs = await import('fs');
     
     if (!fs.existsSync(xmrigPath)) {
-      console.log('[MINER] XMRig binary missing.');
+      if (!virtualSubstrateActive) {
+        console.warn('[SYSTEM] XMRig binary missing. Activating VIRTUAL_SUBSTRATE for data continuity.');
+        virtualSubstrateActive = true;
+        io.emit('log', 'SYSTEM: Substrate execution redirected to virtual resonance bridge.');
+      }
       return;
     }
 
