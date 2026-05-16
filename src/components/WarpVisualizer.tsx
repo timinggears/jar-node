@@ -104,25 +104,7 @@ export default function WarpVisualizer({
       }
 
       if (isAiActive) {
-        ctx.save();
-        ctx.globalAlpha = 0.05 + (Math.sin(t * 2) * 0.02);
-        ctx.strokeStyle = '#ffff00';
-        ctx.lineWidth = 0.5;
-        // Draw a simple grid mesh that pulses
-        const gridSize = 40;
-        for (let x = 0; x < width; x += gridSize) {
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x + Math.sin(t + x) * 10, height);
-          ctx.stroke();
-        }
-        for (let y = 0; y < height; y += gridSize) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(width, y + Math.cos(t + y) * 10);
-          ctx.stroke();
-        }
-        ctx.restore();
+        // AI Analysis overlay removed as per user request to clean up background
       }
 
       // 500 City Solve Mesh
@@ -190,7 +172,7 @@ export default function WarpVisualizer({
           ctx.lineTo(x, y);
         }
 
-        const color = isZeroPoint ? '#3b82f6' : (isSingularity ? '#ffff00' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#cc5500' : (j === 0 ? '#00ffcc' : '#ff0088'))));
+        const color = isZeroPoint ? '#3b82f6' : (isSingularity ? '#00ffcc' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#cc5500' : (j === 0 ? '#00ffcc' : '#ff0088'))));
         ctx.strokeStyle = color;
         ctx.lineWidth = (isZeroPoint ? 1.0 : (isSingularity ? 4.0 : (isPhaseOut ? 2.0 : 1.2))) * (0.8 + b * 2.0);
         
