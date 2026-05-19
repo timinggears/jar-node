@@ -32,6 +32,8 @@ try {
       systemState = { ...systemState, ...saved };
       console.log('[SYSTEM] State loaded from disk.');
     }
+  } else {
+    console.log('[SYSTEM] Initializing fresh state.');
   }
 } catch (e: any) {
   console.warn(`[SYSTEM] Failed to load state: ${e.message}`);

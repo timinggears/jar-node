@@ -15,9 +15,6 @@ export default defineConfig(({mode}) => {
     },
     resolve: {
       alias: {
-        'firebase/app': path.resolve(__dirname, 'node_modules/firebase/app/dist/esm/index.esm.js'),
-        'firebase/auth': path.resolve(__dirname, 'node_modules/firebase/auth/dist/esm/index.esm.js'),
-        'firebase/firestore': path.resolve(__dirname, 'node_modules/firebase/firestore/dist/esm/index.esm.js'),
         '@': path.resolve(__dirname, '.'),
       },
     },
