@@ -4,9 +4,11 @@ import { Server } from 'socket.io';
 import { createServer as createViteServer } from 'vite';
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
+import fs from 'fs';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import os from 'os';
+import * as glob from 'glob';
 
 // --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
 const STATE_FILE = path.join(process.cwd(), 'system_state.json');
@@ -23,18 +25,20 @@ let systemState = {
 
 // Load state if exists
 try {
-  const fs = require('fs');
   if (fs.existsSync(STATE_FILE)) {
-    const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    systemState = { ...systemState, ...saved };
+    const content = fs.readFileSync(STATE_FILE, 'utf8');
+    if (content.trim()) {
+      const saved = JSON.parse(content);
+      systemState = { ...systemState, ...saved };
+      console.log('[SYSTEM] State loaded from disk.');
+    }
   }
-} catch (e) {
-  console.warn('[SYSTEM] Failed to load state');
+} catch (e: any) {
+  console.warn(`[SYSTEM] Failed to load state: ${e.message}`);
 }
 
 function saveState() {
   try {
-    const fs = require('fs');
     fs.writeFileSync(STATE_FILE, JSON.stringify({ 
       bias: systemState.bias, 
       overdrive: systemState.overdrive,
@@ -43,8 +47,10 @@ function saveState() {
       zpe_level: systemState.zpe_level,
       last_sync: Date.now(),
       vault: systemState.vault
-    }));
-  } catch (e) {}
+    }, null, 2));
+  } catch (e: any) {
+    console.error(`[SYSTEM] Failed to save state: ${e.message}`);
+  }
 }
 
 async function startServer() {
@@ -378,7 +384,6 @@ async function startServer() {
     if (!miningEnabled || virtualSubstrateActive) return;
 
     const xmrigPath = path.join(process.cwd(), 'xmrig');
-    const fs = await import('fs');
     
     if (!fs.existsSync(xmrigPath)) {
       if (!virtualSubstrateActive) {
@@ -461,9 +466,7 @@ async function startServer() {
   // --- SYSTEM SCAN ENDPOINT ---
   app.get('/api/system/scan', async (req, res) => {
     try {
-      const fs = await import('fs');
-      const glob = await import('glob');
-      const files = await glob.glob('**/*', { ignore: ['node_modules/**', 'dist/**', '.git/**'], nodir: true });
+    const files = await glob.glob('**/*', { ignore: ['node_modules/**', 'dist/**', '.git/**'], nodir: true });
       let totalSize = 0;
       files.forEach(f => {
         try {
