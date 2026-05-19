@@ -951,6 +951,14 @@ export default function App() {
     return () => clearInterval(interval);
   }, [user, isBooted, saveSystemState, lastSavedStats]);
 
+  const handleManualSync = useCallback(async () => {
+    if (user) {
+      addLog("CLOUD: Initiating manual nodal handshake...", "info");
+      await saveSystemState(user.uid, statsRef.current, carrierBiasRef.current);
+      addLog("CLOUD: Global state anchored to substrate.", "success");
+    }
+  }, [user, addLog, saveSystemState]);
+
   const toggleWindow = useCallback((id: string) => {
     setOpenWindows(prev => {
       if (prev.includes(id)) {
@@ -1225,7 +1233,7 @@ export default function App() {
               isActive={activeWindow === 'cloud'}
               initialPos={{ x: 200, y: 150 }}
             >
-              <AuthWindow />
+              <AuthWindow onSync={handleManualSync} />
             </DesktopWindow>
           )}
 

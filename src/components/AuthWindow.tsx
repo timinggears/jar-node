@@ -4,13 +4,25 @@
  */
 
 import React from 'react';
-import { LogIn, LogOut, User, Cloud, Save } from 'lucide-react';
+import { LogIn, LogOut, User, Cloud, Save, RefreshCw } from 'lucide-react';
 import { useFirebase } from './FirebaseProvider';
 import { signInWithGoogle, auth } from '../lib/firebase';
 import { motion } from 'motion/react';
 
-export default function AuthWindow() {
+interface AuthWindowProps {
+  onSync?: () => Promise<void>;
+}
+
+export default function AuthWindow({ onSync }: AuthWindowProps) {
   const { user, loading } = useFirebase();
+  const [isSyncing, setIsSyncing] = React.useState(false);
+
+  const handleSync = async () => {
+    if (!onSync) return;
+    setIsSyncing(true);
+    await onSync();
+    setIsSyncing(false);
+  };
 
   const handleLogout = async () => {
     try {
@@ -93,6 +105,21 @@ export default function AuthWindow() {
                 <div className="text-[#00ffcc]">ENABLED</div>
               </div>
             </div>
+
+            <button
+              onClick={handleSync}
+              disabled={isSyncing}
+              className={`w-full p-4 border border-[#00ffcc]/30 bg-[#00ffcc]/5 rounded-sm flex items-center justify-between group hover:bg-[#00ffcc]/10 transition-all ${isSyncing ? 'opacity-50 cursor-wait' : ''}`}
+            >
+              <div className="flex items-center gap-3">
+                <RefreshCw size={14} className={`text-[#00ffcc] ${isSyncing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+                <div className="text-left">
+                  <div className="text-white font-bold leading-tight uppercase">Force Substrate Sync</div>
+                  <div className="text-zinc-500 text-[8px] uppercase">Manual nodal handshake</div>
+                </div>
+              </div>
+              <div className="text-[10px] text-[#00ffcc] font-black">SYNC_REQ</div>
+            </button>
 
             <div className="p-4 border border-emerald-500/20 bg-emerald-500/5 rounded-sm">
                <div className="text-emerald-500 font-bold text-[9px] uppercase mb-2 flex justify-between items-center">

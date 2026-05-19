@@ -27,7 +27,7 @@
             "isQec": { "type": "boolean" },
             "seedHex": { "type": "string" }
           },
-          "required": ["coherence", "jitter", "intelligence", "frequency", "gpuParity", "hashRate", "qubits", "shares", "loadAvg", "errors", "neuralLoad", "cognitiveDepth", "memeticDepth", "isOverdrive", "isQec", "seedHex"]
+          "required": ["coherence", "jitter", "intelligence", "frequency", "gpuParity", "hashRate", "qubits", "shares", "loadAvg", "errors", "neuralLoad", "cognitiveDepth", "memeticDepth", "zpeLevel", "isOverdrive", "isQec", "seedHex"]
         },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
