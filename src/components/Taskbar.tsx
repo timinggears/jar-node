@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -122,6 +122,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('settings')} 
         isActive={activeWindow === 'settings'}
         onClick={() => onToggleWindow('settings')}
+      />
+      <AppIcon 
+        id="cloud"
+        icon={<Cloud size={20} />} 
+        label="Cloud Sync" 
+        isOpen={openWindows.includes('cloud')} 
+        isActive={activeWindow === 'cloud'}
+        onClick={() => onToggleWindow('cloud')}
       />
       
       <div className="w-[1px] h-8 bg-white/10 mx-2" />

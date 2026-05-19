@@ -9,16 +9,17 @@ interface SubstrateVisualizerProps {
   gpuParity: number;
   coherence: number;
   frequency: number;
+  zpeLevel: number;
 }
 
-export default function SubstrateVisualizer({ gpuParity, coherence, frequency }: SubstrateVisualizerProps) {
+export default function SubstrateVisualizer({ gpuParity, coherence, frequency, zpeLevel }: SubstrateVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const propsRef = useRef({ gpuParity, coherence, frequency });
+  const propsRef = useRef({ gpuParity, coherence, frequency, zpeLevel });
 
   // Update refs when props change without restarting loop
   useEffect(() => {
-    propsRef.current = { gpuParity, coherence, frequency };
-  }, [gpuParity, coherence, frequency]);
+    propsRef.current = { gpuParity, coherence, frequency, zpeLevel };
+  }, [gpuParity, coherence, frequency, zpeLevel]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -40,16 +41,18 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency }:
     resize();
 
     const render = () => {
-      const { gpuParity: gp, coherence: coh, frequency: freq } = propsRef.current;
+      const { gpuParity: gp, coherence: coh, frequency: freq, zpeLevel: zpe } = propsRef.current;
       
       // Background clear with slight trail
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      // Lower ZPE = dimmer rendering
+      const zpeFactor = zpe / 100;
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.1 + (0.05 * (1 - zpeFactor))})`;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const intensity = (gp / 100);
-      const particleCount = Math.floor(intensity * 5); // Reduced count for stability
+      const intensity = (gp / 100) * zpeFactor;
+      const particleCount = Math.floor(intensity * 5); 
       
-      if (particles.length < 100 && Math.random() < intensity) {
+      if (particles.length < (100 * zpeFactor) && Math.random() < intensity) {
         for(let i = 0; i < particleCount; i++) {
           particles.push({
             x: Math.random() * canvas.width,
@@ -57,7 +60,7 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency }:
             vx: (Math.random() - 0.5) * (freq / 40000),
             vy: (Math.random() - 0.5) * (freq / 40000),
             life: 1.0,
-            color: coh > 0.9 ? `rgba(0, 255, 204, ${0.1 + Math.random() * 0.4})` : `rgba(255, 0, 255, ${0.1 + Math.random() * 0.2})`
+            color: coh > 0.9 ? `rgba(0, 255, 204, ${(0.1 + Math.random() * 0.4) * zpeFactor})` : `rgba(255, 0, 255, ${(0.1 + Math.random() * 0.2) * zpeFactor})`
           });
         }
       }

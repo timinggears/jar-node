@@ -19,6 +19,7 @@ export interface SystemStats {
   cognitiveDepth: number;
   memeticDepth: number;
   gpuParity: number;
+  zpeLevel: number;
   isOverdrive: boolean;
   isQec: boolean;
   seedHex: string;

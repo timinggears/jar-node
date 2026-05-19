@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "SystemState": {
+      "title": "SystemState",
+      "description": "Stores the current state of the quantum stabilizer system",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "coherence": { "type": "number" },
+            "jitter": { "type": "number" },
+            "intelligence": { "type": "number" },
+            "frequency": { "type": "number" },
+            "gpuParity": { "type": "number" },
+            "hashRate": { "type": "number" },
+            "qubits": { "type": "number" },
+            "shares": { "type": "number" },
+            "loadAvg": { "type": "number" },
+            "errors": { "type": "number" },
+            "neuralLoad": { "type": "number" },
+            "cognitiveDepth": { "type": "number" },
+            "memeticDepth": { "type": "number" },
+            "zpeLevel": { "type": "number" },
+            "isOverdrive": { "type": "boolean" },
+            "isQec": { "type": "boolean" },
+            "seedHex": { "type": "string" }
+          },
+          "required": ["coherence", "jitter", "intelligence", "frequency", "gpuParity", "hashRate", "qubits", "shares", "loadAvg", "errors", "neuralLoad", "cognitiveDepth", "memeticDepth", "isOverdrive", "isQec", "seedHex"]
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "stats", "updatedAt"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "System log entries",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] }
+      },
+      "required": ["userId", "timestamp", "message", "type"]
+    }
+  },
+  "firestore": {
+    "states/{userId}": {
+      "schema": "SystemState",
+      "description": "The current system state for a specific user"
+    },
+    "logs/{logId}": {
+      "schema": "Log",
+      "description": "Historical log entries"
+    }
+  }
+}

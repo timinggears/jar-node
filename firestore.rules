@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Master Gate: Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- Validation Blueprints ---
+
+    function isValidSystemState(data) {
+      return data.keys().hasAll(['userId', 'stats', 'updatedAt']) &&
+             data.keys().size() == 3 &&
+             data.userId == request.auth.uid &&
+             data.updatedAt == request.time &&
+             data.stats.keys().hasAll([
+               'coherence', 'jitter', 'intelligence', 'frequency', 'gpuParity', 
+               'hashRate', 'qubits', 'shares', 'loadAvg', 'errors', 
+               'neuralLoad', 'cognitiveDepth', 'memeticDepth', 'zpeLevel', 'isOverdrive', 
+               'isQec', 'seedHex'
+             ]) &&
+             data.stats.keys().size() == 17;
+    }
+
+    function isValidLog(data) {
+      return data.keys().hasAll(['userId', 'timestamp', 'message', 'type']) &&
+             data.keys().size() == 4 &&
+             data.userId == request.auth.uid &&
+             data.timestamp is number &&
+             data.message is string && data.message.size() <= 500 &&
+             data.type in ['info', 'success', 'warning', 'error'];
+    }
+
+    // --- Matches ---
+
+    match /states/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidSystemState(incoming());
+    }
+
+    match /logs/{logId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidLog(incoming());
+    }
+  }
+}

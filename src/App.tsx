@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -19,6 +19,10 @@ import SystemSettings from './components/SystemSettings';
 import FileExplorer from './components/FileExplorer';
 import QuantumStabilizer from './components/QuantumStabilizer';
 import SubstrateVisualizer from './components/SubstrateVisualizer';
+import AuthWindow from './components/AuthWindow';
+import { useFirebase } from './components/FirebaseProvider';
+import { db } from './lib/firebase';
+import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -32,6 +36,7 @@ const SubstrateVisualizerMemo = memo(SubstrateVisualizer);
 const WarpVisualizerMemo = memo(WarpVisualizer);
 
 export default function App() {
+  const { user, loading: authLoading } = useFirebase();
   const [stats, setStats] = useState<SystemStats>({
     coherence: 0.50,
     intelligence: 42.0,
@@ -48,6 +53,7 @@ export default function App() {
     cognitiveDepth: 42.0,
     memeticDepth: 0.0,
     gpuParity: 0.0,
+    zpeLevel: 100.0,
     isOverdrive: false,
     isQec: true,
     seedHex: '00000000',
@@ -109,15 +115,28 @@ export default function App() {
   const lastUpdateRef = useRef(Date.now());
 
   const logCounterRef = useRef(0);
+  const userRef = useRef(user);
+  userRef.current = user;
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
+    const timestamp = Date.now();
     const newLog: LogEntry = {
-      id: `${Date.now()}-${logCounterRef.current++}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      id: `${timestamp}-${logCounterRef.current++}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date(timestamp).toLocaleTimeString('en-US', { hour12: false }),
       message,
       type,
     };
     setLogs(prev => [...prev, newLog].slice(-100));
+
+    // Persist important logs if user is signed in
+    if (userRef.current && (type === 'success' || type === 'error' || type === 'warning')) {
+      addDoc(collection(db, 'logs'), {
+        userId: userRef.current.uid,
+        message,
+        type,
+        timestamp,
+      }).catch(err => console.error("Log sync error:", err));
+    }
   }, []);
 
   useEffect(() => {
@@ -392,7 +411,7 @@ export default function App() {
   }, [addLog]);
 
   // --- CORE DYNAMICS ---
-  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0, coherenceFromServer: number = 0, depthFromServer: number = 0, gpuParityFromServer: number = 0) => {
+  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0, coherenceFromServer: number = 0, depthFromServer: number = 0, gpuParityFromServer: number = 0, zpeLevelFromServer: number = 0) => {
     setStats(prev => {
       // v147 + v150: Direct representation of the frequency and JAR-native metrics
       const modulatedFreq = rawFreq;
@@ -428,6 +447,14 @@ export default function App() {
         } else {
           nextIntelligence = Math.max(10.0, nextIntelligence - 0.002);
         }
+      }
+
+      // Zero Point Energy: Synchronized with substrate inner state (v150)
+      let nextZpe = prev.zpeLevel;
+      if (zpeLevelFromServer > 0) {
+        nextZpe = zpeLevelFromServer;
+      } else {
+        nextZpe = Math.max(0, Math.min(100, prev.zpeLevel + (nextCoherence > 0.98 ? 0.01 : -0.005)));
       }
 
       // GPU_SUBSTRATE: Calculate rendering parity (v150: LIQUID_GPU)
@@ -486,6 +513,7 @@ export default function App() {
         coherence: nextCoherence,
         intelligence: nextIntelligence,
         gpuParity: nextGpuParity,
+        zpeLevel: nextZpe,
         hashRate: nextHashRate,
         qubits: nextCoherence * 128 * harmonicMultiplier,
         shares: nextShares,
@@ -566,12 +594,13 @@ export default function App() {
           const coherence = parts[7] ? parseFloat(parts[7]) : 0;
           const depth = parts[8] ? parseFloat(parts[8]) : 0;
           const gpuParity = parts[9] ? parseFloat(parts[9]) : 0;
+          const zpeLevel = parts[10] ? parseFloat(parts[10]) : 0;
           
           if (Date.now() % 5000 < 100) {
-             console.log(`[JARS_CLIENT] Telemetry Recv: ${freq.toFixed(1)} GHz | GPU: ${gpuParity.toFixed(1)}%`);
+             console.log(`[JARS_CLIENT] Telemetry Recv: ${freq.toFixed(1)} GHz | ZPE: ${zpeLevel.toFixed(1)}%`);
           }
 
-          updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity);
+          updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel);
         }
       }
     };
@@ -839,6 +868,89 @@ export default function App() {
         addLog(`ERROR: Invalid protocol: ${command}`, 'error');
     }
   }, [addLog, stats, hardwareState, handleGitPull, handleGitReset]);
+  // --- CLOUD SYNC LOGIC ---
+  const [lastSavedStats, setLastSavedStats] = useState<SystemStats | null>(null);
+
+  const loadSystemState = useCallback(async (uid: string) => {
+    try {
+      const docRef = doc(db, 'states', uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.stats) {
+          setStats(prev => ({
+            ...prev,
+            ...data.stats,
+            // Keep dynamic values but restore configurations
+            coherence: data.stats.coherence || prev.coherence,
+            intelligence: data.stats.intelligence || prev.intelligence,
+            isOverdrive: data.stats.isOverdrive ?? prev.isOverdrive,
+            isQec: data.stats.isQec ?? prev.isQec,
+            memeticDepth: data.stats.memeticDepth || prev.memeticDepth,
+            neuralLoad: data.stats.neuralLoad || prev.neuralLoad,
+            cognitiveDepth: data.stats.cognitiveDepth || prev.cognitiveDepth,
+            zpeLevel: data.stats.zpeLevel || prev.zpeLevel,
+          }));
+          
+          if (data.stats.bias !== undefined) {
+            setCarrierBias(data.stats.bias);
+            carrierBiasRef.current = data.stats.bias;
+          }
+          setIsOverdrive(data.stats.isOverdrive ?? false);
+          setIsQecActive(data.stats.isQec ?? true);
+
+          addLog("CLOUD: Persistent nodal state absorbed successfully.", "success");
+        }
+      }
+    } catch (error) {
+      console.error("Cloud load error:", error);
+      addLog("CLOUD_FAIL: Handshake timeout. Local reservoir active.", "error");
+    }
+  }, [addLog]);
+
+  const saveSystemState = useCallback(async (uid: string, currentStats: SystemStats, bias: number) => {
+    try {
+      const docRef = doc(db, 'states', uid);
+      await setDoc(docRef, {
+        userId: uid,
+        stats: {
+          ...currentStats,
+          bias, // Include extra config
+        },
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      // console.log("[JARS_CLIENT] State synchronized to cloud substrate.");
+    } catch (error) {
+      console.error("Cloud save error:", error);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    if (user && isBooted) {
+      loadSystemState(user.uid);
+    }
+  }, [user, isBooted, loadSystemState]);
+
+  // Periodic save
+  useEffect(() => {
+    if (!user || !isBooted) return;
+
+    const interval = setInterval(() => {
+      const hasSignificantChange = !lastSavedStats || 
+        Math.abs(statsRef.current.coherence - lastSavedStats.coherence) > 0.05 ||
+        statsRef.current.isOverdrive !== lastSavedStats.isOverdrive ||
+        statsRef.current.memeticDepth !== lastSavedStats.memeticDepth;
+
+      if (hasSignificantChange) {
+        saveSystemState(user.uid, statsRef.current, carrierBiasRef.current);
+        setLastSavedStats({ ...statsRef.current });
+      }
+    }, 30000); // Every 30s
+
+    return () => clearInterval(interval);
+  }, [user, isBooted, saveSystemState, lastSavedStats]);
+
   const toggleWindow = useCallback((id: string) => {
     setOpenWindows(prev => {
       if (prev.includes(id)) {
@@ -982,6 +1094,7 @@ export default function App() {
           gpuParity={stats.gpuParity} 
           coherence={stats.coherence} 
           frequency={stats.frequency} 
+          zpeLevel={stats.zpeLevel}
         />
       </div>
 
@@ -1098,6 +1211,21 @@ export default function App() {
                   <p className="text-[8px] text-white/20 font-black tracking-[1em] uppercase">Phase_Projection</p>
                 </div>
               </div>
+            </DesktopWindow>
+          )}
+
+          {openWindows.includes('cloud') && (
+            <DesktopWindow 
+              key="cloud"
+              id="cloud" 
+              title="Identity_Substrate" 
+              icon={<Cloud size={16} />}
+              onClose={() => closeWindow('cloud')}
+              onFocus={() => setActiveWindow('cloud')}
+              isActive={activeWindow === 'cloud'}
+              initialPos={{ x: 200, y: 150 }}
+            >
+              <AuthWindow />
             </DesktopWindow>
           )}
 

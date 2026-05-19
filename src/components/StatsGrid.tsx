@@ -28,6 +28,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
         <StatItem label="ERR_CORRECT" value={stats.errors.toString().padStart(6, '0')} color="text-[#ff00ff]" />
         <StatItem label="MEMETIC_DEPTH" value={stats.memeticDepth.toFixed(4)} color="text-yellow-400" />
         <StatItem label="GPU_SUBSTRATE" value={`${stats.gpuParity.toFixed(1)}%`} color="text-cyan-400" />
+        <StatItem label="ZPE_RES" value={`${stats.zpeLevel.toFixed(2)}%`} color="text-emerald-400" />
         
         <div className="w-[1px] h-8 bg-white/10 mx-2" />
         

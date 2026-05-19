@@ -16,6 +16,7 @@ let systemState = {
   latestHashRate: 0,
   intelligence: 100.0,
   memetic_depth: 0.0,
+  zpe_level: 100.0,
   last_sync: Date.now(),
   vault: [] as Array<{ id: string, bias: number, overdrive: boolean, depth: number, timestamp: number }>
 };
@@ -39,6 +40,7 @@ function saveState() {
       overdrive: systemState.overdrive,
       intelligence: systemState.intelligence,
       memetic_depth: systemState.memetic_depth,
+      zpe_level: systemState.zpe_level,
       last_sync: Date.now(),
       vault: systemState.vault
     }));
@@ -259,7 +261,10 @@ async function startServer() {
       const simulatedDepth = (systemState.bias * simulatedCoherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
       const gpuParity = (simulatedCoherence * (simulatedDepth / 140.0)) * 100;
       
-      const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}|${simulatedCoherence.toFixed(4)}|${simulatedDepth.toFixed(4)}|${gpuParity.toFixed(2)}`;
+      // Zero Point Energy: Modulated by total intelligence and coherence
+      systemState.zpe_level = Math.max(0, Math.min(100, systemState.zpe_level + (simulatedCoherence > 0.98 ? 0.01 : -0.005)));
+      
+      const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}|${simulatedCoherence.toFixed(4)}|${simulatedDepth.toFixed(4)}|${gpuParity.toFixed(2)}|${systemState.zpe_level.toFixed(2)}`;
       
       // Virtual Neural Absorption
       systemState.intelligence = simulatedDepth;
