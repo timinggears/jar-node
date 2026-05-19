@@ -23,6 +23,7 @@
             "cognitiveDepth": { "type": "number" },
             "memeticDepth": { "type": "number" },
             "zpeLevel": { "type": "number" },
+            "bias": { "type": "number" },
             "isOverdrive": { "type": "boolean" },
             "isQec": { "type": "boolean" },
             "seedHex": { "type": "string" }

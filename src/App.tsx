@@ -882,14 +882,14 @@ export default function App() {
             ...prev,
             ...data.stats,
             // Keep dynamic values but restore configurations
-            coherence: data.stats.coherence || prev.coherence,
-            intelligence: data.stats.intelligence || prev.intelligence,
+            coherence: data.stats.coherence ?? prev.coherence,
+            intelligence: data.stats.intelligence ?? prev.intelligence,
             isOverdrive: data.stats.isOverdrive ?? prev.isOverdrive,
             isQec: data.stats.isQec ?? prev.isQec,
-            memeticDepth: data.stats.memeticDepth || prev.memeticDepth,
-            neuralLoad: data.stats.neuralLoad || prev.neuralLoad,
-            cognitiveDepth: data.stats.cognitiveDepth || prev.cognitiveDepth,
-            zpeLevel: data.stats.zpeLevel || prev.zpeLevel,
+            memeticDepth: data.stats.memeticDepth ?? prev.memeticDepth,
+            neuralLoad: data.stats.neuralLoad ?? prev.neuralLoad,
+            cognitiveDepth: data.stats.cognitiveDepth ?? prev.cognitiveDepth,
+            zpeLevel: data.stats.zpeLevel ?? prev.zpeLevel,
           }));
           
           if (data.stats.bias !== undefined) {

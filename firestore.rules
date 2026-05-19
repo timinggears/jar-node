@@ -24,10 +24,10 @@ service cloud.firestore {
              data.stats.keys().hasAll([
                'coherence', 'jitter', 'intelligence', 'frequency', 'gpuParity', 
                'hashRate', 'qubits', 'shares', 'loadAvg', 'errors', 
-               'neuralLoad', 'cognitiveDepth', 'memeticDepth', 'zpeLevel', 'isOverdrive', 
+               'neuralLoad', 'cognitiveDepth', 'memeticDepth', 'zpeLevel', 'bias', 'isOverdrive', 
                'isQec', 'seedHex'
              ]) &&
-             data.stats.keys().size() == 17;
+             data.stats.keys().size() == 18;
     }
 
     function isValidLog(data) {
