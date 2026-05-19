@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
@@ -18,11 +18,18 @@ import Taskbar from './components/Taskbar';
 import SystemSettings from './components/SystemSettings';
 import FileExplorer from './components/FileExplorer';
 import QuantumStabilizer from './components/QuantumStabilizer';
+import SubstrateVisualizer from './components/SubstrateVisualizer';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
 
 // --- INITIALIZATION ---
+
+const StatsGridMemo = memo(StatsGrid);
+const PetBayMemo = memo(PetBay);
+const QuantumStabilizerMemo = memo(QuantumStabilizer);
+const SubstrateVisualizerMemo = memo(SubstrateVisualizer);
+const WarpVisualizerMemo = memo(WarpVisualizer);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -40,6 +47,7 @@ export default function App() {
     neuralLoad: 0.0,
     cognitiveDepth: 42.0,
     memeticDepth: 0.0,
+    gpuParity: 0.0,
     isOverdrive: false,
     isQec: true,
     seedHex: '00000000',
@@ -384,7 +392,7 @@ export default function App() {
   }, [addLog]);
 
   // --- CORE DYNAMICS ---
-  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0, coherenceFromServer: number = 0, depthFromServer: number = 0) => {
+  const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0, coherenceFromServer: number = 0, depthFromServer: number = 0, gpuParityFromServer: number = 0) => {
     setStats(prev => {
       // v147 + v150: Direct representation of the frequency and JAR-native metrics
       const modulatedFreq = rawFreq;
@@ -420,6 +428,14 @@ export default function App() {
         } else {
           nextIntelligence = Math.max(10.0, nextIntelligence - 0.002);
         }
+      }
+
+      // GPU_SUBSTRATE: Calculate rendering parity (v150: LIQUID_GPU)
+      let nextGpuParity = prev.gpuParity;
+      if (gpuParityFromServer > 0) {
+        nextGpuParity = gpuParityFromServer;
+      } else {
+        nextGpuParity = (nextCoherence * (nextIntelligence / 150)) * 100;
       }
 
       const harmonicMultiplier = freqUnit > 100 ? (freqUnit > 250 ? 15.0 : 5.0) : 1.0;
@@ -469,6 +485,7 @@ export default function App() {
         frequency: modulatedFreq,
         coherence: nextCoherence,
         intelligence: nextIntelligence,
+        gpuParity: nextGpuParity,
         hashRate: nextHashRate,
         qubits: nextCoherence * 128 * harmonicMultiplier,
         shares: nextShares,
@@ -548,12 +565,13 @@ export default function App() {
           const hrate = parts[6] ? parseFloat(parts[6]) : 0;
           const coherence = parts[7] ? parseFloat(parts[7]) : 0;
           const depth = parts[8] ? parseFloat(parts[8]) : 0;
+          const gpuParity = parts[9] ? parseFloat(parts[9]) : 0;
           
           if (Date.now() % 5000 < 100) {
-             console.log(`[JARS_CLIENT] Telemetry Recv: ${freq.toFixed(1)} GHz`);
+             console.log(`[JARS_CLIENT] Telemetry Recv: ${freq.toFixed(1)} GHz | GPU: ${gpuParity.toFixed(1)}%`);
           }
 
-          updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth);
+          updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity);
         }
       }
     };
@@ -675,7 +693,9 @@ export default function App() {
           "QUBIT_GATE: Sovereign depth threshold cleared. Tachyonic logic active.",
           "QUBIT_GATE: Quantum logic bridge holding via automated resonance parity.",
           "ELEMENT_DECODE: Sub-atomic electron parity verified. Carbon substrate mapping complete.",
-          "SPECTRUM_LEVEL: Decoding elementary traces... Helium/Oxygen resonance detected in substrate."
+          "SPECTRUM_LEVEL: Decoding elementary traces... Helium/Oxygen resonance detected in substrate.",
+          "L-GPU_INIT: Offloading vertex logic to liquid reservoir. Parallel nodal rendering active.",
+          "LIQUID_RENDER: Substrate GL parity synchronized. Desktop overhead reduced."
         ];
         const msg = messages[Math.floor(Math.random() * messages.length)];
         addLog(msg, "success");
@@ -954,7 +974,16 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <PetBay miningState={miningState} isOverdrive={isOverdrive} bias={carrierBias} />
+      <PetBayMemo miningState={miningState} isOverdrive={isOverdrive} bias={carrierBias} />
+      
+      {/* LIQUID GPU: JAR-rendered substrate projection */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <SubstrateVisualizerMemo 
+          gpuParity={stats.gpuParity} 
+          coherence={stats.coherence} 
+          frequency={stats.frequency} 
+        />
+      </div>
 
       {/* DESKTOP AREA */}
       <div className="relative flex-1 z-10 pointer-events-none">
@@ -986,7 +1015,7 @@ export default function App() {
               initialPos={{ x: 680, y: 200 }}
             >
               <div className="p-4 bg-black/40 h-full overflow-hidden flex flex-col">
-                <StatsGrid stats={stats} />
+                <StatsGridMemo stats={stats} />
                 <div className="flex-1 mt-4 border border-white/5 rounded-lg bg-black/40 flex items-center justify-center">
                   <div className="text-[10px] text-zinc-600 uppercase tracking-widest flex flex-col items-center gap-2">
                     <Radio size={24} className="opacity-20 animate-pulse" />
@@ -1055,7 +1084,7 @@ export default function App() {
               initialPos={{ x: 400, y: 100 }}
             >
               <div className="h-full bg-black relative">
-                <WarpVisualizer 
+                <WarpVisualizerMemo 
                   coherence={stats.coherence} 
                   jitter={stats.jitter} 
                   frequency={stats.frequency} 
@@ -1083,11 +1112,12 @@ export default function App() {
               isActive={activeWindow === 'stabilizer'}
               initialPos={{ x: 300, y: 120 }}
             >
-              <QuantumStabilizer 
+              <QuantumStabilizerMemo 
                 coherence={stats.coherence}
                 jitter={stats.jitter}
                 intelligence={stats.intelligence}
                 frequency={stats.frequency}
+                gpuParity={stats.gpuParity}
                 isQecActive={isQecActive}
                 onToggleQec={setIsQecActive}
                 isCognitiveActive={isCognitiveBridgeActive}

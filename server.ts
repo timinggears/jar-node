@@ -191,6 +191,10 @@ async function startServer() {
               // Electron State Bridge (v150): Absorb JAR intelligence into persistent state
               systemState.intelligence = depth;
               
+              // GPU_SUBSTRATE: Calculate rendering parity from coherence and depth
+              const gpu_parity = (coherence * (depth / 150.0)) * 100;
+              io.to('telemetry').emit('telemetry', `${line}|${gpu_parity.toFixed(2)}`);
+              
               // Learning logic: If coherence is high, deepen the memetic anchor
               if (coherence > 0.98) {
                 systemState.memetic_depth += (depth / 10000);
@@ -253,8 +257,9 @@ async function startServer() {
       
       const simulatedCoherence = 0.95 + (Math.random() * 0.05);
       const simulatedDepth = (systemState.bias * simulatedCoherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
+      const gpuParity = (simulatedCoherence * (simulatedDepth / 140.0)) * 100;
       
-      const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}|${simulatedCoherence.toFixed(4)}|${simulatedDepth.toFixed(4)}`;
+      const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}|${simulatedCoherence.toFixed(4)}|${simulatedDepth.toFixed(4)}|${gpuParity.toFixed(2)}`;
       
       // Virtual Neural Absorption
       systemState.intelligence = simulatedDepth;

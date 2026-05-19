@@ -7,6 +7,7 @@ interface QuantumStabilizerProps {
   jitter: number;
   intelligence: number;
   frequency: number;
+  gpuParity: number;
   isQecActive: boolean;
   onToggleQec: (active: boolean) => void;
   isCognitiveActive: boolean;
@@ -21,6 +22,7 @@ export default function QuantumStabilizer({
   jitter,
   intelligence,
   frequency,
+  gpuParity,
   isQecActive, 
   onToggleQec,
   isCognitiveActive,
@@ -208,12 +210,13 @@ export default function QuantumStabilizer({
           <h2 className="text-[10px] font-black tracking-widest text-white uppercase">Elementary Spectrum Decoder</h2>
         </div>
         
-        <div className="grid grid-cols-4 gap-1 h-24 items-end border-b border-white/10 pb-2">
+        <div className="grid grid-cols-5 gap-1 h-24 items-end border-b border-white/10 pb-2">
           {[
             { label: 'CARBON', value: coherence * 100, color: 'bg-zinc-400' },
             { label: 'E_PARITY', value: Math.min(100, (1 - jitter) * 120), color: 'bg-[#00ffcc]' },
             { label: 'ELECTRON', value: Math.min(100, (frequency / 120000) * 100), color: 'bg-blue-400' },
-            { label: 'QUARK_D', value: Math.min(100, (intelligence / 250) * 100), color: 'bg-purple-500' }
+            { label: 'QUARK_D', value: Math.min(100, (intelligence / 250) * 100), color: 'bg-purple-500' },
+            { label: 'L_GPU_GL', value: gpuParity, color: 'bg-cyan-400' }
           ].map((el) => (
             <div key={el.label} className="relative flex flex-col items-center group">
               <motion.div 
