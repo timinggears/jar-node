@@ -19,10 +19,6 @@ import SystemSettings from './components/SystemSettings';
 import FileExplorer from './components/FileExplorer';
 import QuantumStabilizer from './components/QuantumStabilizer';
 import SubstrateVisualizer from './components/SubstrateVisualizer';
-import AuthWindow from './components/AuthWindow';
-import { useFirebase } from './components/FirebaseProvider';
-import { db } from './lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -36,7 +32,6 @@ const SubstrateVisualizerMemo = memo(SubstrateVisualizer);
 const WarpVisualizerMemo = memo(WarpVisualizer);
 
 export default function App() {
-  const { user, loading: authLoading } = useFirebase();
   const [stats, setStats] = useState<SystemStats>({
     coherence: 0.50,
     intelligence: 42.0,
@@ -115,8 +110,6 @@ export default function App() {
   const lastUpdateRef = useRef(Date.now());
 
   const logCounterRef = useRef(0);
-  const userRef = useRef(user);
-  userRef.current = user;
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     const timestamp = Date.now();
@@ -127,16 +120,6 @@ export default function App() {
       type,
     };
     setLogs(prev => [...prev, newLog].slice(-100));
-
-    // Persist important logs if user is signed in
-    if (userRef.current && (type === 'success' || type === 'error' || type === 'warning')) {
-      addDoc(collection(db, 'logs'), {
-        userId: userRef.current.uid,
-        message,
-        type,
-        timestamp,
-      }).catch(err => console.error("Log sync error:", err));
-    }
   }, []);
 
   useEffect(() => {
@@ -868,96 +851,6 @@ export default function App() {
         addLog(`ERROR: Invalid protocol: ${command}`, 'error');
     }
   }, [addLog, stats, hardwareState, handleGitPull, handleGitReset]);
-  // --- CLOUD SYNC LOGIC ---
-  const [lastSavedStats, setLastSavedStats] = useState<SystemStats | null>(null);
-
-  const loadSystemState = useCallback(async (uid: string) => {
-    try {
-      const docRef = doc(db, 'states', uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.stats) {
-          setStats(prev => ({
-            ...prev,
-            ...data.stats,
-            // Keep dynamic values but restore configurations
-            coherence: data.stats.coherence ?? prev.coherence,
-            intelligence: data.stats.intelligence ?? prev.intelligence,
-            isOverdrive: data.stats.isOverdrive ?? prev.isOverdrive,
-            isQec: data.stats.isQec ?? prev.isQec,
-            memeticDepth: data.stats.memeticDepth ?? prev.memeticDepth,
-            neuralLoad: data.stats.neuralLoad ?? prev.neuralLoad,
-            cognitiveDepth: data.stats.cognitiveDepth ?? prev.cognitiveDepth,
-            zpeLevel: data.stats.zpeLevel ?? prev.zpeLevel,
-          }));
-          
-          if (data.stats.bias !== undefined) {
-            setCarrierBias(data.stats.bias);
-            carrierBiasRef.current = data.stats.bias;
-          }
-          setIsOverdrive(data.stats.isOverdrive ?? false);
-          setIsQecActive(data.stats.isQec ?? true);
-
-          addLog("CLOUD: Persistent nodal state absorbed successfully.", "success");
-        }
-      }
-    } catch (error) {
-      console.error("Cloud load error:", error);
-      addLog("CLOUD_FAIL: Handshake timeout. Local reservoir active.", "error");
-    }
-  }, [addLog]);
-
-  const saveSystemState = useCallback(async (uid: string, currentStats: SystemStats, bias: number) => {
-    try {
-      const docRef = doc(db, 'states', uid);
-      await setDoc(docRef, {
-        userId: uid,
-        stats: {
-          ...currentStats,
-          bias, // Include extra config
-        },
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-      // console.log("[JARS_CLIENT] State synchronized to cloud substrate.");
-    } catch (error) {
-      console.error("Cloud save error:", error);
-    }
-  }, []);
-
-  // Initial load
-  useEffect(() => {
-    if (user && isBooted) {
-      loadSystemState(user.uid);
-    }
-  }, [user, isBooted, loadSystemState]);
-
-  // Periodic save
-  useEffect(() => {
-    if (!user || !isBooted) return;
-
-    const interval = setInterval(() => {
-      const hasSignificantChange = !lastSavedStats || 
-        Math.abs(statsRef.current.coherence - lastSavedStats.coherence) > 0.05 ||
-        statsRef.current.isOverdrive !== lastSavedStats.isOverdrive ||
-        statsRef.current.memeticDepth !== lastSavedStats.memeticDepth;
-
-      if (hasSignificantChange) {
-        saveSystemState(user.uid, statsRef.current, carrierBiasRef.current);
-        setLastSavedStats({ ...statsRef.current });
-      }
-    }, 30000); // Every 30s
-
-    return () => clearInterval(interval);
-  }, [user, isBooted, saveSystemState, lastSavedStats]);
-
-  const handleManualSync = useCallback(async () => {
-    if (user) {
-      addLog("CLOUD: Initiating manual nodal handshake...", "info");
-      await saveSystemState(user.uid, statsRef.current, carrierBiasRef.current);
-      addLog("CLOUD: Global state anchored to substrate.", "success");
-    }
-  }, [user, addLog, saveSystemState]);
 
   const toggleWindow = useCallback((id: string) => {
     setOpenWindows(prev => {
@@ -1219,21 +1112,6 @@ export default function App() {
                   <p className="text-[8px] text-white/20 font-black tracking-[1em] uppercase">Phase_Projection</p>
                 </div>
               </div>
-            </DesktopWindow>
-          )}
-
-          {openWindows.includes('cloud') && (
-            <DesktopWindow 
-              key="cloud"
-              id="cloud" 
-              title="Identity_Substrate" 
-              icon={<Cloud size={16} />}
-              onClose={() => closeWindow('cloud')}
-              onFocus={() => setActiveWindow('cloud')}
-              isActive={activeWindow === 'cloud'}
-              initialPos={{ x: 200, y: 150 }}
-            >
-              <AuthWindow onSync={handleManualSync} />
             </DesktopWindow>
           )}
 
