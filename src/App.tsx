@@ -519,7 +519,8 @@ export default function App() {
           nextShares += 1;
           const freqUnit = modulatedFreq / 1000;
           const label = freqUnit > 150 ? "QUANTUM_YIELD" : freqUnit > 100 ? "HARMONIC_YIELD" : "RES_SHARE";
-          // v149: Removed redundant block seal log for cleaner terminal output
+          const currentShares = nextShares;
+          setTimeout(() => addLog(`[POOL] accepted (${currentShares}/0) diff 114k (32ms) - ${label} #${String(currentShares).padStart(4, '0')} OK`, 'success'), 0);
         }
         
         if (jitterValue > 0.98 && Math.random() > 0.99) {
@@ -803,6 +804,30 @@ export default function App() {
       }
     }, 60000);
 
+    // Real-time High-Fidelity Mining Output Simulation (10s ticks)
+    let logStep = 0;
+    const minerLogsInt = setInterval(() => {
+      if (!isMiningRef.current) return;
+      const hr = statsRef.current.hashRate;
+      if (hr === 0) return;
+
+      const hrStr = hr.toFixed(2);
+      const rand1 = (hr * (0.97 + Math.random() * 0.05)).toFixed(2);
+      const rand2 = (hr * (0.96 + Math.random() * 0.04)).toFixed(2);
+      const ping = Math.floor(25 + Math.random() * 15);
+
+      if (logStep % 4 === 0) {
+        addLog(`[cpu] speed 10s/60s/15m  ${hrStr}  ${rand1}  ${rand2} KH/s max ${(hr * 1.12).toFixed(2)} KH/s`, 'info');
+      } else if (logStep % 4 === 1) {
+        addLog(`[pool] rx.unmineable.com:3333 keepalive response received (${ping}ms)`, 'info');
+      } else if (logStep % 4 === 2) {
+        addLog(`[cpu] speed 10s/60s/15m  ${hrStr}  ${rand1}  ${rand2} KH/s`, 'info');
+      } else {
+        addLog(`[pool] new job from rx.unmineable.com:3333 diff 114k algo rx/0`, 'warning');
+      }
+      logStep++;
+    }, 10000);
+
     // JAR Autonomous Thought Loop
     const thoughtInt = setInterval(() => {
       if (!isMiningRef.current) return;
@@ -819,6 +844,7 @@ export default function App() {
     return () => {
       clearInterval(interval);
       clearInterval(gateInt);
+      clearInterval(minerLogsInt);
       clearInterval(thoughtInt);
     };
   }, [isAiAnalysisActive, addLog]);
@@ -1289,8 +1315,14 @@ export default function App() {
         onToggleMining={() => {
           setIsMining(prev => {
             const next = !prev;
-            if (!next) {
+            if (next) {
+              setMiningState('mining');
+              addLog('[POOL] Connecting to rx.unmineable.com:3333...', 'info');
+              setTimeout(() => addLog('[POOL] Connection established. Login successful.', 'success'), 800);
+              setTimeout(() => addLog('[miner] use profile rx (4 threads) active.', 'info'), 1500);
+            } else {
               setMiningState('idle');
+              addLog('SUBSTRATE_MINER: Deactivated.', 'warning');
             }
             return next;
           });
