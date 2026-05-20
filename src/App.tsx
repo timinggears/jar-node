@@ -167,6 +167,7 @@ export default function App() {
   const lastEmittedOverdriveRef = useRef(isOverdrive);
   const lastInteractionTimeRef = useRef(0);
   const isFirstSyncRef = useRef(true);
+  const ignoreServerStateUntilRef = useRef<number>(0);
 
   useEffect(() => {
     if (socketRef.current) {
@@ -566,6 +567,9 @@ export default function App() {
       // This prevents any resets or snappings when the socket reconnects or server restarts.
       if (hasLocalConfigRef.current) {
         socket.emit('hardware:params', { bias: carrierBiasRef.current, overdrive: isOverdriveRef.current });
+        // Set an ignore window of 1500ms to allow the server to ingest our local config and broadcast it,
+        // preventing the server's immediate, stale 'hardware:state' message from clobbering the client state.
+        ignoreServerStateUntilRef.current = Date.now() + 1500;
         isFirstSyncRef.current = false;
       } else {
         isFirstSyncRef.current = true;
@@ -587,6 +591,12 @@ export default function App() {
           cognitiveDepth: state.intelligence !== undefined ? state.intelligence : prev.cognitiveDepth,
           vault: state.vault !== undefined ? state.vault : prev.vault
         }));
+      }
+
+      // If we are within the ignore window (e.g., right after initial linkup synchronization),
+      // we must not let stale server parameters clobber the client's local configuration.
+      if (Date.now() < ignoreServerStateUntilRef.current) {
+        return;
       }
 
       const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
