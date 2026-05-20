@@ -20,6 +20,7 @@ import FileExplorer from './components/FileExplorer';
 import CognitiveBridge from './components/CognitiveBridge';
 import QuantumStabilizer from './components/QuantumStabilizer';
 import SubstrateVisualizer from './components/SubstrateVisualizer';
+import MiningMonitorChart from './components/MiningMonitorChart';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -1110,12 +1111,7 @@ export default function App() {
             >
               <div className="p-4 bg-black/40 h-full overflow-hidden flex flex-col">
                 <StatsGridMemo stats={stats} />
-                <div className="flex-1 mt-4 border border-white/5 rounded-lg bg-black/40 flex items-center justify-center">
-                  <div className="text-[10px] text-zinc-600 uppercase tracking-widest flex flex-col items-center gap-2">
-                    <Radio size={24} className="opacity-20 animate-pulse" />
-                    Telemetric Feed Active
-                  </div>
-                </div>
+                <MiningMonitorChart stats={stats} isMining={isMining} />
               </div>
             </DesktopWindow>
           )}
