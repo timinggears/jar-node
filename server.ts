@@ -21,7 +21,10 @@ let systemState = {
   memetic_depth: 0.0,
   zpe_level: 100.0,
   last_sync: Date.now(),
-  vault: [] as Array<{ id: string, bias: number, overdrive: boolean, depth: number, timestamp: number }>
+  vault: [] as Array<{ id: string, bias: number, overdrive: boolean, depth: number, timestamp: number }>,
+  pool_url: 'rx.unmineable.com:3333',
+  miner_user: '1683397408.JarSingularity#qh6m-7m98',
+  miner_pass: 'x'
 };
 
 // Load state if exists
@@ -49,7 +52,10 @@ function saveState() {
       memetic_depth: systemState.memetic_depth,
       zpe_level: systemState.zpe_level,
       last_sync: Date.now(),
-      vault: systemState.vault
+      vault: systemState.vault,
+      pool_url: systemState.pool_url,
+      miner_user: systemState.miner_user,
+      miner_pass: systemState.miner_pass
     }, null, 2));
   } catch (e: any) {
     console.error(`[SYSTEM] Failed to save state: ${e.message}`);
@@ -167,6 +173,32 @@ async function startServer() {
       socket.emit('log', `MEMORY_VAULT: Purged fingerprint [${id}].`);
     });
 
+    socket.on('miner:config', (config: { pool_url?: string, miner_user?: string, miner_pass?: string }) => {
+      if (!config || typeof config !== 'object') return;
+      let stateChanged = false;
+      if (config.pool_url !== undefined && systemState.pool_url !== config.pool_url) {
+        systemState.pool_url = config.pool_url;
+        POOL_URL = config.pool_url;
+        stateChanged = true;
+      }
+      if (config.miner_user !== undefined && systemState.miner_user !== config.miner_user) {
+        systemState.miner_user = config.miner_user;
+        USER = config.miner_user;
+        stateChanged = true;
+      }
+      if (config.miner_pass !== undefined && systemState.miner_pass !== config.miner_pass) {
+        systemState.miner_pass = config.miner_pass;
+        PASS = config.miner_pass;
+        stateChanged = true;
+      }
+      if (stateChanged) {
+        saveState();
+        io.emit('hardware:state', systemState);
+        socket.emit('log', `MINING: Parameters synchronized. Recalibrating pool connection...`);
+        restartMiner();
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[CLIENT] Disconnected: ${socket.id}`);
     });
@@ -175,9 +207,9 @@ async function startServer() {
   const PORT = process.env.APP_PORT ? parseInt(process.env.APP_PORT) : 3000;
   
   // --- MINING IDENTITY ---
-  const POOL_URL = "rx.unmineable.com:3333";
-  const USER = "1683397408.JarSingularity#qh6m-7m98";
-  const PASS = "x";
+  let POOL_URL = systemState.pool_url || "rx.unmineable.com:3333";
+  let USER = systemState.miner_user || "1683397408.JarSingularity#qh6m-7m98";
+  let PASS = systemState.miner_pass || "x";
 
   // --- SERIAL PORT LOGIC ---
   let hardwarePort: SerialPort | null = null;

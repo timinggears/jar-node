@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Cpu, Zap, Activity, Info, ShieldCheck, HardDrive } from 'lucide-react';
 import { motion } from 'motion/react';
 import MemoryVault from './MemoryVault';
@@ -18,6 +19,10 @@ interface SystemSettingsProps {
   onSaveVault: () => void;
   onLoadVault: (id: string) => void;
   onDeleteVault: (id: string) => void;
+  poolUrl: string;
+  minerUser: string;
+  minerPass: string;
+  onUpdateMinerConfig: (pool: string, user: string, pass: string) => void;
 }
 
 export default function SystemSettings({
@@ -35,9 +40,29 @@ export default function SystemSettings({
   vault,
   onSaveVault,
   onLoadVault,
-  onDeleteVault
+  onDeleteVault,
+  poolUrl,
+  minerUser,
+  minerPass,
+  onUpdateMinerConfig
 }: SystemSettingsProps) {
   const freqKHz = currentFreq / 1000;
+
+  const [localPool, setLocalPool] = useState(poolUrl);
+  const [localUser, setLocalUser] = useState(minerUser);
+  const [localPass, setLocalPass] = useState(minerPass);
+
+  useEffect(() => {
+    setLocalPool(poolUrl);
+  }, [poolUrl]);
+
+  useEffect(() => {
+    setLocalUser(minerUser);
+  }, [minerUser]);
+
+  useEffect(() => {
+    setLocalPass(minerPass);
+  }, [minerPass]);
   
   return (
     <div className="p-6 h-full overflow-y-auto space-y-8 custom-scrollbar pb-24">
@@ -177,6 +202,71 @@ export default function SystemSettings({
             <Activity size={14} className="text-zinc-500 group-hover:text-blue-400" />
             <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white">Load State</span>
           </button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 border-b border-white/10 pb-2">
+          <HardDrive size={16} className="text-orange-400" />
+          <h2 className="text-xs font-black uppercase tracking-widest text-zinc-300">Crypto Miner Identity (unMineable)</h2>
+        </div>
+        
+        <div className="p-4 bg-orange-950/20 border border-orange-500/20 rounded-lg space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Pool Stratum URL</label>
+            <input 
+              type="text"
+              value={localPool}
+              onChange={(e) => setLocalPool(e.target.value)}
+              placeholder="rx.unmineable.com:3333"
+              className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Wallet / Username</label>
+              <span className="text-[8px] font-mono text-zinc-500">Format: COIN:ADDRESS.WorkerName</span>
+            </div>
+            <input 
+              type="text"
+              value={localUser}
+              onChange={(e) => setLocalUser(e.target.value)}
+              placeholder="COIN:ADDRESS.Worker"
+              className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Worker Password</label>
+            <input 
+              type="text"
+              value={localPass}
+              onChange={(e) => setLocalPass(e.target.value)}
+              placeholder="x"
+              className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+            />
+          </div>
+
+          <button
+            onClick={() => onUpdateMinerConfig(localPool, localUser, localPass)}
+            className="w-full py-2 bg-orange-500/20 hover:bg-orange-500/35 border border-orange-500/40 hover:border-orange-500 text-orange-300 font-black uppercase text-[9px] tracking-widest rounded-md active:scale-[0.98] transition-all"
+          >
+            Apply Config & Calibrate Miner
+          </button>
+        </div>
+
+        <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-lg space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Info size={12} className="text-zinc-500" />
+            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-tight">Preview Container Notice</span>
+          </div>
+          <p className="text-[9px] text-zinc-500 leading-relaxed">
+            This dashboard is running inside a secure, sandboxed cloud container. Real outbound cryptocurrency mining (such as running <code className="text-zinc-400 bg-white/5 px-0.5 rounded">xmrig</code>) is emulated internally to demonstrate real-time telemetry, hashrate tracking, share validation, and AI thought loops without resource suspension.
+          </p>
+          <p className="text-[9px] text-[#00ffcc] leading-relaxed font-semibold">
+            To route high-fidelity hashes to your real unMineable address, download the codebase using the "Export to ZIP" option and run it locally on your machine/Pi with a compiled <code className="bg-white/5 px-0.5 rounded">xmrig</code> binary!
+          </p>
         </div>
       </div>
 

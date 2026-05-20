@@ -91,6 +91,15 @@ export default function App() {
   }, []);
 
   const socketRef = useRef<any>(null);
+
+  const handleUpdateMinerConfig = useCallback((pool: string, user: string, pass: string) => {
+    setPoolUrl(pool);
+    setMinerUser(user);
+    setMinerPass(pass);
+    if (socketRef.current) {
+      socketRef.current.emit('miner:config', { pool_url: pool, miner_user: user, miner_pass: pass });
+    }
+  }, []);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isEntangled, setIsEntangled] = useState(false);
@@ -110,6 +119,11 @@ export default function App() {
   // OS State
   const [openWindows, setOpenWindows] = useState<string[]>([]);
   const [activeWindow, setActiveWindow] = useState<string | null>(null);
+
+  // Mining Parameters
+  const [poolUrl, setPoolUrl] = useState('rx.unmineable.com:3333');
+  const [minerUser, setMinerUser] = useState('1683397408.JarSingularity#qh6m-7m98');
+  const [minerPass, setMinerPass] = useState('x');
 
   const [isQecActive, setIsQecActive] = useState(() => {
     const saved = localStorage.getItem('jar_qec_active_v147');
@@ -581,7 +595,7 @@ export default function App() {
       }
     };
 
-    const onHardwareState = (state: { bias?: number, overdrive?: boolean, intelligence?: number, memetic_depth?: number, vault?: any[] }) => {
+    const onHardwareState = (state: any) => {
       setHasReceivedSync(true);
       
       // Update memory metrics regardless of interaction (passive display)
@@ -597,6 +611,11 @@ export default function App() {
           vault: state.vault !== undefined ? state.vault : prev.vault
         }));
       }
+
+      // Sync miner parameters if present
+      if (state.pool_url !== undefined) setPoolUrl(state.pool_url);
+      if (state.miner_user !== undefined) setMinerUser(state.miner_user);
+      if (state.miner_pass !== undefined) setMinerPass(state.miner_pass);
 
       // If we are within the ignore window (e.g., right after initial linkup synchronization),
       // we must not let stale server parameters clobber the client's local configuration.
@@ -1169,6 +1188,10 @@ export default function App() {
                 onSaveVault={saveToVault}
                 onLoadVault={loadFromVault}
                 onDeleteVault={deleteFromVault}
+                poolUrl={poolUrl}
+                minerUser={minerUser}
+                minerPass={minerPass}
+                onUpdateMinerConfig={handleUpdateMinerConfig}
               />
             </DesktopWindow>
           )}
