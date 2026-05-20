@@ -11,7 +11,7 @@ import os from 'os';
 import * as glob from 'glob';
 
 // --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
-const STATE_FILE = path.join(process.cwd(), 'system_state.json');
+const STATE_FILE = path.join(os.tmpdir(), 'system_state.json');
 let systemState = {
   bias: 50,
   overdrive: false,
