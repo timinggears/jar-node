@@ -86,19 +86,30 @@ async function startServer() {
     });
 
   socket.on('hardware:params', (params: any) => {
+    if (!params || typeof params !== 'object') {
+      return;
+    }
+    let stateChanged = false;
     if (params.bias !== undefined) {
-      const oldBias = systemState.bias;
-      systemState.bias = Math.min(79.0, Number(params.bias));
-      saveState();
+      const targetBias = Math.min(79.0, Number(params.bias));
+      if (systemState.bias !== targetBias) {
+        systemState.bias = targetBias;
+        stateChanged = true;
+      }
     }
     if (params.overdrive !== undefined) {
-      const oldOverdrive = systemState.overdrive;
-      systemState.overdrive = Boolean(params.overdrive);
-      saveState();
+      const targetOverdrive = Boolean(params.overdrive);
+      if (systemState.overdrive !== targetOverdrive) {
+        systemState.overdrive = targetOverdrive;
+        stateChanged = true;
+      }
     }
     
-    // Broadcast change to all other clients
-    io.emit('hardware:state', systemState);
+    if (stateChanged) {
+      saveState();
+      // Broadcast change to all other clients
+      io.emit('hardware:state', systemState);
+    }
     
     socket.emit('log', `SYSTEM: Nodal frequencies realigned to ${systemState.bias} GHz target.`);
     
@@ -317,7 +328,7 @@ async function startServer() {
     } catch (err) {
       console.error('[SERVER] Telemetry error:', err);
     }
-  }, 50); // Increased telemetry update rate for "Real Experiment" feel (20Hz)
+  }, 350); // Balanced telemetry update rate (approx 3Hz) to prevent browser UI thread freeze and Socket.io ping timeout
 
   findAndOpenPort();
 
