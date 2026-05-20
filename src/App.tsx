@@ -134,20 +134,19 @@ export default function App() {
 
   useEffect(() => {
     if (socketRef.current) {
-      const needsSync = isFirstSyncRef.current || carrierBias !== lastEmittedBiasRef.current || isOverdrive !== lastEmittedOverdriveRef.current;
+      // Do not send parameters until we have performed our first sync from the server
+      if (isFirstSyncRef.current) return;
+
+      const needsSync = carrierBias !== lastEmittedBiasRef.current || isOverdrive !== lastEmittedOverdriveRef.current;
       if (!needsSync) return;
       
-      // console.log(`[JARS_CLIENT] Syncing Intent: Bias=${carrierBias}, Overdrive=${isOverdrive} (FirstSync=${isFirstSyncRef.current})`);
-      if (!isFirstSyncRef.current) {
-        addLog(`SYSTEM: Substrate realigned to ${carrierBias.toFixed(1)} GHz`, 'info');
-      }
+      addLog(`SYSTEM: Substrate realigned to ${carrierBias.toFixed(1)} GHz`, 'info');
       socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
       
       lastEmittedBiasRef.current = carrierBias;
       lastEmittedOverdriveRef.current = isOverdrive;
-      isFirstSyncRef.current = false;
     }
-  }, [carrierBias, isOverdrive, addLog, hardwareState]);
+  }, [carrierBias, isOverdrive, addLog]);
 
   // Quantum Entanglement Logic
   useEffect(() => {
@@ -549,9 +548,23 @@ export default function App() {
         }));
       }
 
-      // Only adopt server bias/overdrive if we aren't currently interacting and NOT on first sync
       const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
-      if (timeSinceInteraction < 2000 || isFirstSyncRef.current) return;
+      
+      // Adopt server bias/overdrive if it is the first synchronization, or if we aren't currently interacting
+      if (isFirstSyncRef.current) {
+        if (state.bias !== undefined) {
+          setCarrierBias(state.bias);
+          lastEmittedBiasRef.current = state.bias;
+        }
+        if (state.overdrive !== undefined) {
+          setIsOverdrive(state.overdrive);
+          lastEmittedOverdriveRef.current = state.overdrive;
+        }
+        isFirstSyncRef.current = false;
+        return;
+      }
+
+      if (timeSinceInteraction < 2000) return;
 
       if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 0.1) {
         setCarrierBias(state.bias);

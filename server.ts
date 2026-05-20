@@ -234,6 +234,7 @@ async function startServer() {
   }
 
   // --- HARDWARE / SIMULATION TELEMETRY ---
+  let saveTicks = 0;
   setInterval(async () => {
     try {
       if (hardwarePort && hardwarePort.isOpen) return;
@@ -280,8 +281,10 @@ async function startServer() {
         systemState.memetic_depth += (simulatedDepth / 12000);
       }
       
-      // Auto-save memory every 30s in simulation
-      if (Date.now() % 30000 < 60) {
+      // Auto-save memory every 30s in simulation (600 ticks * 50ms)
+      saveTicks++;
+      if (saveTicks >= 600) {
+        saveTicks = 0;
         saveState();
       }
       
@@ -447,7 +450,8 @@ async function startServer() {
 
   // Handle process cleanup
   const cleanup = () => {
-    console.log('[SERVER] Shutting down...');
+    console.log('[SERVER] Shutting down and saving state...');
+    saveState();
     miningEnabled = false;
     if (xmrigProcess) {
       console.log('[MINER] Terminating XMRig...');
