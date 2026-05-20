@@ -79,7 +79,7 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency, z
         if (p.y > canvas.height) p.y = 0;
 
         ctx.fillStyle = p.color;
-        const size = (p.life * 2) * (coh * 1.5);
+        const size = Math.max(0, (p.life * 2) * (coh * 1.5));
         ctx.beginPath();
         ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
         ctx.fill();
