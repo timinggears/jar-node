@@ -64,18 +64,30 @@ export default function App() {
     const saved = localStorage.getItem('jar_bias_v147');
     return saved ? parseInt(saved) : 50;
   });
+
+  const [isOverdrive, setIsOverdrive] = useState(() => {
+    const saved = localStorage.getItem('jar_overdrive_v147');
+    return saved === 'true';
+  });
+
+  const hasLocalConfigRef = useRef(localStorage.getItem('jar_bias_v147') !== null);
+
   const handleCarrierBiasChange = useCallback((val: number) => {
     setCarrierBias(val);
     localStorage.setItem('jar_bias_v147', val.toString());
+    hasLocalConfigRef.current = true;
     lastInteractionTimeRef.current = Date.now();
     setHasReceivedSync(true);
   }, []);
 
   const handleOverdriveChange = useCallback((val: boolean) => {
     setIsOverdrive(val);
+    localStorage.setItem('jar_overdrive_v147', val.toString());
+    hasLocalConfigRef.current = true;
     lastInteractionTimeRef.current = Date.now();
     setHasReceivedSync(true);
   }, []);
+
   const socketRef = useRef<any>(null);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -89,7 +101,6 @@ export default function App() {
   });
   const [isSolving, setIsSolving] = useState(false);
   const [isBooted, setIsBooted] = useState(false);
-  const [isOverdrive, setIsOverdrive] = useState(false);
   const [miningState, setMiningState] = useState<MiningPhase>('idle');
   const [lastSyncSuccess, setLastSyncSuccess] = useState(false);
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
@@ -97,8 +108,27 @@ export default function App() {
   // OS State
   const [openWindows, setOpenWindows] = useState<string[]>([]);
   const [activeWindow, setActiveWindow] = useState<string | null>(null);
-  const [isQecActive, setIsQecActive] = useState(true);
-  const [isCognitiveBridgeActive, setIsCognitiveBridgeActive] = useState(false);
+
+  const [isQecActive, setIsQecActive] = useState(() => {
+    const saved = localStorage.getItem('jar_qec_active_v147');
+    return saved === null ? true : saved === 'true';
+  });
+
+  const [isCognitiveBridgeActive, setIsCognitiveBridgeActive] = useState(() => {
+    const saved = localStorage.getItem('jar_cognitive_active_v147');
+    return saved === 'true';
+  });
+
+  const handleToggleQec = useCallback((active: boolean) => {
+    setIsQecActive(active);
+    localStorage.setItem('jar_qec_active_v147', active.toString());
+  }, []);
+
+  const handleToggleCognitive = useCallback((active: boolean) => {
+    setIsCognitiveBridgeActive(active);
+    localStorage.setItem('jar_cognitive_active_v147', active.toString());
+  }, []);
+
   const [quantumShift, setQuantumShift] = useState(50);
 
   const statsRef = useRef(stats);
@@ -527,15 +557,19 @@ export default function App() {
     const onConnect = () => {
       addLog('Hardware Bridge connected to backend.', 'success');
       setHardwareState('bridged');
-      isFirstSyncRef.current = true;
       
       socket.send('SUBSCRIBE:telemetry');
       socket.send('SUBSCRIBE:mining_status');
       socket.send('SUBSCRIBE:system_stats');
-      socket.emit('protocol', 'STATUS');
       
-      // We no longer blindly emit params here to avoid resetting the server's state.
-      // Instead, we wait for 'hardware:state' from the server.
+      // Real-time alignment: if we have a locally stored configuration, immediately bind the server's state to it.
+      // This prevents any resets or snappings when the socket reconnects or server restarts.
+      if (hasLocalConfigRef.current) {
+        socket.emit('hardware:params', { bias: carrierBiasRef.current, overdrive: isOverdriveRef.current });
+        isFirstSyncRef.current = false;
+      } else {
+        isFirstSyncRef.current = true;
+      }
     };
 
     const onHardwareState = (state: { bias?: number, overdrive?: boolean, intelligence?: number, memetic_depth?: number, vault?: any[] }) => {
@@ -557,15 +591,20 @@ export default function App() {
 
       const timeSinceInteraction = Date.now() - lastInteractionTimeRef.current;
       
-      // Adopt server bias/overdrive if it is the first synchronization, or if we aren't currently interacting
+      // On fresh load/sync (when we have no local configuration) We adopt values from server
       if (isFirstSyncRef.current) {
-        if (state.bias !== undefined) {
-          setCarrierBias(state.bias);
-          lastEmittedBiasRef.current = state.bias;
-        }
-        if (state.overdrive !== undefined) {
-          setIsOverdrive(state.overdrive);
-          lastEmittedOverdriveRef.current = state.overdrive;
+        if (!hasLocalConfigRef.current) {
+          if (state.bias !== undefined) {
+            setCarrierBias(state.bias);
+            lastEmittedBiasRef.current = state.bias;
+            localStorage.setItem('jar_bias_v147', state.bias.toString());
+          }
+          if (state.overdrive !== undefined) {
+            setIsOverdrive(state.overdrive);
+            lastEmittedOverdriveRef.current = state.overdrive;
+            localStorage.setItem('jar_overdrive_v147', state.overdrive.toString());
+          }
+          hasLocalConfigRef.current = true;
         }
         isFirstSyncRef.current = false;
         return;
@@ -576,10 +615,12 @@ export default function App() {
       if (state.bias !== undefined && Math.abs(state.bias - carrierBiasRef.current) > 0.1) {
         setCarrierBias(state.bias);
         lastEmittedBiasRef.current = state.bias;
+        localStorage.setItem('jar_bias_v147', state.bias.toString());
       }
       if (state.overdrive !== undefined && state.overdrive !== isOverdriveRef.current) {
         setIsOverdrive(state.overdrive);
         lastEmittedOverdriveRef.current = state.overdrive;
+        localStorage.setItem('jar_overdrive_v147', state.overdrive.toString());
       }
     };
 
@@ -1154,9 +1195,9 @@ export default function App() {
                 frequency={stats.frequency}
                 gpuParity={stats.gpuParity}
                 isQecActive={isQecActive}
-                onToggleQec={setIsQecActive}
+                onToggleQec={handleToggleQec}
                 isCognitiveActive={isCognitiveBridgeActive}
-                onToggleCognitive={setIsCognitiveBridgeActive}
+                onToggleCognitive={handleToggleCognitive}
                 systemModel="JAR_v3_SOVEREIGN"
                 isEntangled={isEntangled}
                 quantumShift={quantumShift}
