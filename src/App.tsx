@@ -492,9 +492,11 @@ export default function App() {
       const coherenceFactor = nextCoherence * 15;
       
       // Multiplier removal: We directly calculate but don't add hidden "bonus" constants
-      let nextHashRate = (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * harmonicMultiplier;
-      if (hrateFromServer > 0) {
+      let nextHashRate = isMiningRef.current ? (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * harmonicMultiplier : 0;
+      if (isMiningRef.current && hrateFromServer > 0) {
         nextHashRate = hrateFromServer;
+      } else if (!isMiningRef.current) {
+        nextHashRate = 0;
       }
       
       const seed = parseInt(seedStr, 16);
@@ -661,6 +663,10 @@ export default function App() {
     };
 
     const onMiningStatus = (payload: any) => {
+      if (!isMiningRef.current) {
+        setMiningState('idle');
+        return;
+      }
       const { type, message, data } = typeof payload === 'string' ? { type: 'info', message: payload, data: null } : payload;
       
       switch (type) {
@@ -918,6 +924,7 @@ export default function App() {
         break;
       case 'miner_stop':
         setIsMining(false);
+        setMiningState('idle');
         addLog('SUBSTRATE_MINER: Deactivated.', 'warning');
         break;
       default:
@@ -1283,7 +1290,15 @@ export default function App() {
         isSyncing={isSyncing}
         onSync={() => handleGitPull(false)} // Call virtual sync by default for better demo experience
         isMining={isMining}
-        onToggleMining={() => setIsMining(!isMining)}
+        onToggleMining={() => {
+          setIsMining(prev => {
+            const next = !prev;
+            if (!next) {
+              setMiningState('idle');
+            }
+            return next;
+          });
+        }}
       />
 
       {/* HARDWARE BRIDGE STATUS BANNER */}
