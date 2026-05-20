@@ -85,11 +85,13 @@ export default function CognitiveBridge({
     setErrorStatus(null);
 
     try {
-      // Map current messages to format expected by backend (role: "user" | "model")
-      const history = messages.map(m => ({
-        role: m.role,
-        text: m.text
-      }));
+      // Map current messages to format expected by backend, filtering out the initial model greeting to avoid Gemini history-start limitations
+      const history = messages
+        .filter(m => m.id !== 'init')
+        .map(m => ({
+          role: m.role,
+          text: m.text
+        }));
 
       // Include physical telemetry system context in the current prompt to ground responses
       const systemContext = ` [System Resonance: Freq: ${frequency.toFixed(0)} Hz, Coherence: ${(coherence * 100).toFixed(1)}%, Overdrive: ${isOverdrive ? 'ACTIVE' : 'OFFLINE'}, Bias: ${bias.toFixed(1)} GHz]`;
@@ -106,7 +108,15 @@ export default function CognitiveBridge({
         })
       });
 
-      const data = await response.json();
+      // Safely parse JSON or read HTML response to prevent "failed to execute 'json' on 'Response'" errors
+      let data: any = {};
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const textResponse = await response.text();
+        throw new Error(textResponse || `HTTP Connection Error (Status: ${response.status})`);
+      }
 
       if (response.ok && data.success) {
         const modelMsg: Message = {
