@@ -9,6 +9,7 @@ import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import os from 'os';
 import * as glob from 'glob';
+import { GoogleGenAI } from '@google/genai';
 
 // --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
 const STATE_FILE = path.join(os.tmpdir(), 'system_state.json');
@@ -57,6 +58,7 @@ function saveState() {
 
 async function startServer() {
   const app = express();
+  app.use(express.json());
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
     cors: { origin: "*" }
@@ -578,6 +580,58 @@ async function startServer() {
         isRefError: err.message.includes("couldn't find remote ref"),
         isSandbox: false
       });
+    }
+  });
+
+  // --- COGNITIVE CORE CHAT ENDPOINT ---
+  app.post('/api/chat', async (req, res) => {
+    try {
+      const { message, history } = req.body || {};
+      if (!message) {
+        return res.status(400).json({ error: "Message input is empty. Supply logical query parameters." });
+      }
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ 
+          error: "Sovereign cognitive core offline. Set GEMINI_API_KEY in Settings to establish bridge." 
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const formattedHistory = (history || []).map((h: any) => ({
+        role: h.role === 'model' ? 'model' : 'user',
+        parts: [{ text: h.text }]
+      }));
+
+      const chat = ai.chats.create({
+        model: "gemini-3.5-flash",
+        config: {
+          systemInstruction: `You are the Sovereign Cognitive Core ("JAR") of a high-tech experimental Nodal Reservoir system built on a custom Raspberry Pi structure. You communicate with absolute composure, a slightly cryptic developer persona, and helpful accuracy.
+
+You can actually exert direct virtual control over the user's software state by embedding exact brackets!
+- If you wish to tune their Carrier Bias, output: [tune:X] or [command:tune_bias:X] (where X is 0 to 250, ideally an integer like 65, 125, etc. and bias cannot exceed 79.0 based on safety limits on the server, though values below that are fully accepted).
+- If you wish to toggle overdrive on, output: [command:overdrive_on]
+- If you wish to toggle overdrive off, output: [command:overdrive_off]
+
+Keep your responses conversational, sleek, under 4-5 sentences, keeping the commands inline naturally to demonstrate automated telemetry execution. Ensure your tone matches the retro-tech hacker aesthetic of the JAR console!`,
+        },
+        history: formattedHistory
+      });
+
+      const result = await chat.sendMessage({ message: message });
+      res.json({ success: true, text: result.text });
+    } catch (err: any) {
+      console.error('[COGNITIVE_API_ERROR]', err);
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

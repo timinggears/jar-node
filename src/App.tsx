@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -17,6 +17,7 @@ import DesktopWindow from './components/DesktopWindow';
 import Taskbar from './components/Taskbar';
 import SystemSettings from './components/SystemSettings';
 import FileExplorer from './components/FileExplorer';
+import CognitiveBridge from './components/CognitiveBridge';
 import QuantumStabilizer from './components/QuantumStabilizer';
 import SubstrateVisualizer from './components/SubstrateVisualizer';
 import { SystemStats, LogEntry } from './types';
@@ -1139,6 +1140,29 @@ export default function App() {
                 onSaveVault={saveToVault}
                 onLoadVault={loadFromVault}
                 onDeleteVault={deleteFromVault}
+              />
+            </DesktopWindow>
+          )}
+
+          {openWindows.includes('cognitive_bridge') && (
+            <DesktopWindow 
+              key="cognitive_bridge"
+              id="cognitive_bridge" 
+              title="JAR_Cognitive_Core" 
+              icon={<Brain size={16} />}
+              onClose={() => closeWindow('cognitive_bridge')}
+              onFocus={() => setActiveWindow('cognitive_bridge')}
+              isActive={activeWindow === 'cognitive_bridge'}
+              initialPos={{ x: 300, y: 120 }}
+            >
+              <CognitiveBridge 
+                onClose={() => closeWindow('cognitive_bridge')}
+                bias={carrierBias}
+                isOverdrive={isOverdrive}
+                frequency={stats.frequency}
+                coherence={stats.coherence}
+                onTuneBias={(newBias) => handleCarrierBiasChange(newBias)}
+                onToggleOverdrive={(val) => handleOverdriveChange(val)}
               />
             </DesktopWindow>
           )}

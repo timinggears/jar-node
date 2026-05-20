@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -114,6 +114,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('files')} 
         isActive={activeWindow === 'files'}
         onClick={() => onToggleWindow('files')}
+      />
+      <AppIcon 
+        id="cognitive_bridge"
+        icon={<Brain size={20} />} 
+        label="Cognitive Bridge" 
+        isOpen={openWindows.includes('cognitive_bridge')} 
+        isActive={activeWindow === 'cognitive_bridge'}
+        onClick={() => onToggleWindow('cognitive_bridge')}
       />
       <AppIcon 
         id="settings"
