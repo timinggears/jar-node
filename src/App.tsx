@@ -70,6 +70,12 @@ export default function App() {
     lastInteractionTimeRef.current = Date.now();
     setHasReceivedSync(true);
   }, []);
+
+  const handleOverdriveChange = useCallback((val: boolean) => {
+    setIsOverdrive(val);
+    lastInteractionTimeRef.current = Date.now();
+    setHasReceivedSync(true);
+  }, []);
   const socketRef = useRef<any>(null);
   const [isAiAnalysisActive, setIsAiAnalysisActive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -521,6 +527,7 @@ export default function App() {
     const onConnect = () => {
       addLog('Hardware Bridge connected to backend.', 'success');
       setHardwareState('bridged');
+      isFirstSyncRef.current = true;
       
       socket.send('SUBSCRIBE:telemetry');
       socket.send('SUBSCRIBE:mining_status');
@@ -636,6 +643,7 @@ export default function App() {
     socket.on('disconnect', () => {
       addLog('Hardware Bridge disconnected.', 'error');
       setHardwareState('disconnected');
+      isFirstSyncRef.current = true;
     });
 
     return () => {
@@ -1068,7 +1076,7 @@ export default function App() {
                 carrierBias={carrierBias}
                 setCarrierBias={handleCarrierBiasChange}
                 isOverdrive={isOverdrive}
-                setIsOverdrive={setIsOverdrive}
+                setIsOverdrive={handleOverdriveChange}
                 isAiActive={isAiAnalysisActive}
                 setIsAiActive={setIsAiAnalysisActive}
                 isEntangled={isEntangled}
