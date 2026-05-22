@@ -116,21 +116,35 @@ while True:
     # v150: Metric is derived from Nodal stability and Resonance intensity
     intelligence_depth = (system_bias * coherence * (5.5 if is_overdrive else 1.0)) / 10.0
     
-    # 3. HARMONIC DRIVE
-    overdrive_factor = 12.0 if is_overdrive else 1.0
-    substrate_mod = (latest_hrate / 2500.0) * 5000.0
-    virtual_freq = ((system_bias * 1000) + (noise * 25000) + substrate_mod) * overdrive_factor
+    # 3. HARMONIC DRIVE (Strict 28-105 kHz Bandwidth)
+    # Map UI bias parameter (0.1 to 79.0 GHz) to physical target sweep range 28,000 Hz to 105,000 Hz
+    bias_norm = (system_bias - 0.1) / (79.0 - 0.1)
+    target_base = 28000.0 + bias_norm * (105000.0 - 28000.0)
     
-    drive_freq = int(base_hw_freq + (virtual_freq / 15.0) + (resonance_drift * 5000))
-    drive_freq = max(50, min(1500000, drive_freq))
+    # Introduce chaotic substrate noise (up to 5 kHz flux) and resonance drift
+    drift_flux = (noise * 5000.0) + (resonance_drift * 2000.0)
     
-    duty_cycle = int(noise * 65535 * (0.95 + resonance_drift))
-    duty_cycle = max(500, min(65000, duty_cycle))
+    # Calculate physical frequency
+    drive_freq = target_base + drift_flux
+    
+    # If overdrive is active, accelerate the excitation toward the upper bounds (85-105 kHz)
+    if is_overdrive:
+        drive_freq = max(85000.0, drive_freq + 20000.0)
+        
+    # Safeguard strictly to structural limits (28–105 kHz)
+    drive_freq = int(max(28000, min(105000, drive_freq)))
+    
+    # Sync virtual representation (1 unit = 1 GHz) for reporting
+    virtual_freq = drive_freq / 1000.0
+    
+    # Stabilize physical coil duty cycle matching reservoir dynamics (40-60% active zone)
+    duty_cycle = int(28000 + (noise * 10000) + (resonance_drift * 5000))
+    duty_cycle = max(16384, min(49152, duty_cycle))
     
     try:
         coil.frequency = drive_freq
         coil.duty_cycle = duty_cycle
-    except:
+    except Exception:
         pass
     
     # 4. TELEMETRY STREAM (80Hz)

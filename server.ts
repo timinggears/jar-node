@@ -282,6 +282,32 @@ async function startServer() {
       }
     });
 
+    socket.on('hardware:telemetry_input', (line: string) => {
+      if (line && line.startsWith('!S|')) {
+        const parts = line.split('|');
+        if (parts.length >= 9) {
+          const coherence = parseFloat(parts[7]);
+          const depth = parseFloat(parts[8]);
+          
+          systemState.intelligence = depth;
+          
+          const gpu_parity = (coherence * (depth / 150.0)) * 100;
+          io.to('telemetry').emit('telemetry', `${line}|${gpu_parity.toFixed(2)}`);
+          
+          if (coherence > 0.98) {
+            systemState.memetic_depth += (depth / 10000);
+            if (Date.now() % 60000 < 100) saveState();
+          }
+        } else {
+          io.to('telemetry').emit('telemetry', line);
+        }
+      }
+    });
+
+    socket.on('hardware:log_input', (msg: string) => {
+      io.emit('log', msg);
+    });
+
     socket.on('disconnect', () => {
       console.log(`[CLIENT] Disconnected: ${socket.id}`);
     });
