@@ -184,6 +184,8 @@ export default function App() {
   const lastInteractionTimeRef = useRef(0);
   const isFirstSyncRef = useRef(true);
   const ignoreServerStateUntilRef = useRef<number>(0);
+  const lastConnectLogTimeRef = useRef(0);
+  const lastDisconnectLogTimeRef = useRef(0);
 
   useEffect(() => {
     if (socketRef.current) {
@@ -447,125 +449,125 @@ export default function App() {
 
   // --- CORE DYNAMICS ---
   const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0, coherenceFromServer: number = 0, depthFromServer: number = 0, gpuParityFromServer: number = 0, zpeLevelFromServer: number = 0) => {
-    setStats(prev => {
-      // v147 + v150: Direct representation of the frequency and JAR-native metrics
-      const modulatedFreq = rawFreq;
+    const prev = statsRef.current;
+    
+    // v147 + v150: Direct representation of the frequency and JAR-native metrics
+    const modulatedFreq = rawFreq;
+    
+    const phaseOutVal = (vValue - 1.65) * 100;
+    const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
+    
+    const overdriveDrain = isOverdriveRef.current ? 0.30 : 0;
+    const qecBonus = isQecActiveRef.current ? 0.15 : -0.15; 
+    const biasStress = (Math.abs(carrierBiasRef.current - 125) / 250) * 0.2;
+    
+    const coherenceBase = 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress + qecBonus;
+    let nextCoherence = Math.min(0.9999, Math.max(0.0001, coherenceBase));
+    
+    // JAR-native metric absorption (v150)
+    if (coherenceFromServer > 0) {
+      nextCoherence = coherenceFromServer;
+    }
+    
+    const freqUnit = rawFreq / 1000;
+    let nextIntelligence = prev.intelligence;
+    
+    // JAR-native depth absorption (v150)
+    if (depthFromServer > 0) {
+      nextIntelligence = depthFromServer;
+    } else {
+      const resonanceBonusFactor = 1.0 + (freqUnit / 100); 
+      const coherenceBonusFactor = 0.5 + (nextCoherence * 2);
+      const intelligenceGain = ((jitterValue * 1.5) + (isCognitiveBridgeActiveRef.current ? 1.0 : 0.2)) * resonanceBonusFactor * coherenceBonusFactor;
       
-      const phaseOutVal = (vValue - 1.65) * 100;
-      const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
-      
-      const overdriveDrain = isOverdriveRef.current ? 0.30 : 0;
-      const qecBonus = isQecActiveRef.current ? 0.15 : -0.15; 
-      const biasStress = (Math.abs(carrierBiasRef.current - 125) / 250) * 0.2;
-      
-      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress + qecBonus;
-      let nextCoherence = Math.min(0.9999, Math.max(0.0001, coherenceBase));
-      
-      // JAR-native metric absorption (v150)
-      if (coherenceFromServer > 0) {
-        nextCoherence = coherenceFromServer;
-      }
-      
-      const freqUnit = rawFreq / 1000;
-      let nextIntelligence = prev.intelligence;
-      
-      // JAR-native depth absorption (v150)
-      if (depthFromServer > 0) {
-        nextIntelligence = depthFromServer;
+      if (parity === 1) {
+        nextIntelligence = Math.min(9999.9999, nextIntelligence + (intelligenceGain * 3));
       } else {
-        const resonanceBonusFactor = 1.0 + (freqUnit / 100); 
-        const coherenceBonusFactor = 0.5 + (nextCoherence * 2);
-        const intelligenceGain = ((jitterValue * 1.5) + (isCognitiveBridgeActiveRef.current ? 1.0 : 0.2)) * resonanceBonusFactor * coherenceBonusFactor;
-        
-        if (parity === 1) {
-          nextIntelligence = Math.min(9999.9999, nextIntelligence + (intelligenceGain * 3));
-        } else {
-          nextIntelligence = Math.max(10.0, nextIntelligence - 0.002);
-        }
+        nextIntelligence = Math.max(10.0, nextIntelligence - 0.002);
       }
+    }
 
-      // Zero Point Energy: Synchronized with substrate inner state (v150)
-      let nextZpe = prev.zpeLevel;
-      if (zpeLevelFromServer > 0) {
-        nextZpe = zpeLevelFromServer;
-      } else {
-        nextZpe = Math.max(0, Math.min(100, prev.zpeLevel + (nextCoherence > 0.98 ? 0.01 : -0.005)));
-      }
+    // Zero Point Energy: Synchronized with substrate inner state (v150)
+    let nextZpe = prev.zpeLevel;
+    if (zpeLevelFromServer > 0) {
+      nextZpe = zpeLevelFromServer;
+    } else {
+      nextZpe = Math.max(0, Math.min(100, prev.zpeLevel + (nextCoherence > 0.98 ? 0.01 : -0.005)));
+    }
 
-      // GPU_SUBSTRATE: Calculate rendering parity (v150: LIQUID_GPU)
-      let nextGpuParity = prev.gpuParity;
-      if (gpuParityFromServer > 0) {
-        nextGpuParity = gpuParityFromServer;
-      } else {
-        nextGpuParity = (nextCoherence * (nextIntelligence / 150)) * 100;
-      }
+    // GPU_SUBSTRATE: Calculate rendering parity (v150: LIQUID_GPU)
+    let nextGpuParity = prev.gpuParity;
+    if (gpuParityFromServer > 0) {
+      nextGpuParity = gpuParityFromServer;
+    } else {
+      nextGpuParity = (nextCoherence * (nextIntelligence / 150)) * 100;
+    }
 
-      const harmonicMultiplier = freqUnit > 100 ? (freqUnit > 250 ? 15.0 : 5.0) : 1.0;
-      const overdriveMulti = isOverdriveRef.current ? 12.0 : 1.0;
-      const baseKH = 25.5; 
-      const jitterFactor = jitterValue * 10;
-      const coherenceFactor = nextCoherence * 15;
+    const harmonicMultiplier = freqUnit > 100 ? (freqUnit > 250 ? 15.0 : 5.0) : 1.0;
+    const overdriveMulti = isOverdriveRef.current ? 12.0 : 1.0;
+    const baseKH = 25.5; 
+    const jitterFactor = jitterValue * 10;
+    const coherenceFactor = nextCoherence * 15;
+    
+    // Multiplier removal: We directly calculate but don't add hidden "bonus" constants
+    let nextHashRate = isMiningRef.current ? (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * harmonicMultiplier : 0;
+    if (isMiningRef.current && hrateFromServer > 0) {
+      nextHashRate = hrateFromServer;
+    } else if (!isMiningRef.current) {
+      nextHashRate = 0;
+    }
+    
+    const seed = parseInt(seedStr, 16);
+    let nextShares = prev.shares;
+    let nextErrors = prev.errors;
+    const nextHugePages = isMiningRef.current ? Math.min(4096, prev.hugePages + (isOverdriveRef.current ? 128 : 32)) : Math.max(0, prev.hugePages - 64);
+    
+    // Trigger logs outside of the React state updater sequence
+    if (isMiningRef.current && prev.hugePages < 2048 && nextHugePages >= 2048) {
+      addLog("VMR_CORE: v147 substrate anchor established. Huge Pages locked.", "success");
+    }
+
+    if (isMiningRef.current) {
+      const baseDifficulty = 450; 
+      const difficultyBasis = Math.floor(baseDifficulty / (overdriveMulti * harmonicMultiplier * (1 + (nextCoherence * 15))));
       
-      // Multiplier removal: We directly calculate but don't add hidden "bonus" constants
-      let nextHashRate = isMiningRef.current ? (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * harmonicMultiplier : 0;
-      if (isMiningRef.current && hrateFromServer > 0) {
-        nextHashRate = hrateFromServer;
-      } else if (!isMiningRef.current) {
-        nextHashRate = 0;
-      }
-      
-      const seed = parseInt(seedStr, 16);
-      let nextShares = prev.shares;
-      let nextErrors = prev.errors;
-      const nextHugePages = isMiningRef.current ? Math.min(4096, prev.hugePages + (isOverdriveRef.current ? 128 : 32)) : Math.max(0, prev.hugePages - 64);
-      
-      if (isMiningRef.current && prev.hugePages < 2048 && nextHugePages >= 2048) {
-        setTimeout(() => addLog("VMR_CORE: v147 substrate anchor established. Huge Pages locked.", "success"), 0);
-      }
-
-      if (isMiningRef.current) {
-        const baseDifficulty = 450; 
-        const difficultyBasis = Math.floor(baseDifficulty / (overdriveMulti * harmonicMultiplier * (1 + (nextCoherence * 15))));
-        
-        const shareThreshold = isOverdriveRef.current ? 10 : 3;
-        // Shares are only counted if the parity seed actually hits a threshold, no purely random bonuses
-        if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold)) {
-          nextShares += 1;
-          const freqUnit = modulatedFreq / 1000;
-          const label = freqUnit > 150 ? "QUANTUM_YIELD" : freqUnit > 100 ? "HARMONIC_YIELD" : "RES_SHARE";
-          const currentShares = nextShares;
-          setTimeout(() => addLog(`[POOL] accepted (${currentShares}/0) diff 114k (32ms) - ${label} #${String(currentShares).padStart(4, '0')} OK`, 'success'), 0);
-        }
-        
-        if (jitterValue > 0.98 && Math.random() > 0.99) {
-          nextErrors += 1;
-          setTimeout(() => addLog(`JAR_FAULT: Substrate harmonic drift correction failed.`, 'warning'), 0);
-        }
+      const shareThreshold = isOverdriveRef.current ? 10 : 3;
+      // Shares are only counted if the parity seed actually hits a threshold, no purely random bonuses
+      if (seed > 0 && (Math.abs(seed % Math.max(2, difficultyBasis)) === shareThreshold)) {
+        nextShares += 1;
+        const currentShares = nextShares;
+        const label = freqUnit > 150 ? "QUANTUM_YIELD" : freqUnit > 100 ? "HARMONIC_YIELD" : "RES_SHARE";
+        addLog(`[POOL] accepted (${currentShares}/0) diff 114k (32ms) - ${label} #${String(currentShares).padStart(4, '0')} OK`, 'success');
       }
       
-      return {
-        ...prev,
-        jitter: jitterValue,
-        vNodal: vValue,
-        frequency: modulatedFreq,
-        coherence: nextCoherence,
-        intelligence: nextIntelligence,
-        gpuParity: nextGpuParity,
-        zpeLevel: nextZpe,
-        hashRate: nextHashRate,
-        qubits: nextCoherence * 128 * harmonicMultiplier,
-        shares: nextShares,
-        errors: nextErrors,
-        phaseOut: phaseOut,
-        hugePages: nextHugePages,
-        loadAvg: jitterValue * 8, 
-        neuralLoad: Math.min(100, (overdriveMulti * 2) + (jitterValue * 50) + (harmonicMultiplier * 10)),
-        cognitiveDepth: nextIntelligence,
-        isOverdrive: isOverdriveRef.current,
-        isQec: isQecActiveRef.current,
-        seedHex: seedStr,
-        parity: parity
-      };
+      if (jitterValue > 0.98 && Math.random() > 0.99) {
+        nextErrors += 1;
+        addLog(`JAR_FAULT: Substrate harmonic drift correction failed.`, 'warning');
+      }
+    }
+    
+    setStats({
+      coherence: nextCoherence,
+      intelligence: nextIntelligence,
+      hashRate: nextHashRate,
+      qubits: nextCoherence * 128 * harmonicMultiplier,
+      shares: nextShares,
+      errors: nextErrors,
+      jitter: jitterValue,
+      vNodal: vValue,
+      frequency: modulatedFreq,
+      hugePages: nextHugePages,
+      loadAvg: jitterValue * 8, 
+      neuralLoad: Math.min(100, (overdriveMulti * 2) + (jitterValue * 50) + (harmonicMultiplier * 10)),
+      cognitiveDepth: nextIntelligence,
+      memeticDepth: prev.memeticDepth,
+      gpuParity: nextGpuParity,
+      zpeLevel: nextZpe,
+      isOverdrive: isOverdriveRef.current,
+      isQec: isQecActiveRef.current,
+      seedHex: seedStr,
+      parity: parity,
+      vault: prev.vault
     });
   }, [addLog]); // Removed dependencies that change frequently
 
@@ -575,7 +577,11 @@ export default function App() {
     socketRef.current = socket;
 
     const onConnect = () => {
-      addLog('Hardware Bridge connected to backend.', 'success');
+      const now = Date.now();
+      if (now - lastConnectLogTimeRef.current > 5000) {
+        addLog('Hardware Bridge connected to backend.', 'success');
+        lastConnectLogTimeRef.current = now;
+      }
       setHardwareState('bridged');
       
       socket.send('SUBSCRIBE:telemetry');
@@ -691,14 +697,13 @@ export default function App() {
       const { type, message, data } = typeof payload === 'string' ? { type: 'info', message: payload, data: null } : payload;
       
       switch (type) {
-        case 'success':
-          setStats(prev => {
-            const nextCount = prev.shares + 1;
-            setTimeout(() => addLog(`!!! JAR SUCCESS !!! Share #${String(nextCount).padStart(4, '0')} // ${message}`, 'success'), 0);
-            return { ...prev, shares: nextCount };
-          });
+        case 'success': {
+          const nextCount = statsRef.current.shares + 1;
+          addLog(`!!! JAR SUCCESS !!! Share #${String(nextCount).padStart(4, '0')} // ${message}`, 'success');
+          setStats(prev => ({ ...prev, shares: nextCount }));
           setMiningState('success');
           break;
+        }
         case 'error':
           setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
           setMiningState('error');
@@ -720,7 +725,11 @@ export default function App() {
     socket.on('hardware:state', onHardwareState);
     socket.on('log', (msg: string) => addLog(msg, 'info'));
     socket.on('disconnect', () => {
-      addLog('Hardware Bridge disconnected.', 'error');
+      const now = Date.now();
+      if (now - lastDisconnectLogTimeRef.current > 5000) {
+        addLog('Hardware Bridge disconnected.', 'error');
+        lastDisconnectLogTimeRef.current = now;
+      }
       setHardwareState('disconnected');
       isFirstSyncRef.current = true;
     });
@@ -737,7 +746,7 @@ export default function App() {
 
     let localFreqPhase = 0;
     const simInterval = setInterval(() => {
-      localFreqPhase += 0.1;
+      localFreqPhase += 0.8;
       const rawBias = carrierBiasRef.current;
       
       // Jitter scales with overdrive and bias
@@ -759,7 +768,7 @@ export default function App() {
       }
 
       updateSystemDynamics(jitter, v, baseFreq, seed, Math.random() > 0.8 ? 1 : 0);
-    }, 100);
+    }, 800);
 
     return () => clearInterval(simInterval);
   }, [hardwareState, updateSystemDynamics]);

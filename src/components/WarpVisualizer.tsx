@@ -31,6 +31,11 @@ export default function WarpVisualizer({
   const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef<{x: number, y: number}[]>([]);
   const dimensionsRef = useRef({ width: 0, height: 0 });
+  const propsRef = useRef({ coherence, jitter, frequency, bias, isInstalling, installProgress, isAiActive, isSolving });
+
+  useEffect(() => {
+    propsRef.current = { coherence, jitter, frequency, bias, isInstalling, installProgress, isAiActive, isSolving };
+  }, [coherence, jitter, frequency, bias, isInstalling, installProgress, isAiActive, isSolving]);
 
   useEffect(() => {
     // Reduced background node count to 150 for efficiency
@@ -68,6 +73,16 @@ export default function WarpVisualizer({
     const startTime = performance.now();
 
     const draw = (time: number) => {
+      const { 
+        coherence, 
+        jitter, 
+        frequency, 
+        bias, 
+        isInstalling, 
+        isAiActive, 
+        isSolving 
+      } = propsRef.current;
+
       const { width, height } = dimensionsRef.current;
       if (width === 0 || height === 0) {
         animationId = requestAnimationFrame(draw);
@@ -258,7 +273,7 @@ export default function WarpVisualizer({
 
     animationId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animationId);
-  }, [coherence, jitter, frequency, bias, isInstalling, isAiActive, isSolving]);
+  }, []);
 
   return (
     <section ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-transparent overflow-hidden font-mono">
