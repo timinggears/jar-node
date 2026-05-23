@@ -281,10 +281,10 @@ export default function WarpVisualizer({
       <motion.div 
         className="absolute inset-0 flex items-center justify-center pointer-events-none z-0"
         animate={bias > 85 ? {
-          x: [0, (Math.random() - 0.5) * 10, 0],
-          y: [0, (Math.random() - 0.5) * 10, 0],
+          x: [-5, 5, -3, 3, -1, 1, 0],
+          y: [3, -3, 2, -2, 1, -1, 0],
         } : { x: 0, y: 0 }}
-        transition={bias > 85 ? { duration: 0.1, repeat: Infinity } : { duration: 0.5 }}
+        transition={bias > 85 ? { duration: 0.15, repeat: Infinity } : { duration: 0.5 }}
       >
         <div className="w-full h-full" />
       </motion.div>

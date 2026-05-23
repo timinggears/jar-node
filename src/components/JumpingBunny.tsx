@@ -80,7 +80,7 @@ export default function JumpingBunny({ miningState, isStatic, bias = 50 }: { min
             animate={{
               scale: [0, 1.2, 0],
               x: [0, (i - 2) * 20, (i - 2) * 30],
-              y: [0, -20 - Math.random() * 20, -10],
+              y: [0, -20 - (i * 10), -10],
               opacity: [0, 1, 0]
             }}
             transition={{

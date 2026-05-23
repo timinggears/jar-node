@@ -364,8 +364,9 @@ async function startServer() {
                 systemState.memetic_depth += (depth / 10000);
                 if (Date.now() % 60000 < 100) saveState(); // Occasional persistent flush
               }
+            } else {
+              io.to('telemetry').emit('telemetry', line);
             }
-            io.to('telemetry').emit('telemetry', line);
           }
         });
 

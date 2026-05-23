@@ -160,6 +160,7 @@ export default function App() {
   const isCognitiveBridgeActiveRef = useRef(isCognitiveBridgeActive);
   isCognitiveBridgeActiveRef.current = isCognitiveBridgeActive;
   const lastUpdateRef = useRef(Date.now());
+  const pendingTelemetryRef = useRef<any>(null);
 
   const logCounterRef = useRef(0);
 
@@ -664,6 +665,14 @@ export default function App() {
       }
     };
 
+    const telemetryInterval = setInterval(() => {
+      if (pendingTelemetryRef.current) {
+        const { jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel } = pendingTelemetryRef.current;
+        updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel);
+        pendingTelemetryRef.current = null;
+      }
+    }, 120);
+
     const onTelemetry = (line: string) => {
       if (line.startsWith('!S|')) {
         setHardwareState('connected');
@@ -684,7 +693,7 @@ export default function App() {
              console.log(`[JARS_CLIENT] Telemetry Recv: ${freq.toFixed(1)} GHz | ZPE: ${zpeLevel.toFixed(1)}%`);
           }
 
-          updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel);
+          pendingTelemetryRef.current = { jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel };
         }
       }
     };
@@ -735,6 +744,7 @@ export default function App() {
     });
 
     return () => {
+      clearInterval(telemetryInterval);
       socket.disconnect();
     };
   }, [addLog, updateSystemDynamics]); // Dependencies are now more stable
@@ -1023,11 +1033,11 @@ export default function App() {
         <motion.div 
           className="fixed inset-0 pointer-events-none z-[160] border-4 border-red-500/10"
           animate={{
-            x: [0, (Math.random() - 0.5) * 4, 0],
-            y: [0, (Math.random() - 0.5) * 4, 0],
-            opacity: [0.1, 0.3, 0.1]
+            x: [-2, 2, -1, 1, -2, 2, 0],
+            y: [1, -2, 2, -1, 1, -2, 0],
+            opacity: [0.1, 0.3, 0.1, 0.2, 0.1]
           }}
-          transition={{ duration: 0.1, repeat: Infinity }}
+          transition={{ duration: 0.15, repeat: Infinity }}
         />
       )}
 

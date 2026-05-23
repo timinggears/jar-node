@@ -61,12 +61,12 @@ export default function LittleSquirrel({ miningState, isStatic, bias = 50 }: { m
           <motion.circle 
             cx="10.5" cy="7.5" r="0.6" fill="#333" 
             animate={{ scaleY: [1, 0.1, 1] }}
-            transition={{ duration: 3, repeat: Infinity, delay: Math.random() * 2 }}
+            transition={{ duration: 3, repeat: Infinity, delay: 0.8 }}
           />
           <motion.circle 
             cx="13.5" cy="7.5" r="0.6" fill="#333" 
             animate={{ scaleY: [1, 0.1, 1] }}
-            transition={{ duration: 3, repeat: Infinity, delay: Math.random() * 2 }}
+            transition={{ duration: 3, repeat: Infinity, delay: 0.8 }}
           />
           
           {/* Little Nut */}
