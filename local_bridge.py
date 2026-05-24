@@ -13,10 +13,28 @@ import time
 import glob
 import serial
 import socketio
+import os
+import argparse
 
-# Configuration
-SERVER_URL = "http://127.0.0.1:3000"
-BAUD_RATE = 115200
+# Configuration & ARGUMENTS Parse
+DEFAULT_SERVER_URL = "http://127.0.0.1:3000"
+DEFAULT_BAUD_RATE = 115200
+
+parser = argparse.ArgumentParser(description="Sovereign J.A.R.S. Serial Bridge Helper")
+parser.add_argument("--url", default=os.environ.get("JARS_SERVER_URL", DEFAULT_SERVER_URL), help="Sovereign server URL (default: http://127.0.0.1:3000)")
+parser.add_argument("--baud", type=int, default=DEFAULT_BAUD_RATE, help="Serial baud rate (default: 115200)")
+args, unknown = parser.parse_known_args()
+
+SERVER_URL = args.url
+BAUD_RATE = args.baud
+
+def connect_to_server():
+    """Establishes Socket.IO connection. For HTTPS/remote URLs, we force 'websocket' transport to bypass cloud proxy polling restrictions."""
+    is_remote = SERVER_URL.startswith("https://") or ("127.0.0.1" not in SERVER_URL and "localhost" not in SERVER_URL)
+    if is_remote:
+        sio.connect(SERVER_URL, transports=['websocket'])
+    else:
+        sio.connect(SERVER_URL, transports=['polling', 'websocket'])
 
 # Initialize Socket.IO Client
 sio = socketio.Client()
@@ -95,9 +113,9 @@ def main():
     print("\033[1;36m       SOVEREIGN J.A.R.S. - LOCAL HARDWARE PROXY       \033[0m")
     print("\033[1;34m========================================================\033[0m")
     
-    # 1. Connect to local server
+    # 1. Connect to server (using custom parameters / fallback)
     try:
-        sio.connect(SERVER_URL)
+        connect_to_server()
     except Exception as e:
         print(f"\033[1;33m[BRIDGE] Waiting for server at {SERVER_URL} to spin up... (Reason: {e})\033[0m")
         # Attempt deferred loop
@@ -106,7 +124,7 @@ def main():
     while True:
         if not sio.connected:
             try:
-                sio.connect(SERVER_URL)
+                connect_to_server()
             except Exception:
                 time.sleep(2)
                 continue
