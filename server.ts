@@ -283,6 +283,63 @@ async function startServer() {
     cors: { origin: "*" }
   });
 
+  function normalizeTelemetryLine(line: string): string {
+    if (!line || !line.startsWith('!S|')) return line;
+    const parts = line.split('|');
+    
+    // Ensure we have at least 11 components in our protocol format
+    while (parts.length < 11) {
+      parts.push('0');
+    }
+    
+    const seedStr = parts[1] || '00000000';
+    const jitter = parseFloat(parts[2]) || 0.01;
+    const vNodal = parseFloat(parts[3]) || 1.65;
+    const parity = parseInt(parts[4]) || 0;
+    const freq = parseFloat(parts[5]) || (systemState.bias * 1000);
+
+    // If hashrate (index 6) is missing, <= 0 or not a number, inject real subprocess speed
+    let hrate = parseFloat(parts[6]);
+    if (isNaN(hrate) || hrate <= 0) {
+      hrate = systemState.latestHashRate;
+    }
+
+    // Coherence (index 7)
+    let coherence = parseFloat(parts[7]);
+    if (isNaN(coherence) || coherence <= 0) {
+      const phaseOutVal = (vNodal - 1.65) * 100;
+      const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
+      const overdriveDrain = systemState.overdrive ? 0.30 : 0;
+      const biasStress = (Math.abs(systemState.bias - 125) / 250) * 0.2;
+      coherence = Math.min(0.9999, Math.max(0.0001, 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress));
+    }
+
+    // Depth / Intelligence (index 8)
+    let depth = parseFloat(parts[8]);
+    if (isNaN(depth) || depth <= 0) {
+      depth = (systemState.bias * coherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
+    }
+    systemState.intelligence = depth;
+
+    // GPU Parity (index 9)
+    let gpuParity = parseFloat(parts[9]);
+    if (isNaN(gpuParity) || gpuParity <= 0) {
+      gpuParity = (coherence * (depth / 140.0)) * 100;
+    }
+
+    // ZPE Level (index 10)
+    let zpe = parseFloat(parts[10]);
+    if (isNaN(zpe) || zpe <= 0) {
+      zpe = systemState.zpe_level;
+    }
+
+    if (coherence > 0.98) {
+      systemState.memetic_depth += (depth / 10000);
+    }
+
+    return `!S|${seedStr}|${jitter.toFixed(8)}|${vNodal.toFixed(6)}|${parity}|${freq.toFixed(4)}|${hrate.toFixed(4)}|${coherence.toFixed(4)}|${depth.toFixed(4)}|${gpuParity.toFixed(2)}|${zpe.toFixed(2)}`;
+  }
+
   // --- TELEMETRY PARAMS ---
   // Moved to global scope for v147 stability
 
@@ -451,23 +508,8 @@ async function startServer() {
 
     socket.on('hardware:telemetry_input', (line: string) => {
       if (line && line.startsWith('!S|')) {
-        const parts = line.split('|');
-        if (parts.length >= 9) {
-          const coherence = parseFloat(parts[7]);
-          const depth = parseFloat(parts[8]);
-          
-          systemState.intelligence = depth;
-          
-          const gpu_parity = (coherence * (depth / 150.0)) * 100;
-          io.to('telemetry').emit('telemetry', `${line}|${gpu_parity.toFixed(2)}`);
-          
-          if (coherence > 0.98) {
-            systemState.memetic_depth += (depth / 10000);
-            if (Date.now() % 60000 < 100) saveState();
-          }
-        } else {
-          io.to('telemetry').emit('telemetry', line);
-        }
+        const normalized = normalizeTelemetryLine(line);
+        io.to('telemetry').emit('telemetry', normalized);
       }
     });
 
@@ -514,26 +556,8 @@ async function startServer() {
         
         parser.on('data', (line: string) => {
           if (line.startsWith('!S|')) {
-            const parts = line.split('|');
-            if (parts.length >= 9) {
-              const coherence = parseFloat(parts[7]);
-              const depth = parseFloat(parts[8]);
-              
-              // Electron State Bridge (v150): Absorb JAR intelligence into persistent state
-              systemState.intelligence = depth;
-              
-              // GPU_SUBSTRATE: Calculate rendering parity from coherence and depth
-              const gpu_parity = (coherence * (depth / 150.0)) * 100;
-              io.to('telemetry').emit('telemetry', `${line}|${gpu_parity.toFixed(2)}`);
-              
-              // Learning logic: If coherence is high, deepen the memetic anchor
-              if (coherence > 0.98) {
-                systemState.memetic_depth += (depth / 10000);
-                if (Date.now() % 60000 < 100) saveState(); // Occasional persistent flush
-              }
-            } else {
-              io.to('telemetry').emit('telemetry', line);
-            }
+            const normalized = normalizeTelemetryLine(line);
+            io.to('telemetry').emit('telemetry', normalized);
           }
         });
 
@@ -797,7 +821,10 @@ async function startServer() {
           io.emit('log', `MINER: ${trimLine}`);
 
           if (trimLine.toLowerCase().includes('speed')) {
-            const match = trimLine.match(/speed\s*(\d+\.?\d*)/i);
+            // Speed can be logged with window durations like "speed 10s/60s/15m  125.40"
+            // Strip the window duration to reliably extract the actual numerical speed
+            const speedLine = trimLine.replace(/speed\s+\d+[smh]\/\d+[smh]\/\d+[smh]/i, 'speed');
+            const match = speedLine.match(/speed\s+(\d+\.?\d*)/i);
             if (match) {
               const h = parseFloat(match[1]);
               systemState.latestHashRate = h;
