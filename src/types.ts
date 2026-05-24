@@ -22,6 +22,7 @@ export interface SystemStats {
   zpeLevel: number;
   isOverdrive: boolean;
   isQec: boolean;
+  boost2b?: boolean;
   seedHex: string;
   parity: number;
   vault: Array<{

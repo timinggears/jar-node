@@ -23,10 +23,16 @@ DEFAULT_BAUD_RATE = 115200
 parser = argparse.ArgumentParser(description="Sovereign J.A.R.S. Serial Bridge Helper")
 parser.add_argument("--url", default=os.environ.get("JARS_SERVER_URL", DEFAULT_SERVER_URL), help="Sovereign server URL (default: http://127.0.0.1:3000)")
 parser.add_argument("--baud", type=int, default=DEFAULT_BAUD_RATE, help="Serial baud rate (default: 115200)")
+parser.add_argument("--virtual", action="store_true", help="Launch in virtual mock mode without physical USB serial Pico")
 args, unknown = parser.parse_known_args()
 
 SERVER_URL = args.url
 BAUD_RATE = args.baud
+IS_VIRTUAL = args.virtual
+
+# Virtual emulation state
+virtual_bias = 50.0
+virtual_overdrive = False
 
 def connect_to_server():
     """Establishes Socket.IO connection. For HTTPS/remote URLs, we force 'websocket' transport to bypass cloud proxy polling restrictions."""
@@ -79,8 +85,15 @@ def disconnect():
 
 @sio.on("hardware:params")
 def on_params(data):
-    """Listens for parameters from the dashboard and relays them to physical hardware."""
-    global ser
+    """Listens for parameters from the dashboard and relays them to physical hardware (or virtual emulation)."""
+    global ser, virtual_bias, virtual_overdrive
+    if "bias" in data:
+        virtual_bias = float(data["bias"])
+        print(f"[BRIDGE] Target Bias realigned: {virtual_bias:.1f} GHz")
+    if "overdrive" in data:
+        virtual_overdrive = bool(data["overdrive"])
+        print(f"[BRIDGE] Target Overdrive shifted: {virtual_overdrive}")
+        
     if ser and ser.is_open:
         try:
             if "bias" in data:
@@ -99,6 +112,7 @@ def on_params(data):
 def on_command(cmd):
     """Forwards generic terminal CLI commands directly to the Pico."""
     global ser
+    print(f"[BRIDGE] Received workspace instruction command: {cmd}")
     if ser and ser.is_open:
         try:
             full_cmd = f"{cmd}\n"
@@ -121,6 +135,7 @@ def main():
         # Attempt deferred loop
         
     # 2. Infinite telemetry proxy loop
+    last_stat = 0
     while True:
         if not sio.connected:
             try:
@@ -128,6 +143,29 @@ def main():
             except Exception:
                 time.sleep(2)
                 continue
+
+        if IS_VIRTUAL:
+            t = time.time()
+            if t - last_stat > 0.05: # 20 Hz updates
+                import random
+                seed = random.getrandbits(32)
+                parity = bin(seed).count('1') % 2
+                jitter = random.random() * 0.03
+                v = 1.65 + (jitter * 0.5)
+                multi = 3.5 if virtual_overdrive else 1.0
+                virtual_freq = virtual_bias * 1000 * multi
+                
+                # Format: !S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ
+                decoded = "!S|{:08X}|{:.6f}|{:.4f}|{}|{:.1f}".format(seed, jitter, v, parity, virtual_freq)
+                try:
+                    sio.emit("hardware:telemetry_input", decoded)
+                    if random.random() < 0.01:
+                        sio.emit("hardware:log_input", f"PYTHON_BRIDGE: Emulated Pico telemetry pipeline running on bias {virtual_bias:.1f} GHz.")
+                except Exception:
+                    pass
+                last_stat = t
+            time.sleep(0.01)
+            continue
 
         port = find_serial_port()
         if not port:
@@ -176,9 +214,12 @@ def main():
         except KeyboardInterrupt:
             print("\n[BRIDGE] Graceful termination requested.")
             break
-            
+
     if ser:
-        ser.close()
+        try:
+            ser.close()
+        except Exception:
+            pass
     sio.disconnect()
 
 if __name__ == "__main__":

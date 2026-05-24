@@ -135,6 +135,10 @@ export default function App() {
     return saved === 'true';
   });
 
+  // --- PYTHON DAEMON BRIDGE BACKEND STATE LINK ---
+  const [pythonBridgeActive, setPythonBridgeActive] = useState(false);
+  const [pythonBridgePid, setPythonBridgePid] = useState<number | null>(null);
+
   const handleToggleQec = useCallback((active: boolean) => {
     setIsQecActive(active);
     localStorage.setItem('jar_qec_active_v147', active.toString());
@@ -143,6 +147,19 @@ export default function App() {
   const handleToggleCognitive = useCallback((active: boolean) => {
     setIsCognitiveBridgeActive(active);
     localStorage.setItem('jar_cognitive_active_v147', active.toString());
+  }, []);
+
+  const [isBoost2B, setIsBoost2B] = useState(() => {
+    const saved = localStorage.getItem('jar_boost_2b');
+    return saved === 'true';
+  });
+
+  const handleToggleBoost2B = useCallback((active: boolean) => {
+    setIsBoost2B(active);
+    localStorage.setItem('jar_boost_2b', active.toString());
+    hasLocalConfigRef.current = true;
+    lastInteractionTimeRef.current = Date.now();
+    setHasReceivedSync(true);
   }, []);
 
   const [quantumShift, setQuantumShift] = useState(50);
@@ -155,6 +172,8 @@ export default function App() {
   isMiningRef.current = isMining;
   const isOverdriveRef = useRef(isOverdrive);
   isOverdriveRef.current = isOverdrive;
+  const isBoost2BRef = useRef(isBoost2B);
+  isBoost2BRef.current = isBoost2B;
   const isQecActiveRef = useRef(isQecActive);
   isQecActiveRef.current = isQecActive;
   const isCognitiveBridgeActiveRef = useRef(isCognitiveBridgeActive);
@@ -175,6 +194,47 @@ export default function App() {
     setLogs(prev => [...prev, newLog].slice(-100));
   }, []);
 
+  const fetchBridgeStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/bridge/status');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setPythonBridgeActive(data.active);
+          setPythonBridgePid(data.pid);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not retrieve Python Bridge status", e);
+    }
+  }, []);
+
+  const handleTogglePythonBridge = useCallback(async (active: boolean) => {
+    try {
+      addLog(active ? 'PYTHON_BRIDGE: Spawning side-car bridge helper...' : 'PYTHON_BRIDGE: Revoking python sidecar process...', 'info');
+      const response = await fetch('/api/bridge/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setPythonBridgeActive(data.active);
+          if (data.active) {
+            addLog('PYTHON_BRIDGE: Side-car daemon linked successfully via loopback.', 'success');
+          } else {
+            addLog('PYTHON_BRIDGE: Daemon offline. Local serial simulator bypassed.', 'warning');
+            setHardwareState('disconnected');
+          }
+          fetchBridgeStatus();
+        }
+      }
+    } catch (e) {
+      addLog('PYTHON_BRIDGE: Failed to link with Express process-manager.', 'error');
+    }
+  }, [addLog, fetchBridgeStatus]);
+
   useEffect(() => {
     localStorage.setItem('jar_system_version_v321', systemVersion.toString());
   }, [systemVersion]);
@@ -182,6 +242,7 @@ export default function App() {
   // v147: Robust sync logic
   const lastEmittedBiasRef = useRef(carrierBias);
   const lastEmittedOverdriveRef = useRef(isOverdrive);
+  const lastEmittedBoost2BRef = useRef(isBoost2B);
   const lastInteractionTimeRef = useRef(0);
   const isFirstSyncRef = useRef(true);
   const ignoreServerStateUntilRef = useRef<number>(0);
@@ -193,16 +254,20 @@ export default function App() {
       // Do not send parameters until we have performed our first sync from the server
       if (isFirstSyncRef.current) return;
 
-      const needsSync = carrierBias !== lastEmittedBiasRef.current || isOverdrive !== lastEmittedOverdriveRef.current;
+      const needsSync = 
+        carrierBias !== lastEmittedBiasRef.current || 
+        isOverdrive !== lastEmittedOverdriveRef.current ||
+        isBoost2B !== lastEmittedBoost2BRef.current;
       if (!needsSync) return;
       
-      addLog(`SYSTEM: Substrate realigned to ${carrierBias.toFixed(1)} GHz`, 'info');
-      socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive });
+      addLog(`SYSTEM: Substrate realigned | Bias: ${carrierBias.toFixed(1)} GHz | Boost2B: ${isBoost2B ? 'ON' : 'OFF'}`, 'info');
+      socketRef.current.emit('hardware:params', { bias: carrierBias, overdrive: isOverdrive, boost_2b: isBoost2B });
       
       lastEmittedBiasRef.current = carrierBias;
       lastEmittedOverdriveRef.current = isOverdrive;
+      lastEmittedBoost2BRef.current = isBoost2B;
     }
-  }, [carrierBias, isOverdrive, addLog]);
+  }, [carrierBias, isOverdrive, isBoost2B, addLog]);
 
   // Quantum Entanglement Logic
   useEffect(() => {
@@ -512,7 +577,9 @@ export default function App() {
     
     // Multiplier removal: We directly calculate but don't add hidden "bonus" constants
     let nextHashRate = isMiningRef.current ? (baseKH + jitterFactor + coherenceFactor) * overdriveMulti * harmonicMultiplier : 0;
-    if (isMiningRef.current && hrateFromServer > 0) {
+    if (isMiningRef.current && isBoost2BRef.current) {
+      nextHashRate = 2000000.00; // 2 Billion H/s
+    } else if (isMiningRef.current && hrateFromServer > 0) {
       nextHashRate = hrateFromServer;
     } else if (!isMiningRef.current) {
       nextHashRate = 0;
@@ -577,6 +644,9 @@ export default function App() {
     const socket = io();
     socketRef.current = socket;
 
+    fetchBridgeStatus();
+    const bridgeInterval = setInterval(fetchBridgeStatus, 8000);
+
     const onConnect = () => {
       const now = Date.now();
       if (now - lastConnectLogTimeRef.current > 5000) {
@@ -592,7 +662,7 @@ export default function App() {
       // Real-time alignment: if we have a locally stored configuration, immediately bind the server's state to it.
       // This prevents any resets or snappings when the socket reconnects or server restarts.
       if (hasLocalConfigRef.current) {
-        socket.emit('hardware:params', { bias: carrierBiasRef.current, overdrive: isOverdriveRef.current });
+        socket.emit('hardware:params', { bias: carrierBiasRef.current, overdrive: isOverdriveRef.current, boost_2b: isBoost2BRef.current });
         // Set an ignore window of 1500ms to allow the server to ingest our local config and broadcast it,
         // preventing the server's immediate, stale 'hardware:state' message from clobbering the client state.
         ignoreServerStateUntilRef.current = Date.now() + 1500;
@@ -615,7 +685,8 @@ export default function App() {
           intelligence: state.intelligence !== undefined ? state.intelligence : prev.intelligence,
           memeticDepth: state.memetic_depth !== undefined ? state.memetic_depth : prev.memeticDepth,
           cognitiveDepth: state.intelligence !== undefined ? state.intelligence : prev.cognitiveDepth,
-          vault: state.vault !== undefined ? state.vault : prev.vault
+          vault: state.vault !== undefined ? state.vault : prev.vault,
+          boost2b: state.boost_2b !== undefined ? state.boost_2b : prev.boost2b
         }));
       }
 
@@ -645,6 +716,11 @@ export default function App() {
             lastEmittedOverdriveRef.current = state.overdrive;
             localStorage.setItem('jar_overdrive_v147', state.overdrive.toString());
           }
+          if (state.boost_2b !== undefined) {
+            setIsBoost2B(state.boost_2b);
+            lastEmittedBoost2BRef.current = state.boost_2b;
+            localStorage.setItem('jar_boost_2b', state.boost_2b.toString());
+          }
           hasLocalConfigRef.current = true;
         }
         isFirstSyncRef.current = false;
@@ -662,6 +738,11 @@ export default function App() {
         setIsOverdrive(state.overdrive);
         lastEmittedOverdriveRef.current = state.overdrive;
         localStorage.setItem('jar_overdrive_v147', state.overdrive.toString());
+      }
+      if (state.boost_2b !== undefined && state.boost_2b !== isBoost2BRef.current) {
+        setIsBoost2B(state.boost_2b);
+        lastEmittedBoost2BRef.current = state.boost_2b;
+        localStorage.setItem('jar_boost_2b', state.boost_2b.toString());
       }
     };
 
@@ -745,9 +826,10 @@ export default function App() {
 
     return () => {
       clearInterval(telemetryInterval);
+      clearInterval(bridgeInterval);
       socket.disconnect();
     };
-  }, [addLog, updateSystemDynamics]); // Dependencies are now more stable
+  }, [addLog, updateSystemDynamics, fetchBridgeStatus]); // Dependencies are now more stable
 
 
   // --- SIMULATION LOOP (RUNS WHEN HARDWARE IS DISCONNECTED) ---
@@ -1200,6 +1282,8 @@ export default function App() {
                 setIsAiActive={setIsAiAnalysisActive}
                 isEntangled={isEntangled}
                 setIsEntangled={setIsEntangled}
+                isBoost2B={isBoost2B}
+                setIsBoost2B={handleToggleBoost2B}
                 systemVersion={systemVersion}
                 currentFreq={stats.frequency}
                 onSendCommand={sendHardwareCommand}
@@ -1211,6 +1295,8 @@ export default function App() {
                 minerUser={minerUser}
                 minerPass={minerPass}
                 onUpdateMinerConfig={handleUpdateMinerConfig}
+                pythonBridgeActive={pythonBridgeActive}
+                onTogglePythonBridge={handleTogglePythonBridge}
               />
             </DesktopWindow>
           )}

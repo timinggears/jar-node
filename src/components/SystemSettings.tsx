@@ -12,6 +12,8 @@ interface SystemSettingsProps {
   setIsAiActive: (val: boolean) => void;
   isEntangled: boolean;
   setIsEntangled: (val: boolean) => void;
+  isBoost2B: boolean;
+  setIsBoost2B: (val: boolean) => void;
   systemVersion: number;
   currentFreq: number;
   onSendCommand?: (cmd: string) => void;
@@ -23,6 +25,8 @@ interface SystemSettingsProps {
   minerUser: string;
   minerPass: string;
   onUpdateMinerConfig: (pool: string, user: string, pass: string) => void;
+  pythonBridgeActive?: boolean;
+  onTogglePythonBridge?: (active: boolean) => void;
 }
 
 export default function SystemSettings({
@@ -34,6 +38,8 @@ export default function SystemSettings({
   setIsAiActive,
   isEntangled,
   setIsEntangled,
+  isBoost2B,
+  setIsBoost2B,
   systemVersion,
   currentFreq,
   onSendCommand,
@@ -44,7 +50,9 @@ export default function SystemSettings({
   poolUrl,
   minerUser,
   minerPass,
-  onUpdateMinerConfig
+  onUpdateMinerConfig,
+  pythonBridgeActive = false,
+  onTogglePythonBridge
 }: SystemSettingsProps) {
   const freqKHz = currentFreq / 1000;
 
@@ -182,6 +190,48 @@ export default function SystemSettings({
             <motion.div 
               initial={{ x: 4 }}
               animate={{ x: isEntangled ? 26 : 4 }}
+              className="absolute top-1 left-0 w-4 h-4 rounded-full bg-black shadow-lg"
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-lg border-cyan-500/10">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Zap size={14} className={isBoost2B ? "text-cyan-400" : "text-zinc-600"} />
+              <span className="text-[10px] font-bold uppercase tracking-tight text-zinc-200">2B Singularity Uplink</span>
+            </div>
+            <p className="text-[9px] text-zinc-500">Excites virtual substrate hashrate to 2 Billion H/s.</p>
+          </div>
+          <button 
+            onClick={() => setIsBoost2B(!isBoost2B)}
+            className={`w-12 h-6 rounded-full relative transition-colors ${isBoost2B ? 'bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.5)]' : 'bg-zinc-800'}`}
+          >
+            <motion.div 
+              initial={{ x: 4 }}
+              animate={{ x: isBoost2B ? 26 : 4 }}
+              className="absolute top-1 left-0 w-4 h-4 rounded-full bg-black shadow-lg"
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-lg border-emerald-500/10">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Cpu size={14} className={pythonBridgeActive ? "text-emerald-400" : "text-zinc-600"} />
+              <span className="text-[10px] font-bold uppercase tracking-tight text-zinc-200">Python Serial Tunnel</span>
+            </div>
+            <p className="text-[9px] text-zinc-500">
+              {pythonBridgeActive ? "Bridged & Streaming virtual Pico telemetry over Websockets." : "Spawns Python tunnel process to pipe serial flow."}
+            </p>
+          </div>
+          <button 
+            onClick={() => onTogglePythonBridge?.(!pythonBridgeActive)}
+            className={`w-12 h-6 rounded-full relative transition-colors ${pythonBridgeActive ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-zinc-800'}`}
+          >
+            <motion.div 
+              initial={{ x: 4 }}
+              animate={{ x: pythonBridgeActive ? 26 : 4 }}
               className="absolute top-1 left-0 w-4 h-4 rounded-full bg-black shadow-lg"
             />
           </button>

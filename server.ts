@@ -24,7 +24,8 @@ let systemState = {
   vault: [] as Array<{ id: string, bias: number, overdrive: boolean, depth: number, timestamp: number }>,
   pool_url: 'rx.unmineable.com:3333',
   miner_user: '1683397408.JarSingularity#qh6m-7m98',
-  miner_pass: 'x'
+  miner_pass: 'x',
+  boost_2b: false
 };
 
 // Load state if exists
@@ -43,6 +44,63 @@ try {
   console.warn(`[SYSTEM] Failed to load state: ${e.message}`);
 }
 
+// --- PYTHON PROCESS SIDE-CAR SERVICE ---
+let ioInstance: Server | null = null;
+let pythonBridgeProcess: ChildProcess | null = null;
+let pythonBridgeActive = false;
+
+function startPythonBridge() {
+  if (pythonBridgeProcess) return;
+  
+  console.log('[PYTHON_BRIDGE] Executing background python telemetry side-car service...');
+  
+  const pythonCmd = os.platform() === 'win32' ? 'python' : 'python3';
+  const scriptPath = path.join(process.cwd(), 'local_bridge.py');
+  
+  try {
+    // Spawn bridge helper in virtual mode
+    pythonBridgeProcess = spawn(pythonCmd, [scriptPath, '--virtual']);
+    pythonBridgeActive = true;
+    
+    pythonBridgeProcess.stdout?.on('data', (data) => {
+      const line = data.toString().trim();
+      console.log(`[PYTHON_BRIDGE] stdout: ${line}`);
+      if (ioInstance) {
+        ioInstance.emit('log', `PYTHON_BRIDGE: ${line}`);
+      }
+    });
+
+    pythonBridgeProcess.stderr?.on('data', (data) => {
+      const line = data.toString().trim();
+      console.error(`[PYTHON_BRIDGE] stderr: ${line}`);
+      if (ioInstance) {
+        ioInstance.emit('log', `PYTHON_BRIDGE_ERR: ${line}`);
+      }
+    });
+
+    pythonBridgeProcess.on('close', (code) => {
+      console.log(`[PYTHON_BRIDGE] Service shutdown with code ${code}`);
+      pythonBridgeProcess = null;
+      pythonBridgeActive = false;
+      if (ioInstance) {
+        ioInstance.emit('log', `SYSTEM_BRIDGE: Python service terminated.`);
+      }
+    });
+  } catch (err: any) {
+    console.error(`[PYTHON_BRIDGE] Failed to spawn python daemon: ${err.message}`);
+    pythonBridgeActive = false;
+  }
+}
+
+function stopPythonBridge() {
+  if (pythonBridgeProcess) {
+    console.log('[PYTHON_BRIDGE] Revoking python bridge process...');
+    pythonBridgeProcess.kill('SIGKILL');
+    pythonBridgeProcess = null;
+  }
+  pythonBridgeActive = false;
+}
+
 function saveState() {
   try {
     fs.writeFileSync(STATE_FILE, JSON.stringify({ 
@@ -55,7 +113,8 @@ function saveState() {
       vault: systemState.vault,
       pool_url: systemState.pool_url,
       miner_user: systemState.miner_user,
-      miner_pass: systemState.miner_pass
+      miner_pass: systemState.miner_pass,
+      boost_2b: systemState.boost_2b
     }, null, 2));
   } catch (e: any) {
     console.error(`[SYSTEM] Failed to save state: ${e.message}`);
@@ -85,6 +144,7 @@ const STATE_FILE = path.join(os.tmpdir(), 'system_state.json');
 function getLiveHashrate() {
   let bias = 50;
   let overdrive = false;
+  let boost2b = false;
   try {
     if (fs.existsSync(STATE_FILE)) {
       const content = fs.readFileSync(STATE_FILE, 'utf8');
@@ -92,9 +152,14 @@ function getLiveHashrate() {
         const parsed = JSON.parse(content);
         if (parsed.bias !== undefined) bias = parsed.bias;
         if (parsed.overdrive !== undefined) overdrive = parsed.overdrive;
+        if (parsed.boost_2b !== undefined) boost2b = parsed.boost_2b;
       }
     }
   } catch (e) {}
+
+  if (boost2b) {
+    return 2000000.00;
+  }
 
   const baseH = 250 + (bias / 50) * 125;
   const flux = (Math.random() - 0.5) * 45;
@@ -180,7 +245,7 @@ async function startServer() {
     }
     let stateChanged = false;
     if (params.bias !== undefined) {
-      const targetBias = Math.min(79.0, Number(params.bias));
+      const targetBias = Math.min(250.0, Number(params.bias));
       if (systemState.bias !== targetBias) {
         systemState.bias = targetBias;
         stateChanged = true;
@@ -190,6 +255,13 @@ async function startServer() {
       const targetOverdrive = Boolean(params.overdrive);
       if (systemState.overdrive !== targetOverdrive) {
         systemState.overdrive = targetOverdrive;
+        stateChanged = true;
+      }
+    }
+    if (params.boost_2b !== undefined) {
+      const targetBoost = Boolean(params.boost_2b);
+      if (systemState.boost_2b !== targetBoost) {
+        systemState.boost_2b = targetBoost;
         stateChanged = true;
       }
     }
@@ -426,7 +498,7 @@ async function startServer() {
       const parity = (seedNum.toString(2).split('1').length - 1) % 2;
 
       // Safety clamp
-      currentFreq = Math.max(100, Math.min(2500000, currentFreq));
+      currentFreq = Math.max(100, Math.min(250000000, currentFreq));
       
       // PROTOCOL v150: [!S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ|HRATE|COHERENCE|DEPTH]
       
@@ -456,11 +528,15 @@ async function startServer() {
 
       // Virtual Hashrate Simulation
       if (virtualSubstrateActive) {
-        const baseH = 250 + (systemState.bias / 50) * 125;
-        const flux = (Math.random() - 0.5) * 45;
-        const multi = systemState.overdrive ? 14.0 : 1.0;
-        const coherence = 0.96 + (Math.random() * 0.04);
-        systemState.latestHashRate = Math.max(0, (baseH + flux) * multi * coherence);
+        if (systemState.boost_2b) {
+          systemState.latestHashRate = 2000000.00; // 2 Billion H/s
+        } else {
+          const baseH = 250 + (systemState.bias / 50) * 125;
+          const flux = (Math.random() - 0.5) * 45;
+          const multi = systemState.overdrive ? 14.0 : 1.0;
+          const coherence = 0.96 + (Math.random() * 0.04);
+          systemState.latestHashRate = Math.max(0, (baseH + flux) * multi * coherence);
+        }
       }
 
       if (Date.now() % 10000 < 1000) {
@@ -622,6 +698,7 @@ async function startServer() {
     console.log('[SERVER] Shutting down and saving state...');
     saveState();
     miningEnabled = false;
+    stopPythonBridge();
     if (xmrigProcess) {
       console.log('[MINER] Terminating XMRig...');
       xmrigProcess.kill('SIGTERM');
@@ -635,8 +712,44 @@ async function startServer() {
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
 
-  // Start miner
+  // Initialize global IO instance for python logs forwarder
+  ioInstance = io;
+
+  // Start miner and the Python bridge daemon side-car service
   startMining();
+  startPythonBridge();
+
+  // --- PYTHON BRIDGE CONTROLLERS ---
+  app.get('/api/bridge/status', (req, res) => {
+    res.json({
+      success: true,
+      active: pythonBridgeActive,
+      pid: pythonBridgeProcess?.pid || null,
+      mode: 'python_proxy',
+      is_virtual: true
+    });
+  });
+
+  app.post('/api/bridge/toggle', (req, res) => {
+    const { active } = req.body || {};
+    if (active) {
+      startPythonBridge();
+    } else {
+      stopPythonBridge();
+    }
+    res.json({
+      success: true,
+      active: pythonBridgeActive
+    });
+  });
+  
+  app.post('/api/bridge/restart', (req, res) => {
+    stopPythonBridge();
+    setTimeout(() => {
+      startPythonBridge();
+      res.json({ success: true, active: pythonBridgeActive });
+    }, 1000);
+  });
 
   // --- SYSTEM SCAN ENDPOINT ---
   app.get('/api/system/scan', async (req, res) => {
