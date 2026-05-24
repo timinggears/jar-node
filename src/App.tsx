@@ -898,7 +898,7 @@ export default function App() {
       const isOver = isOverdriveRef.current;
       
       // LOGIC: Quantum gate resonance triggers when system metrics align logically
-      const isLogicalAlignment = coherence > 0.96 && intelligence > 200 && frequency > 40000;
+      const isLogicalAlignment = coherence > 0.85 && (intelligence > 4.5 || isQecActiveRef.current) && frequency > 30000;
 
       if (isLogicalAlignment) {
         const messages = [
@@ -1356,6 +1356,8 @@ export default function App() {
                   jitter={stats.jitter} 
                   frequency={stats.frequency} 
                   bias={carrierBias}
+                  vNodal={stats.vNodal}
+                  intelligence={stats.intelligence}
                   isInstalling={isInstalling}
                   installProgress={installProgress}
                   isAiActive={isAiAnalysisActive}

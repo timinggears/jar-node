@@ -3,18 +3,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
+import { Zap, Play, CheckCircle2, RefreshCw } from 'lucide-react';
 
 interface WarpVisualizerProps {
   coherence: number;
   jitter: number;
   frequency: number;
   bias: number;
+  vNodal: number;
+  intelligence: number;
   isInstalling?: boolean;
   installProgress?: number;
   isAiActive?: boolean;
   isSolving?: boolean;
+}
+
+interface Point3D {
+  x: number;
+  y: number;
+  z: number;
 }
 
 export default function WarpVisualizer({ 
@@ -22,7 +31,9 @@ export default function WarpVisualizer({
   jitter, 
   frequency, 
   bias,
-  isInstalling = false, 
+  vNodal,
+  intelligence,
+  isInstalling = false,
   installProgress = 0,
   isAiActive = false,
   isSolving = false
@@ -31,14 +42,23 @@ export default function WarpVisualizer({
   const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef<{x: number, y: number}[]>([]);
   const dimensionsRef = useRef({ width: 0, height: 0 });
-  const propsRef = useRef({ coherence, jitter, frequency, bias, isInstalling, installProgress, isAiActive, isSolving });
+  const propsRef = useRef({ coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving });
+
+  // Local state for interactive quantum gate parity calibration
+  const [calibrating, setCalibrating] = useState(false);
+  const [gateStates, setGateStates] = useState({
+    hadamard: 'STABLE',
+    pauliX: 'STABLE',
+    cnot: 'STABLE'
+  });
+  const [calibrationLog, setCalibrationLog] = useState<string>("QUBIT_GATES: Standing by for parity alignment...");
 
   useEffect(() => {
-    propsRef.current = { coherence, jitter, frequency, bias, isInstalling, installProgress, isAiActive, isSolving };
-  }, [coherence, jitter, frequency, bias, isInstalling, installProgress, isAiActive, isSolving]);
+    propsRef.current = { coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving };
+  }, [coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving]);
 
   useEffect(() => {
-    // Reduced background node count to 150 for efficiency
+    // Generate star/node structure for backdrops
     nodesRef.current = Array.from({ length: 150 }, () => ({
       x: Math.random() * 2000,
       y: Math.random() * 1000
@@ -62,6 +82,33 @@ export default function WarpVisualizer({
     return () => observer.disconnect();
   }, []);
 
+  const handleCalibrateGates = () => {
+    setCalibrating(true);
+    setCalibrationLog("ALIGNING: Initializing H-Gate matrix phase adjustment...");
+    setGateStates({ hadamard: 'RESONATING', pauliX: 'ALIGNING', cnot: 'COUPLING' });
+    
+    // Log globally through CustomEvent so the main console displays the action
+    window.dispatchEvent(new CustomEvent('system-log', {
+      detail: { 
+        message: "QUBIT_GATE: Aligning quantum superposition phases via automated micro-resonance.", 
+        type: "warning" 
+      }
+    }));
+
+    setTimeout(() => {
+      setGateStates({ hadamard: 'ALIGNMENT_LOCKED', pauliX: 'ACTIVE', cnot: 'ENTANGLED' });
+      setCalibrationLog("LOCKED: Waveform alignment holding at 99.8% parity efficiency.");
+      setCalibrating(false);
+      
+      window.dispatchEvent(new CustomEvent('system-log', {
+        detail: { 
+          message: "QUBIT_GATE: Recalibration completed successfully. High-fidelity coherence active.", 
+          type: "success" 
+        }
+      }));
+    }, 2500);
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -74,12 +121,12 @@ export default function WarpVisualizer({
 
     const draw = (time: number) => {
       const { 
-        coherence, 
-        jitter, 
-        frequency, 
-        bias, 
+        coherence: coh, 
+        jitter: jit, 
+        frequency: freq, 
+        bias: bVal, 
+        vNodal: v,
         isInstalling, 
-        isAiActive, 
         isSolving 
       } = propsRef.current;
 
@@ -101,15 +148,15 @@ export default function WarpVisualizer({
       const centerY = height / 2;
       const t = (time - startTime) / 1000;
 
-      const freqUnit = frequency / 1000;
-      const isZeroPoint = frequency === 0;
-      const isPhaseOut = freqUnit >= 28 || coherence === 0;
+      const freqUnit = freq / 1000;
+      const isZeroPoint = freq === 0;
+      const isPhaseOut = freqUnit >= 28 || coh === 0;
       const isTachyonic = freqUnit >= 42;
       const isSingularity = freqUnit >= 50;
 
-      // Draw Reservoir Resonance (Liquid State Background)
-      ctx.globalAlpha = 0.15 * (isZeroPoint ? 0.05 : (isPhaseOut ? 0.5 : coherence));
-      if (isSingularity && Math.random() > 0.8) ctx.globalAlpha = 0.5; 
+      // Draw general space backdrop glowing circles
+      ctx.globalAlpha = 0.1 * (isZeroPoint ? 0.05 : (isPhaseOut ? 0.3 : coh));
+      if (isSingularity && Math.random() > 0.8) ctx.globalAlpha = 0.4; 
       
       if (isInstalling) {
         ctx.globalAlpha = 0.05;
@@ -117,18 +164,13 @@ export default function WarpVisualizer({
         ctx.fillRect(0, (t * 200) % height, width, 2); // Scanning laser
       }
 
-      if (isAiActive) {
-        // AI Analysis overlay removed as per user request to clean up background
-      }
-
-      // 500 City Solve Mesh
+      // Draw the optimization solver backdrop mesh
       if (isSolving) {
         ctx.save();
         ctx.strokeStyle = '#a855f7'; // Purple
         ctx.lineWidth = 0.5;
-        ctx.globalAlpha = 0.4 + (Math.sin(t * 10) * 0.1);
+        ctx.globalAlpha = 0.2 + (Math.sin(t * 10) * 0.05);
         
-        // Draw partial connections to simulate optimization
         const step = Math.floor(t * 15) % 150;
         ctx.beginPath();
         for (let i = 0; i < nodesRef.current.length; i++) {
@@ -143,7 +185,6 @@ export default function WarpVisualizer({
         }
         ctx.stroke();
 
-        // Draw nodes
         ctx.fillStyle = '#a855f7';
         for (let i = 0; i < nodesRef.current.length; i++) {
           const node = nodesRef.current[i];
@@ -154,116 +195,144 @@ export default function WarpVisualizer({
         ctx.restore();
       }
 
-      for (let j = 0; j < 3; j++) {
+      // --- HIGH FIDELITY 3D ROTATING CUBE RESERVOIR CORE (DESIGN CORNER) ---
+      // Distort cube boundaries with actual calculated phase out
+      const shimmer = 45 + (jit * 85);
+      const computedPhaseOut = (v * 142) - (0.41 * shimmer) + (28 * Math.sin(2 * Math.PI * 35 * t));
+      const clampedPhase = Math.max(-85, Math.min(85, computedPhaseOut));
+
+      // Map Y coordinates and scale by bias/impedance
+      const scaleMultiplier = isZeroPoint ? 0.1 : (0.7 + (bVal / 100) * 0.5);
+      const cubeSize = Math.max(20, 85 * scaleMultiplier * (1 + Math.sin(t * 5) * 0.08));
+
+      let vertices: Point3D[] = [
+        { x: -cubeSize, y: -cubeSize, z: -cubeSize },
+        { x: cubeSize, y: -cubeSize, z: -cubeSize },
+        { x: cubeSize, y: cubeSize, z: -cubeSize },
+        { x: -cubeSize, y: cubeSize, z: -cubeSize },
+        { x: -cubeSize, y: -cubeSize, z: cubeSize },
+        { x: cubeSize, y: -cubeSize, z: cubeSize },
+        { x: cubeSize, y: cubeSize, z: cubeSize },
+        { x: -cubeSize, y: cubeSize, z: cubeSize }
+      ];
+
+      // Rotate rates linked up to real physical frequencies/carrier biases
+      const angleX = t * 0.6 * (1 + (bVal / 125));
+      const angleY = t * 0.4 * (1 + (freqUnit / 50));
+      const angleZ = t * 0.2;
+
+      const rotateX = (p: Point3D, rad: number): Point3D => {
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        return {
+          x: p.x,
+          y: p.y * cos - p.z * sin,
+          z: p.y * sin + p.z * cos
+        };
+      };
+
+      const rotateY = (p: Point3D, rad: number): Point3D => {
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        return {
+          x: p.x * cos + p.z * sin,
+          y: p.y,
+          z: -p.x * sin + p.z * cos
+        };
+      };
+
+      const rotateZ = (p: Point3D, rad: number): Point3D => {
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        return {
+          x: p.x * cos - p.y * sin,
+          y: p.x * sin + p.y * cos,
+          z: p.z
+        };
+      };
+
+      // Project vertices to 2D
+      const projected = vertices.map(vert => {
+        let r = rotateX(vert, angleX);
+        r = rotateY(r, angleY);
+        r = rotateZ(r, angleZ);
+
+        // Apply physical Phase-Out spatial warp directly to vertices coordinates!
+        // This makes the physical state space map look organic & mathematically aligned!
+        const warpAmp = clampedPhase / 70;
+        r.x += Math.sin(r.y * 0.04 + t * 12) * warpAmp * 20;
+        r.y += Math.cos(r.x * 0.04 + t * 12) * warpAmp * 20;
+
+        // Depth projection mapping
+        const distance = 250;
+        const fov = 200;
+        const s = fov / (distance + r.z);
+        return {
+          x: centerX + r.x * s,
+          y: centerY + r.y * s
+        };
+      });
+
+      // Wireframe Face Edges
+      const edges = [
+        [0, 1], [1, 2], [2, 3], [3, 0], // Back face
+        [4, 5], [5, 6], [6, 7], [7, 4], // Front face
+        [0, 4], [1, 5], [2, 6], [3, 7]  // Link pins
+      ];
+
+      const edgeColor = isZeroPoint 
+        ? '#3b82f6' 
+        : (isSingularity ? '#00ffcc' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#ff4488' : '#00ffcc')));
+
+      ctx.save();
+      ctx.strokeStyle = edgeColor;
+      ctx.lineWidth = isZeroPoint ? 1.0 : (isSingularity ? 3.0 : 1.5);
+      
+      // Neon glow inside visualization boundaries
+      ctx.shadowBlur = isZeroPoint ? 0 : 15 + Math.random() * 5;
+      ctx.shadowColor = edgeColor;
+
+      // Draw connecting lines
+      ctx.beginPath();
+      edges.forEach(([u, v]) => {
+        ctx.moveTo(projected[u].x, projected[u].y);
+        ctx.lineTo(projected[v].x, projected[v].y);
+      });
+      ctx.stroke();
+
+      // Draw nodes on vertex points
+      ctx.fillStyle = isZeroPoint ? '#3b82f6' : '#ffffff';
+      projected.forEach(p => {
         ctx.beginPath();
-        ctx.moveTo(0, centerY);
-        
-        // v147: Dramatic Bias Scaling - Dampened for v149 to preserve resources
-        // normalized bias (0.0 to 1.0)
-        const b = bias / 100;
-        const biasScale = bias <= 50 
-          ? 0.2 + (bias / 50) * 0.8 
-          : 1.0 + ((bias - 50) / 50) * 2.5; // Reduced from 5.0 to 2.5
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
 
-        for (let x = 0; x < width + 40; x += 40) { // Increased step to 40 for max efficiency
-          let baseIntensity = 10 + jitter * 60; // Further reduced base intensity
-          if (isZeroPoint) baseIntensity = 1;
-          else if (isSingularity) baseIntensity = 25 + Math.random() * 15; // Reduced from 80+40
-          else if (isTachyonic) baseIntensity = 20 + Math.random() * 10; // Reduced from 40+20
-          else if (isPhaseOut) baseIntensity = 30 + Math.random() * 15; // Reduced from 50+20
-
-          // Add jitter-based noise to peak intensity if boosted
-          const noise = bias > 70 ? (Math.random() - 0.5) * (bias - 70) * 0.5 : 0;
-          const intensity = baseIntensity * biasScale + noise;
-          
-          // v147: Drive wave speed and frequency strictly by the Hz value
-          const freqMulti = frequency / 50000;
-          const speedMulti = (1 + (b * 3)) * freqMulti;
-          const wavelength = (isZeroPoint ? 0.001 : (isPhaseOut ? 0.05 : 0.01)) * (1 / Math.sqrt(freqMulti));
-          
-          const y = centerY + Math.sin(x * wavelength + t * ((isZeroPoint ? 0.1 : (0.5 + j)) * speedMulti)) * intensity;
-          ctx.lineTo(x, y);
-        }
-
-        const color = isZeroPoint ? '#3b82f6' : (isSingularity ? '#00ffcc' : (isTachyonic ? '#ffffff' : (isPhaseOut ? '#cc5500' : (j === 0 ? '#00ffcc' : '#ff0088'))));
-        ctx.strokeStyle = color;
-        ctx.lineWidth = (isZeroPoint ? 1.0 : (isSingularity ? 4.0 : (isPhaseOut ? 2.0 : 1.2))) * (0.8 + b * 2.0);
-        
-        if (bias > 70) {
-          // Manual multi-pass glow for more intensity
-          ctx.shadowBlur = 10 + (b * 20);
-          ctx.shadowColor = color;
-          
-          // Glitch secondary line
-          if (bias > 90 && Math.random() > 0.9) {
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth *= 3;
-            ctx.stroke();
-            ctx.strokeStyle = color;
-            ctx.lineWidth /= 3;
-          }
-
-          // v147: Chromatic Aberration Glitch
-          if (Math.random() > 0.7 && bias > 85) {
-            ctx.save();
-            ctx.translate((Math.random() - 0.5) * (bias / 5), 0);
-            ctx.globalAlpha = 0.4;
-            ctx.strokeStyle = '#ff0088'; // Magenta shift
-            ctx.stroke();
-            ctx.translate((Math.random() - 0.5) * (bias / 5), 0);
-            ctx.strokeStyle = '#00ffcc'; // Cyan shift
-            ctx.stroke();
-            ctx.restore();
-          }
-        } else {
-          ctx.shadowBlur = 0;
-        }
-
+      // Inner liquid/carbon vortex ring representation inside 3D Cube
+      ctx.save();
+      ctx.globalAlpha = 0.3 * coh;
+      for (let i = 0; i < 4; i++) {
+        const rSize = (cubeSize * 0.4) + i * 15;
+        const skew = Math.sin(t * 8 + i) * (jit * 80);
+        ctx.beginPath();
+        ctx.ellipse(centerX, centerY, Math.max(5, rSize + skew), Math.max(5, rSize), t * 0.5, 0, Math.PI * 2);
+        ctx.strokeStyle = coh > 0.65 ? '#00ffcc' : '#ff0088';
+        ctx.lineWidth = 1;
         ctx.stroke();
       }
+      ctx.restore();
 
-      // Draw chaotic particles during phase out
+      // Draw chaotic particles shooting around during phase out state
       if (isPhaseOut && !isZeroPoint) {
-        ctx.globalAlpha = 0.8;
-        const pCount = isSingularity ? 40 : (isTachyonic ? 15 : 8); // Reduced particle counts
+        ctx.globalAlpha = 0.6;
+        const pCount = isSingularity ? 15 : 6;
         for (let p = 0; p < pCount; p++) {
           const rx = Math.random() * width;
           const ry = Math.random() * height;
-          ctx.fillStyle = isSingularity ? (Math.random() > 0.5 ? '#00ffcc' : '#ffffff') : (isTachyonic ? '#ffffff' : '#cc5500');
-          const pw = isSingularity ? Math.random() * 400 : (isTachyonic ? Math.random() * 200 : Math.random() * 80 + 20);
-          ctx.fillRect(rx, ry, pw, isSingularity ? Math.random() * 2 : 1);
-        }
-      }
-      ctx.globalAlpha = 1.0;
-
-      // Draw 6 rings (Reduced from 12)
-      const ringCount = isPhaseOut ? (isTachyonic ? 1 : 2) : 6;
-      for (let i = 0; i < 6; i++) {
-        if (isPhaseOut && i >= ringCount) continue;
-        const r = 20 + i * 20;
-        let col = coherence > 0.7 ? '#00ffcc' : '#ff0088';
-        if (isPhaseOut) col = '#cc5500';
-        if (isTachyonic) col = '#ffffff';
-        
-        ctx.globalAlpha = (0.15 + (i / 6) * 0.5) * (isPhaseOut ? 0.05 : coherence * 0.5);
-        
-        // At 28GHz (phase out), the orbit becomes chaotic
-        const chaos = freqUnit >= 28 ? Math.random() * 50 : 0;
-        const warp = Math.sin(t * 15 + i) * (jitter * 250) + chaos;
-        
-        ctx.beginPath();
-        ctx.ellipse(centerX, centerY, Math.max(5, r + warp), Math.max(5, r), 0, 0, Math.PI * 2);
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        if (!isPhaseOut && coherence > 0.8 && i % 4 === 0) {
-          const px = centerX + (r + warp);
-          ctx.globalAlpha = 1.0;
-          ctx.fillStyle = col;
-          ctx.beginPath();
-          ctx.arc(px, centerY, 4, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fillStyle = isSingularity ? '#00ffcc' : '#ff4488';
+          const pLength = Math.random() * 80 + 20;
+          ctx.fillRect(rx, ry, pLength, 1);
         }
       }
 
@@ -275,72 +344,185 @@ export default function WarpVisualizer({
     return () => cancelAnimationFrame(animationId);
   }, []);
 
+  // Compute live values for diagnostics
+  const shimmer = 45 + (jitter * 85);
+  const rawPhaseOut = (vNodal * 142) - (0.41 * shimmer) + (28 * Math.sin(2 * Math.PI * 35 * (Date.now() / 1000)));
+  const clampedPhase = Math.max(-85, Math.min(85, rawPhaseOut));
+
   return (
-    <section ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-transparent overflow-hidden font-mono">
+    <section ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden font-mono text-xs text-white">
+      {/* Absolute clean layout backdrop grid */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,180,0.02)_0%,transparent_85%)] z-0" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:30px_30px] z-0 pointer-events-none" />
+
       {/* Screen Shake Container */}
       <motion.div 
         className="absolute inset-0 flex items-center justify-center pointer-events-none z-0"
         animate={bias > 85 ? {
-          x: [-5, 5, -3, 3, -1, 1, 0],
-          y: [3, -3, 2, -2, 1, -1, 0],
+          x: [-3, 3, -1, 1, 0],
+          y: [2, -2, 1, -1, 0],
         } : { x: 0, y: 0 }}
-        transition={bias > 85 ? { duration: 0.15, repeat: Infinity } : { duration: 0.5 }}
+        transition={bias > 85 ? { duration: 0.2, repeat: Infinity } : { duration: 0.5 }}
       >
         <div className="w-full h-full" />
       </motion.div>
-      {/* Decorative overlays from design */}
-      <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
-        <span className={`px-2 py-1 rounded text-[10px] border backdrop-blur-sm transition-colors ${
-          (frequency) === 0 ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' :
-          (frequency/1000) >= 150 ? 'bg-[#00ffcc] text-black border-[#00ffcc] font-black animate-pulse' :
-          (frequency/1000) >= 100 ? 'bg-white text-black border-white' :
-          (frequency/1000) >= 50 ? 'bg-[#cc5500]/20 text-[#cc5500] border-[#cc5500]/40' : 
-          'bg-[#00ffcc20] text-[#00ffcc] border-[#00ffcc40]'
-        }`}>
-          RESERVOIR_STATE: {(frequency) === 0 ? 'ABSOLUTE_NULL' : (frequency/1000) >= 150 ? 'SINGULARITY_COLLAPSE' : (frequency/1000) >= 100 ? 'QUANTUM_SUPERPOSITION' : (frequency/1000) >= 50 ? 'STABLE_ANCHOR' : 'LOW_POWER'}
-        </span>
-        <span className="px-2 py-1 rounded bg-[#ff008820] text-[#ff0088] text-[10px] border border-[#ff008840] backdrop-blur-sm">
-          NODAL_DRIFT: {jitter.toFixed(3)}
-        </span>
+
+      {/* --- LEFT SIDEBAR PANEL: PHASE_OUT DIAGNOSTIC BLOCKS --- */}
+      <div className="absolute top-4 left-4 w-52 flex flex-col gap-3 z-10 pointer-events-auto">
+        <div className="bg-black/85 backdrop-blur-md rounded-lg border border-white/10 p-3 shadow-xl">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-1.5 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse" />
+            <h3 className="text-[10px] font-black tracking-widest text-[#ff4488]">PHASE_OUT_MONITOR</h3>
+          </div>
+
+          <div className="space-y-2 text-[9px]">
+            <div className="bg-white/5 px-2 py-1 rounded flex justify-between items-center">
+              <span className="text-zinc-500">PHASE_ANGLE:</span>
+              <span className="text-pink-400 font-bold font-mono">
+                {clampedPhase.toFixed(2)}%
+              </span>
+            </div>
+
+            <div className="w-full h-1.5 bg-zinc-950 rounded-full border border-white/10 overflow-hidden relative">
+              <div 
+                className="h-full bg-gradient-to-r from-pink-500 to-[#00ffcc] transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.max(0, ((clampedPhase + 85) / 170) * 100))}%` }}
+              />
+            </div>
+
+            <div className="space-y-1 mt-2 text-zinc-400">
+              <div className="flex justify-between">
+                <span>SHIMMER_FACT:</span>
+                <span className="text-zinc-300">{shimmer.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>VOLT_NODAL:</span>
+                <span className="text-zinc-300">{vNodal.toFixed(4)} V</span>
+              </div>
+              <div className="flex justify-between">
+                <span>COHERENCE:</span>
+                <span className={coherence > 0.65 ? "text-[#00ffcc]" : "text-pink-500"}>{(coherence * 100).toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-black/85 backdrop-blur-md rounded-lg border border-white/10 p-3 shadow-xl">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-1.5 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00ffcc]" />
+            <span className="text-[10px] font-black tracking-wider text-[#00ffcc]">RESERVOIR_STATE</span>
+          </div>
+          <div className="space-y-1 text-[9px] text-zinc-400">
+            <div className="flex justify-between">
+              <span>ACTIVE_CARRIER:</span>
+              <span className="text-[#00ffcc] font-bold">{(frequency / 1000).toFixed(4)} GHz</span>
+            </div>
+            <div className="flex justify-between">
+              <span>CHAOTIC_DRIFT:</span>
+              <span className="text-zinc-300">{jitter.toFixed(4)}</span>
+            </div>
+            <div className="flex justify-between text-[8px] border-t border-white/5 pt-1.5 mt-1">
+              <span>FLUX_DEPTH:</span>
+              <span className="text-zinc-500">{intelligence.toFixed(3)} EPS</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,204,0.03)_0%,transparent_70%)]" />
-      
+      {/* --- RIGHT SIDEBAR PANEL: QUBIT_GATES ALIGNMENT INTERACTIVE CONTROL --- */}
+      <div className="absolute top-4 right-4 w-52 flex flex-col gap-3 z-10 pointer-events-auto">
+        <div className="bg-black/85 backdrop-blur-md rounded-lg border border-white/10 p-3 shadow-xl flex flex-col">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-1.5 mb-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" />
+            <h3 className="text-[10px] font-black tracking-widest text-[#44a8ff]">QUBIT_GATES_ALIGN</h3>
+          </div>
+
+          <div className="space-y-2 text-[9px] mb-3">
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500">HADAMARD (H):</span>
+              <span className={`px-1 rounded text-[8px] ${
+                gateStates.hadamard.includes('LOCK') ? 'bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30' :
+                gateStates.hadamard === 'RESONATING' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold'
+              }`}>
+                {gateStates.hadamard}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500">PAULI_X (σ_x):</span>
+              <span className={`px-1 rounded text-[8px] ${
+                gateStates.pauliX === 'ACTIVE' ? 'bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30' :
+                gateStates.pauliX === 'ALIGNING' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold'
+              }`}>
+                {gateStates.pauliX}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500">CNOT GATE (CX):</span>
+              <span className={`px-1 rounded text-[8px] ${
+                gateStates.cnot === 'ENTANGLED' ? 'bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30' :
+                gateStates.cnot === 'COUPLING' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold'
+              }`}>
+                {gateStates.cnot}
+              </span>
+            </div>
+
+            <div className="border-t border-white/5 pt-2 mt-2">
+              <p className="text-[8px] text-zinc-500 uppercase leading-normal italic select-all">
+                {calibrationLog}
+              </p>
+            </div>
+          </div>
+
+          {/* Interactive button to align/calibrate gates, proving they work again! */}
+          <button 
+            onClick={handleCalibrateGates}
+            disabled={calibrating}
+            className="w-full bg-blue-500/15 border border-blue-500/30 hover:bg-blue-500/25 active:scale-95 text-blue-400 px-3 py-2 rounded font-black tracking-widest uppercase transition-all flex items-center justify-center gap-2 text-[8px] cursor-pointer"
+          >
+            {calibrating ? (
+              <RefreshCw size={10} className="animate-spin" />
+            ) : (
+              <Zap size={10} />
+            )}
+            {calibrating ? "CALIBRATING_PARITY..." : "ALIGN_QUBIT_GATES"}
+          </button>
+        </div>
+      </div>
+
       <canvas
         ref={canvasRef}
-        className={`w-full h-full transition-opacity duration-1000 ${(frequency/1000) >= 28 || frequency === 0 ? 'opacity-100' : 'opacity-80'}`}
+        className="absolute inset-0 w-full h-full pointer-events-none"
       />
-      
-      {/* Central focus point */}
-      <div className="absolute w-32 h-32 rounded-full bg-gradient-to-br from-[#00ffcc15] to-transparent flex items-center justify-center pointer-events-none">
-        <div className={`w-8 h-8 rounded-full shadow-[0_0_30px_#00ffcc90] transition-all duration-300 ${
-          (frequency) === 0 ? 'bg-blue-900 border border-blue-400/50 shadow-[0_0_20px_#3b82f644] scale-[0.5]' :
-          (frequency/1000) >= 50 ? 'bg-[#00ffcc] shadow-[0_0_100px_#00ffcc] scale-[5] animate-ping' :
-          (frequency/1000) >= 42 ? 'bg-white shadow-[0_0_60px_#fff] scale-[2.5] blur-[2px]' :
-          (frequency/1000) >= 28 ? 'bg-[#cc5500] shadow-[0_0_40px_#cc5500] scale-150 animate-ping' : 
-          'bg-[#00ffcc] shadow-[0_0_30px_#00ffcc90] animate-pulse'
-        }`} />
+
+      {/* Central phase perspective identifier */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-1">
+        <p className="text-[8px] text-white/5 font-black tracking-[1.5em] uppercase translate-y-36">Phase_Projection_Vector</p>
       </div>
 
-      {/* Footer text in visualizer */}
-      <div className="absolute bottom-28 left-1/2 -translate-x-1/2 text-[10px] text-white/40 tracking-[0.2em] uppercase flex items-center gap-4 bg-black/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 whitespace-nowrap z-10 transition-all duration-500">
+      {/* Footer statistics readout bar */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] text-zinc-400 tracking-[0.2em] uppercase flex items-center gap-4 bg-black/85 backdrop-blur-md px-6 py-2 rounded-full border border-white/10 whitespace-nowrap z-10 transition-all duration-500">
         {isSolving ? (
-          <div className="flex items-center gap-4 w-full px-12 animate-pulse">
+          <div className="flex items-center gap-4 w-full animate-pulse">
             <span className="text-purple-500 font-bold">OPTIMIZING_250_NODE_PATH...</span>
-            <div className="flex-1 h-0.5 bg-purple-500/10 rounded-full overflow-hidden">
+            <div className="flex-1 h-0.5 bg-purple-500/10 rounded-full overflow-hidden w-24">
                <motion.div 
                 className="h-full bg-purple-500 shadow-[0_0_10px_#a855f7]"
-                initial={{ x: -1000 }}
-                animate={{ x: [-1000, 1000] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                initial={{ x: -100 }}
+                animate={{ x: [ -100, 100 ] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                />
             </div>
             <span className="text-purple-400">NODAL_ANNEALING</span>
           </div>
         ) : isInstalling ? (
-          <div className="flex items-center gap-4 w-full px-12">
+          <div className="flex items-center gap-4 w-full">
             <span className="text-[#00ffcc] animate-pulse">INSTALLING_MODULE...</span>
-            <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+            <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden w-24">
                <motion.div 
                 className="h-full bg-[#00ffcc] shadow-[0_0_10px_#00ffcc]"
                 initial={{ width: 0 }}
@@ -351,14 +533,14 @@ export default function WarpVisualizer({
           </div>
         ) : (
           <>
-            <span className={(frequency/1000) >= 50 && (frequency/1000) < 100 ? "text-[#cc5500] animate-pulse" : "text-white/20"}>
-              QUBIT_GATES: {(frequency/1000) >= 50 && (frequency/1000) < 100 ? 'RESONATING' : 'IDLE'}
+            <span className={(frequency/1000) >= 40 ? "text-[#00ffcc] animate-pulse font-black" : "text-zinc-600"}>
+              QUBIT_GATES: {(frequency/1000) >= 40 ? 'RESONATING' : 'IDLE'}
             </span>
-            <span className="text-white/10 hidden sm:inline">|</span>
-            <span>NODAL FLUX: {(frequency / 247).toFixed(2)} Hz</span>
-            <span className="text-white/10 hidden sm:inline">|</span>
-            <span className={(frequency) === 0 ? 'text-blue-500 font-mono tracking-widest' : (frequency/1000) >= 150 ? 'text-yellow-400 font-black animate-bounce' : (frequency/1000) >= 100 ? 'text-white font-bold' : (frequency/1000) >= 50 ? 'text-[#cc5500] animate-pulse' : ''}>
-              CARRIER: {(frequency/1000).toFixed(4)} GHz
+            <span className="text-zinc-800 hidden sm:inline">|</span>
+            <span className="text-zinc-300">Phase Variance: {clampedPhase.toFixed(2)}%</span>
+            <span className="text-zinc-800 hidden sm:inline">|</span>
+            <span className="text-[#00ffcc] font-black">
+              TUNED: {frequency === 0 ? '0.00' : (frequency/1000).toFixed(4)} GHz
             </span>
           </>
         )}
