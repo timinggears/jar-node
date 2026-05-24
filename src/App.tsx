@@ -80,6 +80,11 @@ export default function App() {
     hasLocalConfigRef.current = true;
     lastInteractionTimeRef.current = Date.now();
     setHasReceivedSync(true);
+    
+    // Trigger unified socket emission to backend for real-time serial writing
+    if (socketRef.current) {
+      socketRef.current.emit('hardware:bias_change', val);
+    }
   }, []);
 
   const handleOverdriveChange = useCallback((val: boolean) => {

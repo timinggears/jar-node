@@ -363,6 +363,38 @@ async function startServer() {
       }
     });
 
+    socket.on('hardware:bias_change', (val: any) => {
+      const targetBias = Math.min(250.0, Number(val));
+      if (isNaN(targetBias)) return;
+      
+      let stateChanged = false;
+      if (systemState.bias !== targetBias) {
+        systemState.bias = targetBias;
+        stateChanged = true;
+      }
+      
+      if (stateChanged) {
+        saveState();
+        io.emit('hardware:state', systemState);
+      }
+      
+      io.emit('hardware:params', { bias: targetBias });
+      socket.emit('log', `SYSTEM: Nodal frequency adjusted to ${systemState.bias} GHz.`);
+
+      if (hardwarePort && hardwarePort.isOpen) {
+        const biasCmd = `BIAS:${systemState.bias}\n`;
+        hardwarePort.write(biasCmd, (err) => {
+          if (err) {
+            console.error(`[HARDWARE_PORT] Error writing bias update to physical Pico: ${err.message}`);
+            socket.emit('log', `ERROR: Failed to transmit bias command to physical Pico: ${err.message}`);
+          } else {
+            console.log(`[HARDWARE_PORT] VERIFIED: Bias command "${biasCmd.trim()}" successfully passed to hardwarePort.write().`);
+            socket.emit('log', `SYSTEM: Verified transmitting bias update [${systemState.bias} GHz] to physical Pico over serial port.`);
+          }
+        });
+      }
+    });
+
   socket.on('hardware:params', (params: any) => {
     if (!params || typeof params !== 'object') {
       return;
