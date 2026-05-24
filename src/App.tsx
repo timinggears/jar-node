@@ -1362,6 +1362,8 @@ export default function App() {
                   installProgress={installProgress}
                   isAiActive={isAiAnalysisActive}
                   isSolving={isSolving}
+                  isQecActive={isQecActive}
+                  isEntangled={isEntangled}
                 />
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <p className="text-[8px] text-white/20 font-black tracking-[1em] uppercase">Phase_Projection</p>

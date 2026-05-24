@@ -18,6 +18,8 @@ interface WarpVisualizerProps {
   installProgress?: number;
   isAiActive?: boolean;
   isSolving?: boolean;
+  isQecActive?: boolean;
+  isEntangled?: boolean;
 }
 
 interface Point3D {
@@ -36,13 +38,15 @@ export default function WarpVisualizer({
   isInstalling = false,
   installProgress = 0,
   isAiActive = false,
-  isSolving = false
+  isSolving = false,
+  isQecActive = false,
+  isEntangled = false
 }: WarpVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef<{x: number, y: number}[]>([]);
   const dimensionsRef = useRef({ width: 0, height: 0 });
-  const propsRef = useRef({ coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving });
+  const propsRef = useRef({ coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled });
 
   // Local state for interactive quantum gate parity calibration
   const [calibrating, setCalibrating] = useState(false);
@@ -54,8 +58,56 @@ export default function WarpVisualizer({
   const [calibrationLog, setCalibrationLog] = useState<string>("QUBIT_GATES: Standing by for parity alignment...");
 
   useEffect(() => {
-    propsRef.current = { coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving };
-  }, [coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving]);
+    propsRef.current = { coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled };
+  }, [coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled]);
+
+  // Dynamically drive Qubit gate states based on real physical variables when not manually calibrating!
+  useEffect(() => {
+    if (calibrating) return;
+
+    // Hadamard (H): Superposition gate driven by QEC stabilizer and carrier frequency
+    let hState = 'STANDBY';
+    if (isQecActive) {
+      hState = isEntangled ? 'SUP_LOCKED' : 'RESONATING';
+    } else if (coherence > 0.8) {
+      hState = 'COHERENT';
+    }
+
+    // Pauli-X (σ_x): Quantum bit flip state driven by carrier bias/frequency excitation
+    let xState = 'IDLE';
+    if (frequency > 40000) {
+      xState = coherence > 0.9 ? 'OPTIMIZED' : 'ACTIVE_FLIP';
+    } else if (bias > 120) {
+      xState = 'EXCITED';
+    }
+
+    // CNOT (CX): Coupled entanglement phase gate
+    let cxState = 'DISENGAGED';
+    if (isEntangled) {
+      cxState = 'ENTANGLED';
+    } else if (coherence > 0.65) {
+      cxState = 'COUPLED';
+    }
+
+    setGateStates({
+      hadamard: hState,
+      pauliX: xState,
+      cnot: cxState
+    });
+
+    // Provide detailed physical logging in the viewer in real-time
+    if (isEntangled && isQecActive) {
+      setCalibrationLog("QUANTUM: Full Hadamard-CNOT superposition entangled via active QEC.");
+    } else if (isEntangled) {
+      setCalibrationLog("QUANTUM: Dual-node phase entanglement holding. Awaiting error correction.");
+    } else if (isQecActive) {
+      setCalibrationLog("STABILIZER: Error correction active. Parity tracking enabled.");
+    } else if (frequency > 40000) {
+      setCalibrationLog(`RESONANCE: Elevated excitation at ${(frequency / 1000).toFixed(2)} GHz. Qubit gates primed.`);
+    } else {
+      setCalibrationLog("STANDBY: Universal state space idling. Adjust knobs/parameters to modulate.");
+    }
+  }, [coherence, frequency, bias, isQecActive, isEntangled, calibrating]);
 
   useEffect(() => {
     // Generate star/node structure for backdrops
@@ -440,10 +492,10 @@ export default function WarpVisualizer({
           <div className="space-y-2 text-[9px] mb-3">
             <div className="flex items-center justify-between">
               <span className="text-zinc-500">HADAMARD (H):</span>
-              <span className={`px-1 rounded text-[8px] ${
-                gateStates.hadamard.includes('LOCK') ? 'bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30' :
-                gateStates.hadamard === 'RESONATING' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                'bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold'
+              <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                gateStates.hadamard.includes('LOCK') || gateStates.hadamard === 'RESONATING' ? 'bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30 shadow-[0_0_10px_rgba(0,255,204,0.1)]' :
+                gateStates.hadamard === 'COHERENT' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
               }`}>
                 {gateStates.hadamard}
               </span>
@@ -451,10 +503,10 @@ export default function WarpVisualizer({
 
             <div className="flex items-center justify-between">
               <span className="text-zinc-500">PAULI_X (σ_x):</span>
-              <span className={`px-1 rounded text-[8px] ${
-                gateStates.pauliX === 'ACTIVE' ? 'bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30' :
-                gateStates.pauliX === 'ALIGNING' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                'bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold'
+              <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                gateStates.pauliX.includes('OPTIMIZED') || gateStates.pauliX === 'ACTIVE' ? 'bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30 shadow-[0_0_10px_rgba(0,255,204,0.1)]' :
+                gateStates.pauliX.includes('ACTIVE') || gateStates.pauliX === 'EXCITED' || gateStates.pauliX === 'ALIGNING' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
               }`}>
                 {gateStates.pauliX}
               </span>
@@ -462,10 +514,10 @@ export default function WarpVisualizer({
 
             <div className="flex items-center justify-between">
               <span className="text-zinc-500">CNOT GATE (CX):</span>
-              <span className={`px-1 rounded text-[8px] ${
-                gateStates.cnot === 'ENTANGLED' ? 'bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30' :
-                gateStates.cnot === 'COUPLING' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                'bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold'
+              <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                gateStates.cnot.includes('ENTANGLED') ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.15)]' :
+                gateStates.cnot.includes('COUPLED') || gateStates.cnot === 'COUPLING' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
               }`}>
                 {gateStates.cnot}
               </span>
