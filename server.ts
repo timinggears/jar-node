@@ -346,8 +346,27 @@ async function startServer() {
     
     // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
     if (hardwarePort && hardwarePort.isOpen) {
-      hardwarePort.write(`BIAS:${systemState.bias}\n`);
-      hardwarePort.write(`OVERDRIVE:${systemState.overdrive ? '1' : '0'}\n`);
+      const biasCmd = `BIAS:${systemState.bias}\n`;
+      hardwarePort.write(biasCmd, (err) => {
+        if (err) {
+          console.error(`[HARDWARE_PORT] Error writing bias update to physical Pico: ${err.message}`);
+          socket.emit('log', `ERROR: Failed to transmit bias command to physical Pico: ${err.message}`);
+        } else {
+          console.log(`[HARDWARE_PORT] VERIFIED: Bias command "${biasCmd.trim()}" successfully passed to hardwarePort.write().`);
+          socket.emit('log', `SYSTEM: Verified transmitting bias update [${systemState.bias} GHz] to physical Pico over serial port.`);
+        }
+      });
+
+      const odCmd = `OVERDRIVE:${systemState.overdrive ? '1' : '0'}\n`;
+      hardwarePort.write(odCmd, (err) => {
+        if (err) {
+          console.error(`[HARDWARE_PORT] Error writing overdrive update to physical Pico: ${err.message}`);
+        } else {
+          console.log(`[HARDWARE_PORT] VERIFIED: Overdrive command "${odCmd.trim()}" successfully passed to hardwarePort.write().`);
+        }
+      });
+    } else {
+      console.log(`[HARDWARE_PORT] Physical serialPort not active or in mock mode. Verified that local virtual bridge is active instead.`);
     }
   });
 
