@@ -200,6 +200,9 @@ async function startServer() {
       io.emit('hardware:state', systemState);
     }
     
+    // Broadcast parameters to other clients, which notifies local_bridge.py / physical bridge
+    io.emit('hardware:params', params);
+    
     socket.emit('log', `SYSTEM: Nodal frequencies realigned to ${systemState.bias} GHz target.`);
     
     // --- BRIDGE TO PHYSICAL HARDWARE (v147) ---
@@ -210,6 +213,9 @@ async function startServer() {
   });
 
     socket.on('hardware:command', (cmd: string) => {
+      // Broadcast command to local_bridge.py / physical bridge
+      io.emit('hardware:command', cmd);
+      
       if (hardwarePort && hardwarePort.isOpen) {
         console.log(`[HARDWARE] Sending: ${cmd}`);
         hardwarePort.write(cmd + '\n');
@@ -237,6 +243,9 @@ async function startServer() {
         systemState.overdrive = entry.overdrive;
         saveState();
         io.emit('hardware:state', systemState);
+        
+        // Broadcast parameters to local_bridge.py / physical bridge
+        io.emit('hardware:params', { bias: entry.bias, overdrive: entry.overdrive });
         
         if (hardwarePort && hardwarePort.isOpen) {
           hardwarePort.write(`BIAS:${systemState.bias}\n`);
