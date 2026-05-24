@@ -1364,6 +1364,7 @@ export default function App() {
                   isSolving={isSolving}
                   isQecActive={isQecActive}
                   isEntangled={isEntangled}
+                  parity={stats.parity}
                 />
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <p className="text-[8px] text-white/20 font-black tracking-[1em] uppercase">Phase_Projection</p>

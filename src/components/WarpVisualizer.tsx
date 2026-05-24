@@ -20,6 +20,7 @@ interface WarpVisualizerProps {
   isSolving?: boolean;
   isQecActive?: boolean;
   isEntangled?: boolean;
+  parity?: number;
 }
 
 interface Point3D {
@@ -40,13 +41,14 @@ export default function WarpVisualizer({
   isAiActive = false,
   isSolving = false,
   isQecActive = false,
-  isEntangled = false
+  isEntangled = false,
+  parity = 0
 }: WarpVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef<{x: number, y: number}[]>([]);
   const dimensionsRef = useRef({ width: 0, height: 0 });
-  const propsRef = useRef({ coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled });
+  const propsRef = useRef({ coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled, parity });
 
   // Local state for interactive quantum gate parity calibration
   const [calibrating, setCalibrating] = useState(false);
@@ -58,8 +60,8 @@ export default function WarpVisualizer({
   const [calibrationLog, setCalibrationLog] = useState<string>("QUBIT_GATES: Standing by for parity alignment...");
 
   useEffect(() => {
-    propsRef.current = { coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled };
-  }, [coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled]);
+    propsRef.current = { coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled, parity };
+  }, [coherence, jitter, frequency, bias, vNodal, intelligence, isInstalling, installProgress, isAiActive, isSolving, isQecActive, isEntangled, parity]);
 
   // Dynamically drive Qubit gate states based on real physical variables when not manually calibrating!
   useEffect(() => {
@@ -73,12 +75,22 @@ export default function WarpVisualizer({
       hState = 'COHERENT';
     }
 
-    // Pauli-X (σ_x): Quantum bit flip state driven by carrier bias/frequency excitation
-    let xState = 'IDLE';
-    if (frequency > 40000) {
-      xState = coherence > 0.9 ? 'OPTIMIZED' : 'ACTIVE_FLIP';
-    } else if (bias > 120) {
-      xState = 'EXCITED';
+    // Pauli-X (σ_x): Quantum bit flip state driven by real-time hardware parity stream & excitation parameters
+    let xState = 'SPIN_UP';
+    if (parity === 1) {
+      if (frequency > 40000) {
+        xState = coherence > 0.9 ? 'OPTIMIZED_FLIP' : 'ACTIVE_FLIP';
+      } else {
+        xState = 'SPIN_DOWN';
+      }
+    } else {
+      if (frequency > 40000 && coherence > 0.95) {
+        xState = 'ALIGN_LOCKED';
+      } else if (bias > 120) {
+        xState = 'EXCITED_UP';
+      } else {
+        xState = 'SPIN_UP';
+      }
     }
 
     // CNOT (CX): Coupled entanglement phase gate
@@ -107,7 +119,7 @@ export default function WarpVisualizer({
     } else {
       setCalibrationLog("STANDBY: Universal state space idling. Adjust knobs/parameters to modulate.");
     }
-  }, [coherence, frequency, bias, isQecActive, isEntangled, calibrating]);
+  }, [coherence, frequency, bias, isQecActive, isEntangled, parity, calibrating]);
 
   useEffect(() => {
     // Generate star/node structure for backdrops
