@@ -54,6 +54,7 @@ export default function PhysicalAsciiReservoir({
   const terminalRef = useRef<HTMLDivElement>(null);
   const sandboxTerminalRef = useRef<HTMLDivElement>(null);
   const packetCountRef = useRef(0);
+  const logIdCounterRef = useRef(0);
   const prevVoltageRef = useRef(voltage);
 
   // Auto-scroll logic for logging streams
@@ -98,10 +99,15 @@ export default function PhysicalAsciiReservoir({
     });
 
     const logMsg = `PHYSICAL → ASCII: "${character}" (code ${asciiVal}) | V: ${voltage.toFixed(4)}V | Stability: ${stability.toFixed(3)}`;
-    setLogEntries(prev => [...prev.slice(-30), { id: `log_${Date.now()}_${Math.random()}`, text: logMsg, type: 'physical' }]);
+    const uniqueLogId = `log_${Date.now()}_raw_${logIdCounterRef.current++}_${Math.random().toString(36).substring(2, 9)}`;
+    setLogEntries(prev => [...prev.slice(-30), { id: uniqueLogId, text: logMsg, type: 'physical' }]);
 
     if (coherence > 0.68 && Math.random() < coherence * 0.6) {
       setTimeout(() => {
+        let combChar = '';
+        let combineMsg = '';
+        let hasCombined = false;
+
         setMemoryBank(prev => {
           const keys = Object.keys(prev);
           if (keys.length >= 2) {
@@ -109,13 +115,13 @@ export default function PhysicalAsciiReservoir({
             const p2 = prev[keys[keys.length - 2]];
 
             const combAscii = ((p1.ascii + p2.ascii) % 58) + 65;
-            const combChar = String.fromCharCode(combAscii);
+            const combCharLocal = String.fromCharCode(combAscii);
             const combId = `comb_${packetCountRef.current++}`;
 
             const combinedPacket: AsciiPacket = {
               id: combId,
               ascii: combAscii,
-              char: combChar,
+              char: combCharLocal,
               stability: (p1.stability + p2.stability) * 0.7,
               timestamp: Date.now(),
               type: 'combined'
@@ -127,22 +133,28 @@ export default function PhysicalAsciiReservoir({
               delete afterComb[combKeys[0]];
             }
 
-            const combineMsg = `COMBINED → RESONANCE CHARACTER: "${combChar}" | Combined Stability: ${combinedPacket.stability.toFixed(3)} (Coherence: ${coherence.toFixed(3)})`;
-            
-            setLogEntries(prevLogs => [...prevLogs.slice(-30), { 
-              id: `log_${Date.now()}_comb`, 
-              text: combineMsg, 
-              type: 'combined' 
-            }]);
-
-            if (onAddLog) {
-              onAddLog(`[ASCII_COMBINATION]: Spatially combined ASCII "${combChar}" from chaotic attractors`, 'success');
-            }
+            combChar = combCharLocal;
+            combineMsg = `COMBINED → RESONANCE CHARACTER: "${combCharLocal}" | Combined Stability: ${combinedPacket.stability.toFixed(3)} (Coherence: ${coherence.toFixed(3)})`;
+            hasCombined = true;
 
             return afterComb;
           }
           return prev;
         });
+
+        // Execute side effects safely outside of the state updater
+        if (hasCombined) {
+          const uniqueCombId = `log_${Date.now()}_comb_${logIdCounterRef.current++}_${Math.random().toString(36).substring(2, 9)}`;
+          setLogEntries(prevLogs => [...prevLogs.slice(-30), { 
+            id: uniqueCombId, 
+            text: combineMsg, 
+            type: 'combined' 
+          }]);
+
+          if (onAddLog) {
+            onAddLog(`[ASCII_COMBINATION]: Spatially combined ASCII "${combChar}" from chaotic attractors`, 'success');
+          }
+        }
       }, 50);
     }
   }, [voltage, coherence, onAddLog]);
@@ -246,7 +258,8 @@ export default function PhysicalAsciiReservoir({
 
   const clearBank = () => {
     setMemoryBank({});
-    setLogEntries(prev => [...prev, { id: `log_${Date.now()}_clear`, text: '--- MEMORY BANK PURGED ---', type: 'physical' }]);
+    const uniqueClearId = `log_${Date.now()}_clear_${logIdCounterRef.current++}_${Math.random().toString(36).substring(2, 9)}`;
+    setLogEntries(prev => [...prev, { id: uniqueClearId, text: '--- MEMORY BANK PURGED ---', type: 'physical' }]);
   };
 
   return (
