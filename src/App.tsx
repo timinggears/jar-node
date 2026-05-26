@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -1457,6 +1457,18 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4">
+           {/* Open Independent Window Option */}
+           <a 
+             href={window.location.origin} 
+             target="_blank" 
+             rel="noopener noreferrer"
+             className="flex items-center gap-1 bg-[#00ffcc]/10 hover:bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30 hover:border-[#00ffcc]/60 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold animate-pulse"
+             title="Open application in its own browser window outside of the AI Studio frame"
+           >
+             <ExternalLink size={9} />
+             <span>OPEN_IN_NEW_WINDOW</span>
+           </a>
+
            <div className="flex items-center gap-2">
              <span className="text-zinc-500">RES_FREQ:</span>
              <span className="text-[#00ffcc] font-mono">{(stats.frequency / 1000).toFixed(4)} GHz</span>
