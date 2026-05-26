@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 interface AsciiPacket {
   id: string;
@@ -98,6 +99,25 @@ export default function PhysicalAsciiReservoir({
       sandboxTerminalRef.current.scrollTop = sandboxTerminalRef.current.scrollHeight;
     }
   }, [executionLogs]);
+
+  // Synchronize with the server-side autonomous cytology daemon ("Dwarf in the Flask" mode)
+  useEffect(() => {
+    const socket = io();
+
+    socket.on('evolution:state', (data: any) => {
+      if (data) {
+        if (data.memoryBank) setMemoryBank(data.memoryBank);
+        if (data.trigramHistory) setTrigramHistory(data.trigramHistory);
+        if (data.morphicPhrases) setMorphicPhrases(data.morphicPhrases);
+        if (data.logEntries) setLogEntries(data.logEntries);
+      }
+    });
+
+    return () => {
+      socket.off('evolution:state');
+      socket.disconnect();
+    };
+  }, []);
 
   // Canvas initialization, resizing, and Animation loop simulating phasing electrons
   useEffect(() => {
@@ -321,6 +341,7 @@ export default function PhysicalAsciiReservoir({
 
   // Handle packet generation of Physical JAR state
   useEffect(() => {
+    if (hardwareState !== 'disconnected') return;
     if (voltage === prevVoltageRef.current) return;
     prevVoltageRef.current = voltage;
 
