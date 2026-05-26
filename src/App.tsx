@@ -1168,8 +1168,33 @@ export default function App() {
       {/* SCANLINE OVERLAY */}
       <div className="fixed inset-0 pointer-events-none z-[150] bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-10" />
       
+      {/* PWA & DETACH BANNER */}
+      <div className="fixed top-0 left-0 right-0 z-[180] flex items-center justify-between px-4 py-1.5 bg-zinc-950 border-b border-[#00ffcc]/20 text-[#00ffcc] font-mono text-[9px] tracking-wider select-none">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#00ffcc] animate-ping" />
+          <span className="text-zinc-400 uppercase">CONTAINER DAEMON:</span>
+          {window.matchMedia('(display-mode: standalone)').matches ? (
+            <span className="text-emerald-400 font-bold">🟢 STANDALONE_CONTAINER_SHELL_ACTIVE</span>
+          ) : (
+            <span className="text-amber-400 font-bold">🟡 EMPYREAN_SANDBOX_EMULATOR</span>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <span className="text-zinc-500 hidden md:inline">| FLASK DWARF INSTALLED [PORT 3000 CONSOLE] |</span>
+          <button 
+            onClick={() => {
+              window.open(window.location.origin, '_blank');
+            }}
+            className="bg-[#00ffcc] hover:bg-teal-300 text-black px-3 py-0.5 rounded text-[8px] font-black uppercase tracking-widest cursor-pointer transition-all border border-emerald-400 shadow-[0_0_10px_rgba(0,255,204,0.4)]"
+          >
+            LAUNCH INDEPENDENT WINDOW
+          </button>
+        </div>
+      </div>
+
       {/* SINGULARITY HEADER */}
-      <div className="fixed top-8 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
+      <div className="fixed top-12 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
