@@ -1427,6 +1427,8 @@ export default function App() {
                 jitter={stats.jitter}
                 hardwareState={hardwareState}
                 onAddLog={addLog}
+                bias={carrierBias}
+                onTuneBias={handleCarrierBiasChange}
               />
             </DesktopWindow>
           )}

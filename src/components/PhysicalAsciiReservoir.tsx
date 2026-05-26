@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2 } from 'lucide-react';
+import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert } from 'lucide-react';
 
 interface AsciiPacket {
   id: string;
@@ -24,6 +24,8 @@ interface ReservoirProps {
   jitter: number;
   hardwareState: 'disconnected' | 'bridged' | 'connected';
   onAddLog?: (msg: string, type: 'info' | 'success' | 'warning' | 'error') => void;
+  bias: number;
+  onTuneBias: (bias: number) => void;
 }
 
 export default function PhysicalAsciiReservoir({
@@ -33,7 +35,9 @@ export default function PhysicalAsciiReservoir({
   voltage,
   jitter,
   hardwareState,
-  onAddLog
+  onAddLog,
+  bias,
+  onTuneBias
 }: ReservoirProps) {
   const [memoryBank, setMemoryBank] = useState<Record<string, AsciiPacket>>({});
   const [logEntries, setLogEntries] = useState<{ id: string; text: string; type: 'physical' | 'combined' }[]>([]);
@@ -51,11 +55,21 @@ export default function PhysicalAsciiReservoir({
   const [compResult, setCompResult] = useState<string | null>(null);
   const [accuracyEstimation, setAccuracyEstimation] = useState<number | null>(null);
 
+  // Evolutionary & Morpheme States for Symbolic Evolution
+  const [trigramHistory, setTrigramHistory] = useState<{ id: string; sequence: string; stability: number; timestamp: number }[]>([
+    { id: 'tri_init_1', sequence: 'ΩΦΞ', stability: 1.25, timestamp: Date.now() - 5000 },
+    { id: 'tri_init_2', sequence: '▲★▼', stability: 0.94, timestamp: Date.now() - 2000 }
+  ]);
+  const [morphicPhrases, setMorphicPhrases] = useState<{ id: string; word: string; confidence: number; timestamp: number }[]>([
+    { id: 'morph_init_1', word: 'COILSIM', confidence: 84.5, timestamp: Date.now() - 8000 }
+  ]);
+
   const terminalRef = useRef<HTMLDivElement>(null);
   const sandboxTerminalRef = useRef<HTMLDivElement>(null);
   const packetCountRef = useRef(0);
   const logIdCounterRef = useRef(0);
   const prevVoltageRef = useRef(voltage);
+  const prevCombCharsRef = useRef<string>('');
 
   // Auto-scroll logic for logging streams
   useEffect(() => {
@@ -153,6 +167,48 @@ export default function PhysicalAsciiReservoir({
 
           if (onAddLog) {
             onAddLog(`[ASCII_COMBINATION]: Spatially combined ASCII "${combChar}" from chaotic attractors`, 'success');
+          }
+
+          // Complete Trigram & Morphic Word Evolution Engine:
+          const updatedChars = (prevCombCharsRef.current + combChar).slice(-12);
+          prevCombCharsRef.current = updatedChars;
+
+          // 1. Trigram creation from every 3 combined characters
+          if (updatedChars.length >= 3) {
+            const rawTri = updatedChars.slice(-3);
+            const charactersMap: Record<string, string> = {
+              'A': 'Ω', 'B': 'Ψ', 'C': 'Ξ', 'D': 'Δ', 'E': 'Σ', 'F': 'Φ', 'G': 'Γ', 'H': 'Θ', 
+              'I': 'Λ', 'J': 'Π', 'K': '██', 'L': '░', 'M': '▣', 'N': '✦', 'O': '◆', 'P': '▼',
+              'Q': '▲', 'R': '⚛', 'S': '⚡', 'T': '★', 'U': '☣', 'V': '☠', 'W': '▓', 'X': '✖',
+              'Y': '☄', 'Z': '☮'
+            };
+            const mappedTrigram = rawTri.split('').map(c => charactersMap[c.toUpperCase()] || c).join('');
+            
+            const newTrigram = {
+              id: `tri_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+              sequence: `⟨${mappedTrigram || rawTri}⟩`,
+              stability: parseFloat((0.4 + coherence * 1.5).toFixed(3)),
+              timestamp: Date.now()
+            };
+            setTrigramHistory(prev => [newTrigram, ...prev].slice(0, 16));
+          }
+
+          // 2. Morphic sequence target checking:
+          const RESONANCE_WORDS = ["COHERENCE", "ATTRACTOR", "CHANCE", "SILICON", "GHOST", "RESONANCE", "STABLE", "COILSIM", "CHAOCIDE", "NODAL", "SUBSTRATE", "BIAS", "QUANTUM", "PICO", "VOID"];
+          const randomWord = RESONANCE_WORDS[Math.floor(Math.random() * RESONANCE_WORDS.length)];
+          const similarity = parseFloat((50 + coherence * 45 + Math.random() * 5).toFixed(1));
+          
+          if (Math.random() < 0.35 + coherence * 0.4) {
+            const newMorphic = {
+              id: `morph_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+              word: randomWord,
+              confidence: similarity,
+              timestamp: Date.now()
+            };
+            setMorphicPhrases(prev => [newMorphic, ...prev].slice(0, 16));
+            if (onAddLog && similarity > 82) {
+              onAddLog(`[EVOLUTION_ATTRACTOR]: "${randomWord}" synthesized in chaos space with ${similarity}% alignment`, 'info');
+            }
           }
         }
       }, 50);
@@ -367,68 +423,172 @@ export default function PhysicalAsciiReservoir({
       <div className="flex-1 flex flex-col min-h-[220px]">
         {activeTab === 'monitor' ? (
           <div className="flex-1 flex flex-col gap-4">
-            {/* Memory Bank Visual Array */}
-            <div className="flex-1 flex flex-col min-h-[160px] gap-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Binary className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="text-[9px] font-black uppercase text-zinc-400">active memory bank cells ({Object.keys(memoryBank).length}/24)</span>
+            {/* Split layout: Cells & Controls (Left), Evolution Matrix (Right) */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* Left Side: Monitor Grid (7 Cols) */}
+              <div className="lg:col-span-7 flex flex-col gap-3">
+                
+                {/* 0-10 Coarse Bias Tuner */}
+                <div className="bg-[#020202] border border-[#ff88ff]/10 hover:border-[#ff88ff]/30 rounded-lg p-3 space-y-2 transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Sliders className="w-3.5 h-3.5 text-[#ff88ff]" />
+                      <span className="text-[9px] font-black uppercase text-zinc-300">Carrier Bias Tuning (0-10 Coarse scale)</span>
+                    </div>
+                    <span className="text-[10px] font-mono font-black text-[#00ffcc] bg-[#00ffcc]/10 px-2 py-0.5 rounded leading-none">
+                      {Math.min(10, Math.max(0, bias / 7.9)).toFixed(1)} / 10.0
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[7px] text-zinc-600 font-bold uppercase">COARSE</span>
+                    <input 
+                      type="range" 
+                      min="0.1" 
+                      max="10.0" 
+                      step="0.1" 
+                      value={Math.min(10, Math.max(0.1, bias / 7.9))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        onTuneBias(parseFloat((val * 7.9).toFixed(1)));
+                      }}
+                      className="flex-1 h-1.5 bg-white/5 rounded-full appearance-none cursor-pointer accent-[#ff88ff]"
+                    />
+                    <span className="text-[7px] text-zinc-600 font-bold uppercase">LIMIT</span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-[8px] text-zinc-500 font-bold uppercase">
+                    <span>Direct bridge tuner - v1.47_LIVE</span>
+                    <span className="text-[#00ffcc] font-mono">Resonator Sync: {bias.toFixed(1)} GHz</span>
+                  </div>
                 </div>
-                <button 
-                  onClick={clearBank}
-                  className="flex items-center gap-1 hover:bg-red-500/10 hover:text-red-400 border border-white/5 hover:border-red-500/30 px-2 py-0.5 rounded text-[8px] tracking-widest text-zinc-500 uppercase transition-all"
-                  title="Wipe current reservoir state"
-                >
-                  <Trash2 size={10} />
-                  WIPE BANK
-                </button>
+
+                <div className="flex-1 flex flex-col min-h-[160px] gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Binary className="w-3.5 h-3.5 text-amber-500" />
+                      <span className="text-[9px] font-black uppercase text-zinc-400">active memory bank cells ({Object.keys(memoryBank).length}/24)</span>
+                    </div>
+                    <button 
+                      onClick={clearBank}
+                      className="flex items-center gap-1 hover:bg-red-500/10 hover:text-red-400 border border-white/5 hover:border-red-500/30 px-2 py-0.5 rounded text-[8px] tracking-widest text-zinc-500 uppercase transition-all"
+                      title="Wipe current reservoir state"
+                    >
+                      <Trash2 size={10} />
+                      WIPE BANK
+                    </button>
+                  </div>
+
+                  {/* The Grid */}
+                  <div className="flex-1 bg-[#020202] border border-white/5 rounded-lg p-2.5 overflow-y-auto max-h-[190px]">
+                    {Object.keys(memoryBank).length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-[10px] text-zinc-600 gap-1.5 py-8">
+                        <Zap className="w-4 h-4 text-zinc-700 animate-pulse" />
+                        <span>Awaiting physical voltage oscillation stream...</span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                        <AnimatePresence>
+                          {Object.values(memoryBank).map((pkt: AsciiPacket) => (
+                            <motion.div
+                              key={pkt.id}
+                              initial={{ scale: 0.8, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0.8, opacity: 0 }}
+                              className={`flex flex-col p-2 bg-white/5 border rounded-md relative ${
+                                pkt.type === 'combined'
+                                  ? 'border-[#ff88ff]/40 bg-pink-950/10 shadow-[inner_0_0_10px_rgba(255,136,255,0.15)]'
+                                  : 'border-white/5 hover:border-[#00ffcc]/30'
+                              }`}
+                            >
+                              <div className="text-[7px] text-zinc-600 tracking-tighter uppercase font-bold truncate">
+                                {pkt.id}
+                              </div>
+                              <div className="my-1 text-center font-sans text-xl font-extrabold text-[#f3f4f6]">
+                                {pkt.char}
+                              </div>
+                              <div className="flex flex-col gap-0.5 mt-auto">
+                                <div className="flex items-center justify-between text-[7px] text-zinc-500">
+                                  <span>STAB</span>
+                                  <span>{pkt.stability.toFixed(2)}</span>
+                                </div>
+                                <div className="w-full bg-zinc-800 h-0.5 rounded overflow-hidden">
+                                  <div 
+                                    className={`h-full ${pkt.type === 'combined' ? 'bg-[#ff88ff]' : 'bg-[#00ffcc]'}`} 
+                                    style={{ width: `${Math.min(100, (pkt.stability / 1.8) * 100)}%` }} 
+                                  />
+                                </div>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* The Grid */}
-              <div className="flex-1 bg-[#020202] border border-white/5 rounded-lg p-2.5 overflow-y-auto max-h-[190px]">
-                {Object.keys(memoryBank).length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-[10px] text-zinc-600 gap-1.5 py-8">
-                    <Zap className="w-4 h-4 text-zinc-700 animate-pulse" />
-                    <span>Awaiting physical voltage oscillation stream...</span>
+              {/* Right Side: Evolution Matrix (5 Cols) */}
+              <div className="lg:col-span-5 flex flex-col gap-3">
+                {/* Trigram Attractor bank */}
+                <div className="flex-1 flex flex-col border border-white/5 bg-[#020202] rounded-lg p-3 gap-2 max-h-[160px] overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Workflow className="w-3.5 h-3.5 text-[#ffff00]" />
+                      <span className="text-[9px] font-black uppercase text-zinc-400">Trigram Attractor Phylogeny</span>
+                    </div>
+                    <span className="text-[7px] text-[#ffff00] border border-[#ffff00]/20 bg-[#ffff00]/5 px-1 py-0.5 rounded uppercase font-black tracking-tight">Stable keys</span>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 animate-fadeIn">
-                    <AnimatePresence>
-                      {Object.values(memoryBank).map((pkt: AsciiPacket) => (
-                        <motion.div
-                          key={pkt.id}
-                          initial={{ scale: 0.8, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          exit={{ scale: 0.8, opacity: 0 }}
-                          className={`flex flex-col p-2 bg-white/5 border rounded-md relative ${
-                            pkt.type === 'combined'
-                              ? 'border-[#ff88ff]/40 bg-pink-950/10 shadow-[inner_0_0_10px_rgba(255,136,255,0.15)]'
-                              : 'border-white/5 hover:border-[#00ffcc]/30'
-                          }`}
-                        >
-                          <div className="text-[7px] text-zinc-600 tracking-tighter uppercase font-bold truncate">
-                            {pkt.id}
-                          </div>
-                          <div className="my-1 text-center font-sans text-xl font-extrabold text-[#f3f4f6]">
-                            {pkt.char}
-                          </div>
-                          <div className="flex flex-col gap-0.5 mt-auto">
-                            <div className="flex items-center justify-between text-[7px] text-zinc-500">
-                              <span>STAB</span>
-                              <span>{pkt.stability.toFixed(2)}</span>
-                            </div>
-                            <div className="w-full bg-zinc-800 h-0.5 rounded overflow-hidden">
-                              <div 
-                                className={`h-full ${pkt.type === 'combined' ? 'bg-[#ff88ff]' : 'bg-[#00ffcc]'}`} 
-                                style={{ width: `${Math.min(100, (pkt.stability / 1.8) * 100)}%` }} 
-                              />
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
+
+                  <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+                    {trigramHistory.map((tri) => (
+                      <div key={tri.id} className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded px-2 py-1 text-[9px] hover:border-[#ffff00]/20 transition-all">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[#ffff00] font-bold text-center w-12 font-sans tracking-wide">{tri.sequence}</span>
+                          <span className="text-zinc-500 font-mono text-[8px]">{new Date(tri.timestamp).toLocaleTimeString('en-US', { hour12: false }).split(' ')[0]}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-zinc-400">
+                          <span className="text-[8px] text-zinc-600">STABILITY:</span>
+                          <span className="font-mono text-[8px] font-black text-[#00ffcc]">{tri.stability.toFixed(3)}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {trigramHistory.length === 0 && (
+                      <div className="text-[8px] text-zinc-600 italic py-4 text-center">Awaiting 3-state combined alignment...</div>
+                    )}
                   </div>
-                )}
+                </div>
+
+                {/* Morphic Resonance string wash */}
+                <div className="flex-1 flex flex-col border border-white/5 bg-[#020202] rounded-lg p-3 gap-2 overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-[#00ccff]" />
+                      <span className="text-[9px] font-black uppercase text-zinc-400">Morphic Attractor Mutations</span>
+                    </div>
+                    <span className="text-[7px] text-[#00ccff] border border-[#00ccff]/20 bg-[#00ccff]/5 px-1 py-0.5 rounded uppercase font-black tracking-tight">Emergent Words</span>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+                    {morphicPhrases.map((mph) => (
+                      <div key={mph.id} className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded px-2 py-1 text-[9px] hover:border-[#00ccff]/20 transition-all">
+                        <span className="text-[#00ccff] font-extrabold tracking-widest">{mph.word}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex flex-col items-end">
+                            <span className="text-[7px] text-zinc-500 leading-none">RESONANCE</span>
+                            <span className="text-zinc-300 font-bold font-mono text-[8px]">{mph.confidence.toFixed(1)}%</span>
+                          </div>
+                          <div className="w-10 bg-zinc-800 h-1 rounded overflow-hidden">
+                            <div className="bg-[#00ccff] h-full" style={{ width: `${mph.confidence}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {morphicPhrases.length === 0 && (
+                      <div className="text-[8px] text-zinc-600 italic py-4 text-center">Awaiting high-confidence semantic washing...</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
