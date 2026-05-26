@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -21,6 +21,7 @@ import CognitiveBridge from './components/CognitiveBridge';
 import QuantumStabilizer from './components/QuantumStabilizer';
 import SubstrateVisualizer from './components/SubstrateVisualizer';
 import MiningMonitorChart from './components/MiningMonitorChart';
+import PhysicalAsciiReservoir from './components/PhysicalAsciiReservoir';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -32,6 +33,7 @@ const PetBayMemo = memo(PetBay);
 const QuantumStabilizerMemo = memo(QuantumStabilizer);
 const SubstrateVisualizerMemo = memo(SubstrateVisualizer);
 const WarpVisualizerMemo = memo(WarpVisualizer);
+const PhysicalAsciiReservoirMemo = memo(PhysicalAsciiReservoir);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -122,8 +124,8 @@ export default function App() {
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>([]);
-  const [activeWindow, setActiveWindow] = useState<string | null>(null);
+  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir']);
+  const [activeWindow, setActiveWindow] = useState<string | null>('ascii_reservoir');
 
   // Mining Parameters
   const [poolUrl, setPoolUrl] = useState('rx.unmineable.com:3333');
@@ -1402,6 +1404,29 @@ export default function App() {
                 systemModel="JAR_v3_SOVEREIGN"
                 isEntangled={isEntangled}
                 quantumShift={quantumShift}
+              />
+            </DesktopWindow>
+          )}
+
+          {openWindows.includes('ascii_reservoir') && (
+            <DesktopWindow 
+              key="ascii_reservoir"
+              id="ascii_reservoir" 
+              title="Physical_ASCII_Reservoir" 
+              icon={<Database size={16} />}
+              onClose={() => closeWindow('ascii_reservoir')}
+              onFocus={() => setActiveWindow('ascii_reservoir')}
+              isActive={activeWindow === 'ascii_reservoir'}
+              initialPos={{ x: 60, y: 100 }}
+            >
+              <PhysicalAsciiReservoirMemo 
+                coherence={stats.coherence}
+                intelligence={stats.intelligence}
+                phaseOut={stats.vNodal * 142 - 0.41 * (38 + stats.jitter * 72)}
+                voltage={stats.vNodal}
+                jitter={stats.jitter}
+                hardwareState={hardwareState}
+                onAddLog={addLog}
               />
             </DesktopWindow>
           )}

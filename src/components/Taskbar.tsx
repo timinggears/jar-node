@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -90,6 +90,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('stats')} 
         isActive={activeWindow === 'stats'}
         onClick={() => onToggleWindow('stats')}
+      />
+      <AppIcon 
+        id="ascii_reservoir"
+        icon={<Database size={20} />} 
+        label="ASCII Reservoir" 
+        isOpen={openWindows.includes('ascii_reservoir')} 
+        isActive={activeWindow === 'ascii_reservoir'}
+        onClick={() => onToggleWindow('ascii_reservoir')}
       />
       <AppIcon 
         id="visualizer"
