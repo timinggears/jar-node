@@ -283,6 +283,32 @@ async function startServer() {
     cors: { origin: "*" }
   });
 
+  let pendingTelemetryToEmit: string | null = null;
+  let lastTelemetryEmitTime = 0;
+  const MIN_SEND_INTERVAL = 150; // Emit at most every 150ms
+
+  function queueTelemetryEmission(line: string) {
+    pendingTelemetryToEmit = line;
+    const now = Date.now();
+    const timeSinceLast = now - lastTelemetryEmitTime;
+    if (timeSinceLast >= MIN_SEND_INTERVAL) {
+      emitPendingTelemetry();
+    }
+  }
+
+  function emitPendingTelemetry() {
+    if (pendingTelemetryToEmit) {
+      io.to('telemetry').emit('telemetry', pendingTelemetryToEmit);
+      pendingTelemetryToEmit = null;
+      lastTelemetryEmitTime = Date.now();
+    }
+  }
+
+  // Fallback periodic flush
+  const telemetryEmitInterval = setInterval(() => {
+    emitPendingTelemetry();
+  }, MIN_SEND_INTERVAL);
+
   function normalizeTelemetryLine(line: string): string {
     if (!line || !line.startsWith('!S|')) return line;
     const parts = line.split('|');
@@ -345,6 +371,7 @@ async function startServer() {
 
   // Track if we have a real hardware connection to decide whether to simulate
   let hardwareActive = false;
+  let lastHardwareTelemetryTime = 0;
 
   // --- SUBSCRIPTION LOGIC ---
   io.on('connection', (socket) => {
@@ -539,9 +566,10 @@ async function startServer() {
     });
 
     socket.on('hardware:telemetry_input', (line: string) => {
+      lastHardwareTelemetryTime = Date.now();
       if (line && line.startsWith('!S|')) {
         const normalized = normalizeTelemetryLine(line);
-        io.to('telemetry').emit('telemetry', normalized);
+        queueTelemetryEmission(normalized);
       }
     });
 
@@ -589,7 +617,7 @@ async function startServer() {
         parser.on('data', (line: string) => {
           if (line.startsWith('!S|')) {
             const normalized = normalizeTelemetryLine(line);
-            io.to('telemetry').emit('telemetry', normalized);
+            queueTelemetryEmission(normalized);
           }
         });
 
@@ -659,14 +687,14 @@ async function startServer() {
         systemState.memetic_depth += (simulatedDepth / 12000);
       }
       
-      // Auto-save memory every 30s in simulation (30 ticks * 1000ms)
+      // Auto-save memory every 30s in simulation (120 ticks * 250ms)
       saveTicks++;
-      if (saveTicks >= 30) {
+      if (saveTicks >= 120) {
         saveTicks = 0;
         saveState();
       }
       
-      io.to('telemetry').emit('telemetry', telemetryLine);
+      queueTelemetryEmission(telemetryLine);
 
       // Virtual Hashrate Simulation
       if (virtualSubstrateActive) {
@@ -699,7 +727,7 @@ async function startServer() {
     } catch (err) {
       console.error('[SERVER] Telemetry error:', err);
     }
-  }, 1000); // 1Hz telemetry update rate to prevent browser UI thread freeze and Socket.io ping timeout
+  }, 250); // Smoother simulated telemetry at 4Hz (250ms), throttled at 150ms
 
   findAndOpenPort();
 

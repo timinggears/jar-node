@@ -658,7 +658,7 @@ export default function App() {
         addLog('Hardware Bridge connected to backend.', 'success');
         lastConnectLogTimeRef.current = now;
       }
-      setHardwareState('bridged');
+      setHardwareState(prev => prev !== 'bridged' ? 'bridged' : prev);
       
       socket.send('SUBSCRIBE:telemetry');
       socket.send('SUBSCRIBE:mining_status');
@@ -761,7 +761,7 @@ export default function App() {
 
     const onTelemetry = (line: string) => {
       if (line.startsWith('!S|')) {
-        setHardwareState('connected');
+        setHardwareState(prev => prev !== 'connected' ? 'connected' : prev);
         const parts = line.split('|');
         if (parts.length >= 6) {
           const seedStr = parts[1];
@@ -786,7 +786,7 @@ export default function App() {
 
     const onMiningStatus = (payload: any) => {
       if (!isMiningRef.current) {
-        setMiningState('idle');
+        setMiningState(prev => prev !== 'idle' ? 'idle' : prev);
         return;
       }
       const { type, message, data } = typeof payload === 'string' ? { type: 'info', message: payload, data: null } : payload;
@@ -796,20 +796,20 @@ export default function App() {
           const nextCount = statsRef.current.shares + 1;
           addLog(`!!! JAR SUCCESS !!! Share #${String(nextCount).padStart(4, '0')} // ${message}`, 'success');
           setStats(prev => ({ ...prev, shares: nextCount }));
-          setMiningState('success');
+          setMiningState(prev => prev !== 'success' ? 'success' : prev);
           break;
         }
         case 'error':
           setStats(prev => ({ ...prev, errors: prev.errors + 1 }));
-          setMiningState('error');
+          setMiningState(prev => prev !== 'error' ? 'error' : prev);
           addLog(`[MINER_ERROR]: ${message}`, 'error');
           break;
         case 'telemetry':
-          if (miningState === 'idle') setMiningState('mining');
+          setMiningState(prev => prev === 'idle' ? 'mining' : prev);
           break;
         case 'info':
         default:
-          if (miningState === 'idle') setMiningState('mining');
+          setMiningState(prev => prev === 'idle' ? 'mining' : prev);
           break;
       }
     };
@@ -825,7 +825,7 @@ export default function App() {
         addLog('Hardware Bridge disconnected.', 'error');
         lastDisconnectLogTimeRef.current = now;
       }
-      setHardwareState('disconnected');
+      setHardwareState(prev => prev !== 'disconnected' ? 'disconnected' : prev);
       isFirstSyncRef.current = true;
     });
 
