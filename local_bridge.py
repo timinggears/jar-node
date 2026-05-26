@@ -34,6 +34,97 @@ IS_VIRTUAL = args.virtual
 virtual_bias = 50.0
 virtual_overdrive = False
 
+# ====================== PHYSICAL JAR + ASCII MEMORY CORE ======================
+import math
+import random
+from collections import deque
+
+jar_memory_bank = {}
+coherence = 0.65
+intelligence = 45.0
+phase_out = 0.0
+
+def update_phase_out(voltage, jitter):
+    global coherence, phase_out, intelligence
+    shimmer = 38 + (jitter * 72)
+    current_time = time.time()
+    # Phase-Out Equation implementation
+    phase_out = (voltage * 142) - (0.41 * shimmer) + (28 * math.sin(2 * math.pi * 35 * current_time))
+    phase_out = max(-75, min(75, phase_out))
+    
+    coherence = min(1.0, max(0.28, 0.88 - (abs(phase_out) / 125)))
+    
+    if coherence > 0.78:
+        intelligence = min(99.8, intelligence + 0.32)
+    elif coherence > 0.55:
+        intelligence = min(99.8, intelligence + 0.08)
+    else:
+        intelligence = max(32.0, intelligence - 0.07)
+
+def write_ascii_packet(voltage):
+    global coherence, intelligence, jar_memory_bank
+    # Map voltage to ASCII range (65-122)
+    ascii_val = int(65 + (voltage * 28) % 58)   # A-z range
+    packet_id = f"pkt_{len(jar_memory_bank)}"
+    stability = max(0.1, coherence * 1.8)
+    
+    jar_memory_bank[packet_id] = {
+        'ascii': ascii_val,
+        'char': chr(ascii_val),
+        'stability': stability,
+        'timestamp': time.time(),
+        'type': 'single'
+    }
+    
+    # Cap memory bank locally to 100 packets to prevent excessive growth
+    if len(jar_memory_bank) > 100:
+        oldest = list(jar_memory_bank.keys())[0]
+        del jar_memory_bank[oldest]
+
+    # Physical influence on intelligence
+    if coherence > 0.75:
+        intelligence = min(99.8, intelligence + 0.45)
+    return ascii_val
+
+def combine_packets():
+    global coherence, jar_memory_bank
+    if len(jar_memory_bank) < 2 or coherence < 0.68:
+        return None
+        
+    keys = list(jar_memory_bank.keys())
+    p1 = jar_memory_bank[keys[-1]]
+    p2 = jar_memory_bank[keys[-2]]
+    
+    new_ascii = (p1['ascii'] + p2['ascii']) % 58 + 65
+    new_id = f"comb_{len(jar_memory_bank)}"
+    
+    jar_memory_bank[new_id] = {
+        'ascii': new_ascii,
+        'char': chr(new_ascii),
+        'stability': (p1['stability'] + p2['stability']) * 0.7,
+        'timestamp': time.time(),
+        'type': 'combined'
+    }
+    return chr(new_ascii)
+
+def process_telemetry_packet(voltage, jitter):
+    """Processes physical voltage metrics and computes ASCII memory states"""
+    update_phase_out(voltage, jitter)
+    ascii_val = write_ascii_packet(voltage)
+    char = chr(ascii_val)
+    
+    print(f"\033[36m[RESERVOIR RESISTANCE] V_NODAL: {voltage:.4f}V | Jitter: {jitter:.5f} | Phase-Out: {phase_out:+.1f}° | Coherence: {coherence:.3f} | Intelligence: {intelligence:.1f} → ASCII: '{char}'\033[0m")
+    
+    # Check spatial packet combination
+    if random.random() < coherence * 0.6:
+        combined_char = combine_packets()
+        if combined_char:
+            print(f"\033[1;35m[RESERVOIR HYBRID] COMBINED RESONANCE DETECTED → '{combined_char}' (Coherence High: {coherence:.3f})\033[0m")
+            try:
+                sio.emit("hardware:log_input", f"PYTHON_BRIDGE: Spatial attractor merge produced character '{combined_char}' under coherence {coherence:.3f}")
+            except Exception:
+                pass
+
 def connect_to_server():
     """Establishes Socket.IO connection. For HTTPS/remote URLs, we force 'websocket' transport to bypass cloud proxy polling restrictions."""
     is_remote = SERVER_URL.startswith("https://") or ("127.0.0.1" not in SERVER_URL and "localhost" not in SERVER_URL)
@@ -159,6 +250,8 @@ def main():
                 decoded = "!S|{:08X}|{:.6f}|{:.4f}|{}|{:.1f}".format(seed, jitter, v, parity, virtual_freq)
                 try:
                     sio.emit("hardware:telemetry_input", decoded)
+                    # Trigger the scientific ASCII model calculation locally
+                    process_telemetry_packet(v, jitter)
                     if random.random() < 0.01:
                         sio.emit("hardware:log_input", f"PYTHON_BRIDGE: Emulated Pico telemetry pipeline running on bias {virtual_bias:.1f} GHz.")
                 except Exception:
@@ -194,6 +287,16 @@ def main():
                         if decoded.startswith("!S|"):
                             # Forward raw telemetry line back into core SocketIO room
                             sio.emit("hardware:telemetry_input", decoded)
+                            
+                            # Parse physical variables: !S|SEED|NOISE|V_NODAL|PARITY...
+                            parts = decoded.split('|')
+                            if len(parts) >= 4:
+                                try:
+                                    p_jitter = float(parts[2])
+                                    p_v = float(parts[3])
+                                    process_telemetry_packet(p_v, p_jitter)
+                                except Exception:
+                                    pass
                         elif decoded:
                             # Forward any debug stdout logs
                             sio.emit("hardware:log_input", f"PICO_HARDWARE: {decoded}")
