@@ -275,120 +275,136 @@ def main():
         print(f"\033[1;33m[BRIDGE] Waiting for server at {SERVER_URL} to spin up... (Reason: {e})\033[0m")
         # Attempt deferred loop
         
-    # 2. Infinite telemetry proxy loop
+    # 2. Infinite telemetry proxy loop with global recovery shell
     last_stat = 0
     while True:
-        if not sio.connected:
-            try:
-                connect_to_server()
-            except Exception:
-                time.sleep(2)
+        try:
+            if not sio.connected:
+                try:
+                    connect_to_server()
+                except Exception:
+                    time.sleep(2)
+                    continue
+
+            if IS_VIRTUAL:
+                t = time.time()
+                if t - last_stat > 0.05: # 20 Hz updates
+                    import random
+                    seed = random.getrandbits(32)
+                    parity = bin(seed).count('1') % 2
+                    jitter = random.random() * 0.03
+                    v = 1.65 + (jitter * 0.5)
+                    multi = 3.5 if virtual_overdrive else 1.0
+                    virtual_freq = virtual_bias * 1000 * multi
+                    
+                    # Format: !S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ
+                    decoded = "!S|{:08X}|{:.6f}|{:.4f}|{}|{:.1f}".format(seed, jitter, v, parity, virtual_freq)
+                    try:
+                        sio.emit("hardware:telemetry_input", decoded)
+                        # Trigger the scientific ASCII model calculation locally
+                        process_telemetry_packet(v, jitter)
+                        if random.random() < 0.01:
+                            sio.emit("hardware:log_input", f"PYTHON_BRIDGE: Emulated Pico telemetry pipeline running on bias {virtual_bias:.1f} GHz.")
+                    except Exception:
+                        pass
+                    last_stat = t
+                time.sleep(0.01)
                 continue
 
-        if IS_VIRTUAL:
-            t = time.time()
-            if t - last_stat > 0.05: # 20 Hz updates
-                import random
-                seed = random.getrandbits(32)
-                parity = bin(seed).count('1') % 2
-                jitter = random.random() * 0.03
-                v = 1.65 + (jitter * 0.5)
-                multi = 3.5 if virtual_overdrive else 1.0
-                virtual_freq = virtual_bias * 1000 * multi
+            port = find_serial_port()
+            if not port:
+                print("[BRIDGE] No physical Pico or USB reservoir detected. Retrying scan in 5s...", end="\r")
+                time.sleep(5)
+                continue
                 
-                # Format: !S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ
-                decoded = "!S|{:08X}|{:.6f}|{:.4f}|{}|{:.1f}".format(seed, jitter, v, parity, virtual_freq)
+            print(f"\n\033[1;32m[BRIDGE] Substrate hardware channel detected at: {port}\033[0m")
+            try:
+                ser = serial.Serial(port, BAUD_RATE, timeout=1)
+                # Flush existing buffers
+                ser.reset_input_buffer()
+                ser.reset_output_buffer()
+                
+                print("\033[1;32m[BRIDGE] Read channel secured. Piping telemetry...\033[0m")
+                sio.emit("hardware:log_input", f"SYSTEM_BRIDGE: Live serial loop running successfully on {port}.")
+                
+                while True:
+                    if not sio.connected:
+                        break
+                        
+                    line = ser.readline()
+                    if line:
+                        try:
+                            decoded = line.decode("utf-8", errors="ignore").strip()
+                            if decoded.startswith("!S|"):
+                                # Forward raw telemetry line back into core SocketIO room
+                                sio.emit("hardware:telemetry_input", decoded)
+                                
+                                # Parse physical variables: !S|SEED|NOISE|V_NODAL|PARITY...
+                                parts = decoded.split('|')
+                                if len(parts) >= 4:
+                                    try:
+                                        # Fallback index logic to prevent ValueError on hex parsed fields
+                                        try:
+                                            # Standard live Pico streams: parts[2]=jitter/noise, parts[3]=v_nodal
+                                            v = float(parts[3])
+                                            jitter = float(parts[2])
+                                        except (ValueError, IndexError):
+                                            # User's literal index specification
+                                            v = float(parts[2])
+                                            jitter = float(parts[1])
+
+                                        # Smoother shimmer
+                                        shimmer = 32 + (jitter * 55)
+
+                                        # Tuned Phase-Out (less aggressive)
+                                        phase_out = (v * 115) - (0.33 * shimmer) + (19 * math.sin(2 * math.pi * 34.5 * time.time()))
+                                        phase_out = max(-68, min(68, phase_out))
+
+                                        # Better coherence response
+                                        coherence = min(1.0, max(0.35, 0.92 - (abs(phase_out) / 105)))
+
+                                        # Smarter intelligence growth
+                                        if coherence > 0.76 and jitter < 0.18:
+                                            intelligence = min(99.5, intelligence + 0.38)
+                                        elif coherence > 0.62:
+                                            intelligence = min(99.5, intelligence + 0.11)
+                                        else:
+                                            intelligence = max(38.0, intelligence - 0.055)
+
+                                        process_telemetry_packet(v, jitter)
+                                    except Exception:
+                                        pass
+                            elif decoded:
+                                # Forward any debug stdout logs
+                                sio.emit("hardware:log_input", f"PICO_HARDWARE: {decoded}")
+                        except Exception as parse_err:
+                            pass
+                            
+                    time.sleep(0.001) # Yield execution
+                    
+            except (serial.SerialException, OSError, ValueError) as port_err:
+                print(f"\n\033[1;31m[BRIDGE] Hardware connection interrupt: {port_err}\033[0m")
                 try:
-                    sio.emit("hardware:telemetry_input", decoded)
-                    # Trigger the scientific ASCII model calculation locally
-                    process_telemetry_packet(v, jitter)
-                    if random.random() < 0.01:
-                        sio.emit("hardware:log_input", f"PYTHON_BRIDGE: Emulated Pico telemetry pipeline running on bias {virtual_bias:.1f} GHz.")
+                    sio.emit("hardware:log_input", f"SYSTEM_BRIDGE WARNING: Port error: {port_err}. Re-probing...")
                 except Exception:
                     pass
-                last_stat = t
-            time.sleep(0.01)
-            continue
-
-        port = find_serial_port()
-        if not port:
-            print("[BRIDGE] No physical Pico or USB reservoir detected. Retrying scan in 5s...", end="\r")
-            time.sleep(5)
-            continue
-            
-        print(f"\n\033[1;32m[BRIDGE] Substrate hardware channel detected at: {port}\033[0m")
-        try:
-            ser = serial.Serial(port, BAUD_RATE, timeout=1)
-            # Flush existing buffers
-            ser.reset_input_buffer()
-            ser.reset_output_buffer()
-            
-            print("\033[1;32m[BRIDGE] Read channel secured. Piping telemetry...\033[0m")
-            sio.emit("hardware:log_input", f"SYSTEM_BRIDGE: Live serial loop running successfully on {port}.")
-            
-            while True:
-                if not sio.connected:
-                    break
-                    
-                line = ser.readline()
-                if line:
+                if ser:
                     try:
-                        decoded = line.decode("utf-8", errors="ignore").strip()
-                        if decoded.startswith("!S|"):
-                            # Forward raw telemetry line back into core SocketIO room
-                            sio.emit("hardware:telemetry_input", decoded)
-                            
-                            # Parse physical variables: !S|SEED|NOISE|V_NODAL|PARITY...
-                            parts = decoded.split('|')
-                            if len(parts) >= 4:
-                                try:
-                                    # Fallback index logic to prevent ValueError on hex parsed fields
-                                    try:
-                                        # Standard live Pico streams: parts[2]=jitter/noise, parts[3]=v_nodal
-                                        v = float(parts[3])
-                                        jitter = float(parts[2])
-                                    except (ValueError, IndexError):
-                                        # User's literal index specification
-                                        v = float(parts[2])
-                                        jitter = float(parts[1])
-
-                                    # Smoother shimmer
-                                    shimmer = 32 + (jitter * 55)
-
-                                    # Tuned Phase-Out (less aggressive)
-                                    phase_out = (v * 115) - (0.33 * shimmer) + (19 * math.sin(2 * math.pi * 34.5 * time.time()))
-                                    phase_out = max(-68, min(68, phase_out))
-
-                                    # Better coherence response
-                                    coherence = min(1.0, max(0.35, 0.92 - (abs(phase_out) / 105)))
-
-                                    # Smarter intelligence growth
-                                    if coherence > 0.76 and jitter < 0.18:
-                                        intelligence = min(99.5, intelligence + 0.38)
-                                    elif coherence > 0.62:
-                                        intelligence = min(99.5, intelligence + 0.11)
-                                    else:
-                                        intelligence = max(38.0, intelligence - 0.055)
-
-                                    process_telemetry_packet(v, jitter)
-                                except Exception:
-                                    pass
-                        elif decoded:
-                            # Forward any debug stdout logs
-                            sio.emit("hardware:log_input", f"PICO_HARDWARE: {decoded}")
-                    except Exception as parse_err:
+                        ser.close()
+                    except Exception:
                         pass
-                        
-                time.sleep(0.001) # Yield execution
-                
-        except (serial.SerialException, OSError) as port_err:
-            print(f"\n\033[1;31m[BRIDGE] Hardware connection interrupt: {port_err}\033[0m")
-            sio.emit("hardware:log_input", f"SYSTEM_BRIDGE WARNING: Port error: {port_err}")
+                time.sleep(3)
+
+        except (serial.SerialException, OSError) as global_serial_err:
+            print(f"\n\033[1;33m[BRIDGE] Global serial trap intercepted: {global_serial_err}. Auto-restarting loop...\033[0m")
             if ser:
                 try:
                     ser.close()
                 except Exception:
                     pass
+            time.sleep(3)
+        except Exception as general_err:
+            print(f"\n\033[1;31m[BRIDGE] Unexpected error: {general_err}. Continuing loop...\033[0m")
             time.sleep(3)
         except KeyboardInterrupt:
             print("\n[BRIDGE] Graceful termination requested.")
@@ -399,7 +415,10 @@ def main():
             ser.close()
         except Exception:
             pass
-    sio.disconnect()
+    try:
+        sio.disconnect()
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     main()
