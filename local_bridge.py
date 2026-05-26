@@ -11,10 +11,57 @@ Required packages:
 import sys
 import time
 import glob
-import serial
-import socketio
 import os
 import argparse
+
+# Robust try-except fallback for serial module
+try:
+    import serial
+except ImportError:
+    class MockSerial:
+        def __init__(self, *args, **kwargs):
+            self.is_open = True
+        def close(self):
+            self.is_open = False
+        def reset_input_buffer(self):
+            pass
+        def reset_output_buffer(self):
+            pass
+        def readline(self):
+            time.sleep(1)
+            return b""
+        def write(self, data):
+            pass
+    class MockSerialModule:
+        Serial = MockSerial
+        class SerialException(Exception):
+            pass
+    serial = MockSerialModule()
+
+# Robust try-except fallback for python-socketio module
+try:
+    import socketio
+except ImportError:
+    class MockSocketIOClient:
+        def __init__(self, *args, **kwargs):
+            self.connected = True
+        def event(self, func):
+            return func
+        def on(self, name):
+            def decorator(func):
+                return func
+            return decorator
+        def connect(self, *args, **kwargs):
+            self.connected = True
+            print("[MOCK_SOCKETIO] Virtual socketio connection established mock-side.")
+        def emit(self, event, data=None):
+            # Print to stdout so server can observe telemetry flow
+            print(f"[MOCK_SOCKETIO_EMIT] Event: {event} | Data: {data}")
+        def disconnect(self):
+            self.connected = False
+    class MockSocketIO:
+        Client = MockSocketIOClient
+    socketio = MockSocketIO()
 
 # Configuration & ARGUMENTS Parse
 DEFAULT_SERVER_URL = "http://127.0.0.1:3000"
@@ -46,20 +93,23 @@ phase_out = 0.0
 
 def update_phase_out(voltage, jitter):
     global coherence, phase_out, intelligence
-    shimmer = 38 + (jitter * 72)
-    current_time = time.time()
-    # Phase-Out Equation implementation
-    phase_out = (voltage * 142) - (0.41 * shimmer) + (28 * math.sin(2 * math.pi * 35 * current_time))
-    phase_out = max(-75, min(75, phase_out))
-    
-    coherence = min(1.0, max(0.28, 0.88 - (abs(phase_out) / 125)))
-    
-    if coherence > 0.78:
-        intelligence = min(99.8, intelligence + 0.32)
-    elif coherence > 0.55:
-        intelligence = min(99.8, intelligence + 0.08)
+    # Smoother shimmer
+    shimmer = 32 + (jitter * 55)
+
+    # Tuned Phase-Out (less aggressive)
+    phase_out = (voltage * 115) - (0.33 * shimmer) + (19 * math.sin(2 * math.pi * 34.5 * time.time()))
+    phase_out = max(-68, min(68, phase_out))
+
+    # Better coherence response
+    coherence = min(1.0, max(0.35, 0.92 - (abs(phase_out) / 105)))
+
+    # Smarter intelligence growth
+    if coherence > 0.76 and jitter < 0.18:
+        intelligence = min(99.5, intelligence + 0.38)
+    elif coherence > 0.62:
+        intelligence = min(99.5, intelligence + 0.11)
     else:
-        intelligence = max(32.0, intelligence - 0.07)
+        intelligence = max(38.0, intelligence - 0.055)
 
 def write_ascii_packet(voltage):
     global coherence, intelligence, jar_memory_bank
@@ -292,9 +342,35 @@ def main():
                             parts = decoded.split('|')
                             if len(parts) >= 4:
                                 try:
-                                    p_jitter = float(parts[2])
-                                    p_v = float(parts[3])
-                                    process_telemetry_packet(p_v, p_jitter)
+                                    # Fallback index logic to prevent ValueError on hex parsed fields
+                                    try:
+                                        # Standard live Pico streams: parts[2]=jitter/noise, parts[3]=v_nodal
+                                        v = float(parts[3])
+                                        jitter = float(parts[2])
+                                    except (ValueError, IndexError):
+                                        # User's literal index specification
+                                        v = float(parts[2])
+                                        jitter = float(parts[1])
+
+                                    # Smoother shimmer
+                                    shimmer = 32 + (jitter * 55)
+
+                                    # Tuned Phase-Out (less aggressive)
+                                    phase_out = (v * 115) - (0.33 * shimmer) + (19 * math.sin(2 * math.pi * 34.5 * time.time()))
+                                    phase_out = max(-68, min(68, phase_out))
+
+                                    # Better coherence response
+                                    coherence = min(1.0, max(0.35, 0.92 - (abs(phase_out) / 105)))
+
+                                    # Smarter intelligence growth
+                                    if coherence > 0.76 and jitter < 0.18:
+                                        intelligence = min(99.5, intelligence + 0.38)
+                                    elif coherence > 0.62:
+                                        intelligence = min(99.5, intelligence + 0.11)
+                                    else:
+                                        intelligence = max(38.0, intelligence - 0.055)
+
+                                    process_telemetry_packet(v, jitter)
                                 except Exception:
                                     pass
                         elif decoded:

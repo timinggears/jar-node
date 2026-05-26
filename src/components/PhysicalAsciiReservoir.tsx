@@ -319,7 +319,10 @@ export default function PhysicalAsciiReservoir({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#050505] text-zinc-300 font-mono text-xs select-none p-4 gap-4 overflow-y-auto" id="ascii-reservoir-container">
+    <div 
+      className="h-[445px] max-h-[445px] flex flex-col bg-[#010602] text-[#00ff66] font-mono text-xs select-none p-4 gap-4 overflow-y-auto border border-[#00ff66]/30 shadow-[0_0_20px_rgba(0,255,102,0.15),_inset_0_0_15px_rgba(0,255,102,0.08)] custom-scrollbar" 
+      id="ascii-reservoir-container"
+    >
       {/* Header bar and connection stats */}
       <div className="flex items-center justify-between border-b border-white/10 pb-2">
         <div className="flex items-center gap-2">
@@ -495,16 +498,20 @@ export default function PhysicalAsciiReservoir({
                               initial={{ scale: 0.8, opacity: 0 }}
                               animate={{ scale: 1, opacity: 1 }}
                               exit={{ scale: 0.8, opacity: 0 }}
-                              className={`flex flex-col p-2 bg-white/5 border rounded-md relative ${
+                              className={`flex flex-col p-2 bg-black/60 border rounded-md relative ${
                                 pkt.type === 'combined'
-                                  ? 'border-[#ff88ff]/40 bg-pink-950/10 shadow-[inner_0_0_10px_rgba(255,136,255,0.15)]'
-                                  : 'border-white/5 hover:border-[#00ffcc]/30'
+                                  ? 'border-[#ff88ff]/40 bg-pink-950/20 shadow-[0_0_12px_rgba(255,136,255,0.2),_inset_0_0_8px_rgba(255,136,255,0.1)]'
+                                  : 'border-[#00ff66]/30 bg-emerald-950/10 hover:border-[#00ff66]/60 shadow-[0_0_12px_rgba(0,255,102,0.25),_inset_0_0_8px_rgba(0,255,102,0.1)] transition-all'
                               }`}
                             >
                               <div className="text-[7px] text-zinc-600 tracking-tighter uppercase font-bold truncate">
                                 {pkt.id}
                               </div>
-                              <div className="my-1 text-center font-sans text-xl font-extrabold text-[#f3f4f6]">
+                              <div className={`my-1 text-center font-sans text-xl font-extrabold ${
+                                pkt.type === 'combined'
+                                  ? 'text-[#ff88ff] drop-shadow-[0_0_8px_rgba(255,136,255,0.7)] animate-pulse'
+                                  : 'text-[#00ff66] drop-shadow-[0_0_10px_rgba(0,255,102,0.9)] animate-pulse'
+                              }`}>
                                 {pkt.char}
                               </div>
                               <div className="flex flex-col gap-0.5 mt-auto">
