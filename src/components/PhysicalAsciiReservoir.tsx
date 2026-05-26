@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert } from 'lucide-react';
 
@@ -71,6 +71,21 @@ export default function PhysicalAsciiReservoir({
   const prevVoltageRef = useRef(voltage);
   const prevCombCharsRef = useRef<string>('');
 
+  // Real-time canvas-based electron field dynamics
+  const electronCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const electronsRef = useRef<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    alpha: number;
+    phase: number;
+    size: number;
+    color: string;
+    targetNode: number;
+  }[]>([]);
+
   // Auto-scroll logic for logging streams
   useEffect(() => {
     if (terminalRef.current) {
@@ -83,6 +98,226 @@ export default function PhysicalAsciiReservoir({
       sandboxTerminalRef.current.scrollTop = sandboxTerminalRef.current.scrollHeight;
     }
   }, [executionLogs]);
+
+  // Canvas initialization, resizing, and Animation loop simulating phasing electrons
+  useEffect(() => {
+    const canvas = electronCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Handle high DPI display scales
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    };
+
+    resizeCanvas();
+    const resizeObserver = new ResizeObserver(() => {
+      resizeCanvas();
+    });
+    if (canvas.parentElement) {
+      resizeObserver.observe(canvas.parentElement);
+    }
+
+    // Initialize 35 electron particles flowing along dynamic orbits
+    if (electronsRef.current.length === 0) {
+      const initialCount = 35;
+      for (let i = 0; i < initialCount; i++) {
+        electronsRef.current.push({
+          x: Math.random() * 500,
+          y: Math.random() * 95,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: (Math.random() - 0.5) * 1.5,
+          alpha: Math.random(),
+          phase: Math.random() * Math.PI * 2,
+          size: 0.8 + Math.random() * 1.8,
+          color: Math.random() > 0.82 ? '#ff88ff' : '#00ff66',
+          targetNode: Math.floor(Math.random() * 5)
+        });
+      }
+    }
+
+    let lastTime = 0;
+    const animate = (timestamp: number) => {
+      if (!ctx || !canvas) return;
+      const w = canvas.width / (window.devicePixelRatio || 1);
+      const h = canvas.height / (window.devicePixelRatio || 1);
+      if (w === 0 || h === 0) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      lastTime = timestamp;
+
+      // Draw decay alpha path for phosphor trail motion blur
+      ctx.fillStyle = 'rgba(1, 6, 2, 0.16)';
+      ctx.fillRect(0, 0, w, h);
+
+      // A. Background wave channels representing tension grids
+      ctx.strokeStyle = 'rgba(0, 255, 102, 0.05)';
+      ctx.lineWidth = 1;
+      const channels = 6;
+      const timeSec = timestamp / 1000;
+
+      for (let i = 1; i <= channels; i++) {
+        ctx.beginPath();
+        const screenY = (h / (channels + 1)) * i;
+        ctx.moveTo(0, screenY);
+        for (let x = 0; x <= w; x += 15) {
+          const waveAmp = 1.5 + jitter * 12;
+          const waveSpeed = 2.0 + (bias / 25.0);
+          const yOffset = Math.sin((x * 0.02) + (timeSec * waveSpeed) + (phaseOut * 0.008)) * waveAmp;
+          ctx.lineTo(x, screenY + yOffset);
+        }
+        ctx.stroke();
+      }
+
+      // B. Define physical attractor resonance nodes
+      const nodes: { x: number; y: number }[] = [];
+      const nodeCount = 5;
+      for (let i = 0; i < nodeCount; i++) {
+        const nx = (w / (nodeCount + 1)) * (i + 1);
+        const ny = h / 2 + Math.sin(timeSec * 1.5 + i) * 8;
+        nodes.push({ x: nx, y: ny });
+
+        // Draw node field range
+        ctx.beginPath();
+        ctx.arc(nx, ny, 6 + Math.sin(timeSec * 2.5 + i) * 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 255, 102, 0.06)';
+        ctx.fill();
+        ctx.strokeStyle = `rgba(0, 255, 102, ${0.12 + coherence * 0.18})`;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(nx, ny, 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#00ff66';
+        ctx.fill();
+      }
+
+      // C. Update and render electron vectors which "phase in and out"
+      electronsRef.current.forEach((el) => {
+        // Increment phase parameter (drives the visual dimensional shift)
+        el.phase += 0.015 + jitter * 0.04;
+
+        // Visual opacity phases cleanly with its sine parameter
+        const waveOpacity = 0.5 * Math.sin(el.phase) + 0.5;
+        // High system coherence locks electrons in phase space; jitter adds decay noise
+        el.alpha = waveOpacity * (0.3 + coherence * 0.7);
+
+        // Calculate pull forces towards current node target
+        const target = nodes[el.targetNode];
+        const dx = target.x - el.x;
+        const dy = target.y - el.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (coherence > 0.65) {
+          // Circular orbital gravitation pull
+          const gravity = 0.045;
+          el.vx += (dx / dist) * gravity - (dy / dist) * 0.018;
+          el.vy += (dy / dist) * gravity + (dx / dist) * 0.018;
+        } else {
+          // Add chaotic thermodynamic step oscillations
+          const microErr = (0.35 + jitter * 1.1) * (Math.random() - 0.5);
+          el.vx += (dx / dist) * 0.015 + microErr;
+          el.vy += (dy / dist) * 0.015 + microErr;
+        }
+
+        // Apply velocity limits based on system excitation voltage/carrier bias
+        const maxVelocity = 1.0 + (voltage * 0.7) + (bias * 0.04);
+        const curVelocity = Math.sqrt(el.vx * el.vx + el.vy * el.vy);
+        if (curVelocity > maxVelocity) {
+          el.vx = (el.vx / curVelocity) * maxVelocity;
+          el.vy = (el.vy / curVelocity) * maxVelocity;
+        }
+
+        // Apply subtle friction viscosity
+        el.vx *= 0.985;
+        el.vy *= 0.985;
+
+        // Move electron
+        el.x += el.vx;
+        el.y += el.vy;
+
+        // Transition target node if orbit is successfully centered
+        if (dist < 8 && Math.random() < 0.2) {
+          el.targetNode = (el.targetNode + 1) % nodeCount;
+        }
+
+        // Infinite wrap bounds check
+        if (el.x < 0) { el.x = w; el.targetNode = Math.floor(Math.random() * nodeCount); }
+        if (el.x > w) { el.x = 0; el.targetNode = Math.floor(Math.random() * nodeCount); }
+        if (el.y < 0) { el.y = h; }
+        if (el.y > h) { el.y = 0; }
+
+        // Render electron glow ball
+        if (el.alpha > 0.01) {
+          ctx.beginPath();
+          ctx.arc(el.x, el.y, el.size, 0, Math.PI * 2);
+
+          ctx.shadowColor = el.color;
+          ctx.shadowBlur = 3 + Math.sin(el.phase) * 3;
+          ctx.fillStyle = el.color === '#ff88ff' 
+            ? `rgba(255, 136, 255, ${el.alpha})` 
+            : el.color === '#ffdd00'
+              ? `rgba(255, 221, 0, ${el.alpha})`
+              : `rgba(0, 255, 102, ${el.alpha})`;
+          ctx.fill();
+          ctx.shadowBlur = 0; // Reset canvas rendering shadow
+        }
+      });
+
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      resizeObserver.disconnect();
+    };
+  }, [voltage, coherence, jitter, bias, phaseOut]);
+
+  // Click handler to excite substrate with fresh particles
+  const handleExciteSubstrate = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = electronCanvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Pulse 12 glowing golden excitation particles
+    for (let i = 0; i < 12; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.2 + Math.random() * 3.0;
+      electronsRef.current.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        alpha: 1.0,
+        phase: Math.random() * Math.PI,
+        size: 1.2 + Math.random() * 2.2,
+        color: '#ffdd00',
+        targetNode: Math.floor(Math.random() * 5)
+      });
+    }
+
+    // Limit maximum electron capacity to prevent processing decay
+    if (electronsRef.current.length > 75) {
+      electronsRef.current = electronsRef.current.slice(-65);
+    }
+
+    if (onAddLog) {
+      onAddLog(`[SUBSTRATE_INTERFEROMETRIC]: Excitation surge generated at node (${x.toFixed(0)}, ${y.toFixed(0)}) px`, 'success');
+    }
+  };
 
   // Handle packet generation of Physical JAR state
   useEffect(() => {
@@ -394,6 +629,35 @@ export default function PhysicalAsciiReservoir({
               className="absolute top-0 bottom-0 bg-[#00ccff] w-1" 
               style={{ left: `${50 + (phaseOut / 200) * 50}%` }} 
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Dynamic Substrate Electron Interferometry Observer */}
+      <div className="bg-[#020d04] border border-[#00ff66]/20 rounded-lg p-2.5 flex flex-col gap-1.5 relative overflow-hidden">
+        <div className="flex items-center justify-between text-[8px] uppercase tracking-wider text-[#00ff66]/80 px-0.5">
+          <div className="flex items-center gap-1.5 font-bold">
+            <Activity className="w-3.5 h-3.5 text-[#00ff66] animate-pulse" />
+            <span>Nodal Substrate Electron Interferometry</span>
+          </div>
+          <div className="flex items-center gap-3 font-mono text-[7px] text-zinc-400">
+            <span>DRIFT FLUX: <span className="text-[#00ff66]">{(voltage * 4.5).toFixed(3)} mA</span></span>
+            <span>PHASE ANGLE COHERENT: <span className="text-[#00ff66]">{phaseOut.toFixed(1)}°</span></span>
+          </div>
+        </div>
+
+        {/* Dynamic Electron Vector Field Canvas */}
+        <div className="relative h-[85px] bg-[#000501] rounded border border-[#00ff66]/15 overflow-hidden">
+          <canvas 
+            ref={electronCanvasRef} 
+            onClick={handleExciteSubstrate}
+            className="w-full h-full block cursor-crosshair"
+            title="Excite substrate with microvoltage particles"
+          />
+          {/* subtle phosphor overlay markings */}
+          <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-black/70 rounded border border-[#00ff66]/10 text-[6.5px] text-[#00ff66]/70 font-mono tracking-tighter uppercase flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66] animate-pulse" />
+            ELECTRONS: LIVE FIELD
           </div>
         </div>
       </div>
