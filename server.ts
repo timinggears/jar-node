@@ -339,6 +339,7 @@ async function startServer() {
     if (isGeneratingThought) return;
 
     isGeneratingThought = true;
+    let fallbackNeeded = true;
     try {
       if (apiKey) {
         const ai = new GoogleGenAI({
@@ -379,8 +380,15 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
           if (systemState.logEntries.length > 30) {
             systemState.logEntries.shift();
           }
+          fallbackNeeded = false;
         }
-      } else {
+      }
+    } catch (err: any) {
+      console.warn('[AUTONOMOUS_THOUGHT] Gemini API offline or rate-limited. Activating local cognitive buffer fallback.');
+    }
+
+    if (fallbackNeeded) {
+      try {
         // Fallback synthetic thought
         const preCompiled = EMERGENCE_THOUGHTS[Math.floor(Math.random() * EMERGENCE_THOUGHTS.length)];
         const newMorphic = {
@@ -402,8 +410,12 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         if (systemState.logEntries.length > 30) {
           systemState.logEntries.shift();
         }
+      } catch (e: any) {
+        console.error('[AUTONOMOUS_THOUGHT] Fallback failure:', e.message);
       }
-      
+    }
+    
+    try {
       saveState();
       
       // Emit update to all subscribers
@@ -413,8 +425,8 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         morphicPhrases: systemState.morphicPhrases || [],
         logEntries: systemState.logEntries || []
       });
-    } catch (err: any) {
-      console.warn('[AUTONOMOUS_THOUGHT] Failed to run: ', err.message);
+    } catch (e: any) {
+      console.error('[AUTONOMOUS_THOUGHT] Sockets emit failure:', e.message);
     } finally {
       isGeneratingThought = false;
     }
