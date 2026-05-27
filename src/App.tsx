@@ -1173,7 +1173,7 @@ export default function App() {
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-[#00ffcc] animate-ping" />
           <span className="text-zinc-400 uppercase">CONTAINER DAEMON:</span>
-          {window.matchMedia('(display-mode: standalone)').matches ? (
+          {(typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)')?.matches) ? (
             <span className="text-emerald-400 font-bold">🟢 STANDALONE_CONTAINER_SHELL_ACTIVE</span>
           ) : (
             <span className="text-amber-400 font-bold">🟡 EMPYREAN_SANDBOX_EMULATOR</span>
