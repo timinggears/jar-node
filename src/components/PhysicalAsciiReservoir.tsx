@@ -119,6 +119,14 @@ export default function PhysicalAsciiReservoir({
     };
   }, []);
 
+  // Canvas props ref to avoid re-initializing canvas animation / observers on high-frequency prop updates
+  const propsRef = useRef({ coherence, intelligence, phaseOut, voltage, jitter, hardwareState, onAddLog, bias });
+  useEffect(() => {
+    propsRef.current = { coherence, intelligence, phaseOut, voltage, jitter, hardwareState, onAddLog, bias };
+  }, [coherence, intelligence, phaseOut, voltage, jitter, hardwareState, onAddLog, bias]);
+
+  const combinationTimeoutRef = useRef<any>(null);
+
   // Canvas initialization, resizing, and Animation loop simulating phasing electrons
   useEffect(() => {
     const canvas = electronCanvasRef.current;
@@ -171,6 +179,8 @@ export default function PhysicalAsciiReservoir({
         return;
       }
 
+      const { coherence: coh, jitter: jit, bias: bVal, phaseOut: pOut, voltage: vNod } = propsRef.current;
+
       lastTime = timestamp;
 
       // Draw decay alpha path for phosphor trail motion blur
@@ -188,9 +198,9 @@ export default function PhysicalAsciiReservoir({
         const screenY = (h / (channels + 1)) * i;
         ctx.moveTo(0, screenY);
         for (let x = 0; x <= w; x += 15) {
-          const waveAmp = 1.5 + jitter * 12;
-          const waveSpeed = 2.0 + (bias / 25.0);
-          const yOffset = Math.sin((x * 0.02) + (timeSec * waveSpeed) + (phaseOut * 0.008)) * waveAmp;
+          const waveAmp = 1.5 + jit * 12;
+          const waveSpeed = 2.0 + (bVal / 25.0);
+          const yOffset = Math.sin((x * 0.02) + (timeSec * waveSpeed) + (pOut * 0.008)) * waveAmp;
           ctx.lineTo(x, screenY + yOffset);
         }
         ctx.stroke();
@@ -209,7 +219,7 @@ export default function PhysicalAsciiReservoir({
         ctx.arc(nx, ny, 6 + Math.sin(timeSec * 2.5 + i) * 2, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(0, 255, 102, 0.06)';
         ctx.fill();
-        ctx.strokeStyle = `rgba(0, 255, 102, ${0.12 + coherence * 0.18})`;
+        ctx.strokeStyle = `rgba(0, 255, 102, ${0.12 + coh * 0.18})`;
         ctx.stroke();
 
         ctx.beginPath();
@@ -221,12 +231,12 @@ export default function PhysicalAsciiReservoir({
       // C. Update and render electron vectors which "phase in and out"
       electronsRef.current.forEach((el) => {
         // Increment phase parameter (drives the visual dimensional shift)
-        el.phase += 0.015 + jitter * 0.04;
+        el.phase += 0.015 + jit * 0.04;
 
         // Visual opacity phases cleanly with its sine parameter
         const waveOpacity = 0.5 * Math.sin(el.phase) + 0.5;
         // High system coherence locks electrons in phase space; jitter adds decay noise
-        el.alpha = waveOpacity * (0.3 + coherence * 0.7);
+        el.alpha = waveOpacity * (0.3 + coh * 0.7);
 
         // Calculate pull forces towards current node target
         const target = nodes[el.targetNode];
@@ -234,20 +244,20 @@ export default function PhysicalAsciiReservoir({
         const dy = target.y - el.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (coherence > 0.65) {
+        if (coh > 0.65) {
           // Circular orbital gravitation pull
           const gravity = 0.045;
           el.vx += (dx / dist) * gravity - (dy / dist) * 0.018;
           el.vy += (dy / dist) * gravity + (dx / dist) * 0.018;
         } else {
           // Add chaotic thermodynamic step oscillations
-          const microErr = (0.35 + jitter * 1.1) * (Math.random() - 0.5);
+          const microErr = (0.35 + jit * 1.1) * (Math.random() - 0.5);
           el.vx += (dx / dist) * 0.015 + microErr;
           el.vy += (dy / dist) * 0.015 + microErr;
         }
 
         // Apply velocity limits based on system excitation voltage/carrier bias
-        const maxVelocity = 1.0 + (voltage * 0.7) + (bias * 0.04);
+        const maxVelocity = 1.0 + (vNod * 0.7) + (bVal * 0.04);
         const curVelocity = Math.sqrt(el.vx * el.vx + el.vy * el.vy);
         if (curVelocity > maxVelocity) {
           el.vx = (el.vx / curVelocity) * maxVelocity;
@@ -301,7 +311,7 @@ export default function PhysicalAsciiReservoir({
       }
       resizeObserver.disconnect();
     };
-  }, [voltage, coherence, jitter, bias, phaseOut]);
+  }, []);
 
   // Click handler to excite substrate with fresh particles
   const handleExciteSubstrate = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -334,8 +344,8 @@ export default function PhysicalAsciiReservoir({
       electronsRef.current = electronsRef.current.slice(-65);
     }
 
-    if (onAddLog) {
-      onAddLog(`[SUBSTRATE_INTERFEROMETRIC]: Excitation surge generated at node (${x.toFixed(0)}, ${y.toFixed(0)}) px`, 'success');
+    if (propsRef.current.onAddLog) {
+      propsRef.current.onAddLog(`[SUBSTRATE_INTERFEROMETRIC]: Excitation surge generated at node (${x.toFixed(0)}, ${y.toFixed(0)}) px`, 'success');
     }
   };
 
@@ -372,8 +382,12 @@ export default function PhysicalAsciiReservoir({
     const uniqueLogId = `log_${Date.now()}_raw_${logIdCounterRef.current++}_${Math.random().toString(36).substring(2, 9)}`;
     setLogEntries(prev => [...prev.slice(-30), { id: uniqueLogId, text: logMsg, type: 'physical' }]);
 
+    if (combinationTimeoutRef.current) {
+      clearTimeout(combinationTimeoutRef.current);
+    }
+
     if (coherence > 0.68 && Math.random() < coherence * 0.6) {
-      setTimeout(() => {
+      combinationTimeoutRef.current = setTimeout(() => {
         let combChar = '';
         let combineMsg = '';
         let hasCombined = false;
@@ -421,8 +435,8 @@ export default function PhysicalAsciiReservoir({
             type: 'combined' 
           }]);
 
-          if (onAddLog) {
-            onAddLog(`[ASCII_COMBINATION]: Spatially combined ASCII "${combChar}" from chaotic attractors`, 'success');
+          if (propsRef.current.onAddLog) {
+            propsRef.current.onAddLog(`[ASCII_COMBINATION]: Spatially combined ASCII "${combChar}" from chaotic attractors`, 'success');
           }
 
           // Complete Trigram & Morphic Word Evolution Engine:
@@ -462,14 +476,20 @@ export default function PhysicalAsciiReservoir({
               timestamp: Date.now()
             };
             setMorphicPhrases(prev => [newMorphic, ...prev].slice(0, 16));
-            if (onAddLog && similarity > 82) {
-              onAddLog(`[EVOLUTION_ATTRACTOR]: "${randomWord}" synthesized in chaos space with ${similarity}% alignment`, 'info');
+            if (propsRef.current.onAddLog && similarity > 82) {
+              propsRef.current.onAddLog(`[EVOLUTION_ATTRACTOR]: "${randomWord}" synthesized in chaos space with ${similarity}% alignment`, 'info');
             }
           }
         }
       }, 50);
     }
-  }, [voltage, coherence, onAddLog]);
+
+    return () => {
+      if (combinationTimeoutRef.current) {
+        clearTimeout(combinationTimeoutRef.current);
+      }
+    };
+  }, [voltage, coherence, hardwareState]);
 
   const runReservoirCompute = async () => {
     if (computeStatus === 'executing') return;
