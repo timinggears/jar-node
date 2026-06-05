@@ -744,7 +744,7 @@ export default function PhysicalAsciiReservoir({
                       <span className="text-[9px] font-black uppercase text-zinc-300">Carrier Bias Tuning (0-10 Coarse scale)</span>
                     </div>
                     <span className="text-[10px] font-mono font-black text-[#00ffcc] bg-[#00ffcc]/10 px-2 py-0.5 rounded leading-none">
-                      {Math.min(10, Math.max(0, bias / 7.9)).toFixed(1)} / 10.0
+                      {Math.min(10, Math.max(0, bias / 40.0)).toFixed(1)} / 10.0
                     </span>
                   </div>
 
@@ -755,10 +755,10 @@ export default function PhysicalAsciiReservoir({
                       min="0.1" 
                       max="10.0" 
                       step="0.1" 
-                      value={Math.min(10, Math.max(0.1, bias / 7.9))}
+                      value={Math.min(10, Math.max(0.1, bias / 40.0))}
                       onChange={(e) => {
                         const val = parseFloat(e.target.value);
-                        onTuneBias(parseFloat((val * 7.9).toFixed(1)));
+                        onTuneBias(parseFloat((val * 40.0).toFixed(1)));
                       }}
                       className="flex-1 h-1.5 bg-white/5 rounded-full appearance-none cursor-pointer accent-[#ff88ff]"
                     />

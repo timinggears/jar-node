@@ -88,15 +88,15 @@ export default function SystemSettings({
             </div>
             <input 
               type="range" 
-              min="0.1" 
-              max="79.0" 
-              step="0.1"
+              min="1.0" 
+              max="400.0" 
+              step="1.0"
               value={carrierBias}
               onChange={(e) => setCarrierBias(parseFloat(e.target.value))}
               className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-[#00ffcc]"
             />
             <p className="text-[9px] text-zinc-600 italic leading-relaxed">
-              Direct tuning: 0.1 to 79.0 GHz. Quantum logic substrate alignment active.
+              Direct tuning: 1.0 to 400.0 GHz. Quantum logic substrate alignment active and unlimited.
             </p>
           </div>
 
@@ -108,7 +108,7 @@ export default function SystemSettings({
               </span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {[12, 24, 48, 79].map(h => {
+              {[24, 100, 250, 400].map(h => {
                 const target = 1000 * h;
                 const isActive = Math.abs(currentFreq - target) < 25000;
                 return (

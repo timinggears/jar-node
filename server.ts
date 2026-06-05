@@ -656,7 +656,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     });
 
     socket.on('hardware:bias_change', (val: any) => {
-      const targetBias = Math.min(250.0, Number(val));
+      const targetBias = Math.min(400.0, Number(val));
       if (isNaN(targetBias)) return;
       
       let stateChanged = false;
@@ -693,7 +693,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     }
     let stateChanged = false;
     if (params.bias !== undefined) {
-      const targetBias = Math.min(250.0, Number(params.bias));
+      const targetBias = Math.min(400.0, Number(params.bias));
       if (systemState.bias !== targetBias) {
         systemState.bias = targetBias;
         stateChanged = true;
