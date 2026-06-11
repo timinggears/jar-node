@@ -297,14 +297,26 @@ async function startServer() {
 
   let pendingTelemetryToEmit: string | null = null;
   let lastTelemetryEmitTime = 0;
-  const MIN_SEND_INTERVAL = 150; // Emit at most every 150ms
+  let telemetryTimeout: NodeJS.Timeout | null = null;
+  const MIN_SEND_INTERVAL = 45; // High-fidelity smooth emission target (approx 22 Hz)
 
   function queueTelemetryEmission(line: string) {
     pendingTelemetryToEmit = line;
     const now = Date.now();
     const timeSinceLast = now - lastTelemetryEmitTime;
+
     if (timeSinceLast >= MIN_SEND_INTERVAL) {
+      if (telemetryTimeout) {
+        clearTimeout(telemetryTimeout);
+        telemetryTimeout = null;
+      }
       emitPendingTelemetry();
+    } else if (!telemetryTimeout) {
+      const delay = MIN_SEND_INTERVAL - timeSinceLast;
+      telemetryTimeout = setTimeout(() => {
+        telemetryTimeout = null;
+        emitPendingTelemetry();
+      }, delay);
     }
   }
 
