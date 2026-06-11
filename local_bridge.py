@@ -94,26 +94,19 @@ phase_out = 0.0
 def update_phase_out(voltage, jitter):
     global coherence, phase_out, intelligence
     
-    # Physical voltage deviation from nominal 1.65V DC offset reference
-    v_deviation = voltage - 1.65
+    # Physical inputs for the user's specific high-fidelity telemetry mapping
+    v = voltage
+    shimmer = 45.0 + (jitter * 85.0)
+    f = 35.0  # physical carrier sweep frequency in Hz
+    t = time.time()
     
-    # Core mathematical mapping centered naturally around 0°
-    phase_out_base = v_deviation * 110.0
+    # High-fidelity phase-out equation specified by user
+    phase_out = (v * 142.0) - (0.41 * shimmer) + (28.0 * math.sin(2.0 * math.pi * f * t))
     
-    # Introduce an authentic, periodic thermal/fluid dynamics sine wave oscillation (1.5 Hz)
-    thermal_osc = 14.0 * math.sin(2.0 * math.pi * 1.55 * time.time())
-    
-    # Proportional physical jitter damping
-    jitter_flux = jitter * 40.0
-    
-    # Integrated Phase-Out angle determination
-    phase_out = phase_out_base + thermal_osc + (random.uniform(-1, 1) * jitter_flux)
-    
-    # Physical hardware temperature and voltage limit clamps (-75° to +75°)
-    phase_out = max(-75.0, min(75.0, phase_out))
-    
-    # Coherence scales with phase stability and is penalized by transient local jitter
-    coherence_base = 1.0 - (abs(phase_out) / 160.0)
+    # Baseline phase_out at nominal 1.65V with minimal jitter is around 215.2°
+    # Coherence scales with phase stability around this physical alignment point
+    phase_deviation = abs(phase_out - 215.2)
+    coherence_base = 1.0 - (phase_deviation / 400.0)
     jitter_penalty = jitter * 3.5
     
     coherence = max(0.15, min(0.9999, coherence_base - jitter_penalty))

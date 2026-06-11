@@ -585,11 +585,16 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     // Intercept if missing, <= 0, or if it represents raw unreactive Pico coherence (which hovers > 0.98)
     const isPicoUnreactiveCoherence = coherence > 0.985 && parts[7] !== undefined;
     if (isNaN(coherence) || coherence <= 0 || isPicoUnreactiveCoherence) {
-      const phaseOutVal = (vNodal - 1.65) * 110.0;
-      const phaseOut = Math.max(-75.0, Math.min(75.0, phaseOutVal));
+      const shimmer = 45.0 + (jitter * 85.0);
+      const f = 35.0;
+      const t = Date.now() / 1000;
+      const phaseOut = (vNodal * 142.0) - (0.41 * shimmer) + (28.0 * Math.sin(2.0 * Math.PI * f * t));
+      
       const overdriveDrain = systemState.overdrive ? 0.15 : 0;
       const biasStress = (Math.abs(systemState.bias - 125) / 400) * 0.1;
-      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 160.0);
+      
+      const phaseDeviation = Math.abs(phaseOut - 215.2);
+      const coherenceBase = 1.0 - (phaseDeviation / 400.0);
       const jitterPenalty = jitter * 3.5;
       coherence = Math.min(0.9999, Math.max(0.15, coherenceBase - jitterPenalty - overdriveDrain - biasStress));
     }
