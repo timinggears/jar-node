@@ -298,7 +298,7 @@ async function startServer() {
   let pendingTelemetryToEmit: string | null = null;
   let lastTelemetryEmitTime = 0;
   let telemetryTimeout: NodeJS.Timeout | null = null;
-  const MIN_SEND_INTERVAL = 45; // High-fidelity smooth emission target (approx 22 Hz)
+  const MIN_SEND_INTERVAL = 1000 / 35; // High-fidelity smooth emission target at exactly 35 Hz (~28.57ms)
 
   function queueTelemetryEmission(line: string) {
     pendingTelemetryToEmit = line;
@@ -1023,7 +1023,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     } catch (err) {
       console.error('[SERVER] Telemetry error:', err);
     }
-  }, 250); // Smoother simulated telemetry at 4Hz (250ms), throttled at 150ms
+  }, 1000 / 35); // Vibrate at exactly 35 Hz to sync with the physical carrier wave specifications
 
   findAndOpenPort();
 

@@ -292,7 +292,7 @@ def main():
 
             if IS_VIRTUAL:
                 t = time.time()
-                if t - last_stat > 0.033: # 30 Hz updates
+                if t - last_stat > (1.0 / 35.0): # Exactly 35 Hz updates
                     import random
                     seed = random.getrandbits(32)
                     parity = bin(seed).count('1') % 2

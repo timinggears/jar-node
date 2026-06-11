@@ -765,7 +765,7 @@ export default function App() {
         updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel);
         pendingTelemetryRef.current = null;
       }
-    }, 120);
+    }, 1000 / 35);
 
     const onTelemetry = (line: string) => {
       if (line.startsWith('!S|')) {
