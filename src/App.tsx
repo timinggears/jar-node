@@ -53,6 +53,7 @@ export default function App() {
     memeticDepth: 0.0,
     gpuParity: 0.0,
     zpeLevel: 100.0,
+    phaseOut: 0.0,
     isOverdrive: false,
     isQec: true,
     seedHex: '00000000',
@@ -639,6 +640,7 @@ export default function App() {
       memeticDepth: prev.memeticDepth,
       gpuParity: nextGpuParity,
       zpeLevel: nextZpe,
+      phaseOut: phaseOut,
       isOverdrive: isOverdriveRef.current,
       isQec: isQecActiveRef.current,
       seedHex: seedStr,
@@ -1448,7 +1450,7 @@ export default function App() {
               <PhysicalAsciiReservoirMemo 
                 coherence={stats.coherence}
                 intelligence={stats.intelligence}
-                phaseOut={stats.vNodal * 142 - 0.41 * (38 + stats.jitter * 72)}
+                phaseOut={stats.phaseOut}
                 voltage={stats.vNodal}
                 jitter={stats.jitter}
                 hardwareState={hardwareState}

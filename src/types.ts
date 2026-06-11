@@ -20,6 +20,7 @@ export interface SystemStats {
   memeticDepth: number;
   gpuParity: number;
   zpeLevel: number;
+  phaseOut: number;
   isOverdrive: boolean;
   isQec: boolean;
   boost2b?: boolean;
