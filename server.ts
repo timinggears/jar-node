@@ -582,20 +582,37 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
 
     // Coherence (index 7)
     let coherence = parseFloat(parts[7]);
-    if (isNaN(coherence) || coherence <= 0) {
-      const phaseOutVal = (vNodal - 1.65) * 100;
-      const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
-      const overdriveDrain = systemState.overdrive ? 0.30 : 0;
-      const biasStress = (Math.abs(systemState.bias - 125) / 250) * 0.2;
-      coherence = Math.min(0.9999, Math.max(0.0001, 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress));
+    // Intercept if missing, <= 0, or if it represents raw unreactive Pico coherence (which hovers > 0.98)
+    const isPicoUnreactiveCoherence = coherence > 0.985 && parts[7] !== undefined;
+    if (isNaN(coherence) || coherence <= 0 || isPicoUnreactiveCoherence) {
+      const phaseOutVal = (vNodal - 1.65) * 110.0;
+      const phaseOut = Math.max(-75.0, Math.min(75.0, phaseOutVal));
+      const overdriveDrain = systemState.overdrive ? 0.15 : 0;
+      const biasStress = (Math.abs(systemState.bias - 125) / 400) * 0.1;
+      const coherenceBase = 1.0 - (Math.abs(phaseOut) / 160.0);
+      const jitterPenalty = jitter * 3.5;
+      coherence = Math.min(0.9999, Math.max(0.15, coherenceBase - jitterPenalty - overdriveDrain - biasStress));
     }
 
     // Depth / Intelligence (index 8)
     let depth = parseFloat(parts[8]);
-    if (isNaN(depth) || depth <= 0) {
-      depth = (systemState.bias * coherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
+    // Intercept if missing, <= 0, or if it matches the legacy static Pico formula
+    const staticPicoDepth = (systemState.bias * coherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
+    const isPicoStaticDepth = Math.abs(depth - staticPicoDepth) < 0.01;
+    if (isNaN(depth) || depth <= 0 || isPicoStaticDepth) {
+      let currentIntel = systemState.intelligence;
+      if (coherence > 0.82) {
+        currentIntel = Math.min(999.0, currentIntel + (coherence - 0.81) * 0.45);
+      } else if (coherence > 0.68) {
+        currentIntel = Math.min(999.0, currentIntel + 0.05);
+      } else {
+        currentIntel = Math.max(10.0, currentIntel - (0.68 - coherence) * 0.35);
+      }
+      systemState.intelligence = currentIntel;
+      depth = currentIntel;
+    } else {
+      systemState.intelligence = depth;
     }
-    systemState.intelligence = depth;
 
     // GPU Parity (index 9)
     let gpuParity = parseFloat(parts[9]);
@@ -913,11 +930,8 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       // v148: Experimental Simulation Layer
       // Replicates the chaotic nodal fluctuations of the liquid substrate
       const t = Date.now() / 1000;
-      const noiseBase = 0.5 + (Math.sin(t * 2) * 0.1);
-      const chaos = (Math.random() - 0.5) * 0.05;
-      const noise = Math.max(0.0001, Math.min(0.9999, noiseBase + chaos));
-      
-      const v_nodal = 1.65 + (noise * 0.5) + (systemState.overdrive ? 0.4 : 0);
+      const jitterVal = 0.015 + (Math.random() * 0.01);
+      const v_nodal = 1.65 + (Math.sin(t * 1.55) * 0.28) + ((Math.random() - 0.5) * jitterVal * 8);
       
       // Resonance Calculations matching code.py v148
       const overdrive_factor = systemState.overdrive ? 7.5 : 1.0;
@@ -925,7 +939,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       const resonanceBase = systemState.bias * 1000;
       
       // Virtual frequency synthesis
-      let currentFreq = (resonanceBase + (noise * 10000) + substrate_mod) * overdrive_factor;
+      let currentFreq = (resonanceBase + (jitterVal * 10000) + substrate_mod) * overdrive_factor;
       
       // Random high-entropy seed bits
       const seedNum = (Math.random() * 0xffffffff) >>> 0;
@@ -935,28 +949,21 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       // Safety clamp
       currentFreq = Math.max(100, Math.min(250000000, currentFreq));
       
-      // PROTOCOL v150: [!S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ|HRATE|COHERENCE|DEPTH]
+      // Build a minimal unreactive simulated telemetry line and let normalizer apply beautiful dynamic physical equations
+      const telemetryLine = `!S|${seedStr}|${jitterVal.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}|0|0|0|${systemState.zpe_level.toFixed(2)}`;
       
-      const simulatedCoherence = 0.95 + (Math.random() * 0.05);
-      const simulatedDepth = (systemState.bias * simulatedCoherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
-      const gpuParity = (simulatedCoherence * (simulatedDepth / 140.0)) * 100;
+      // Normalize and queue the organic telemetry update
+      const normalizedLine = normalizeTelemetryLine(telemetryLine);
+      const parts = normalizedLine.split('|');
+      const normalizedCoherence = parseFloat(parts[7]) || 0.85;
+      const normalizedDepth = parseFloat(parts[8]) || 100.0;
       
       // Zero Point Energy: Modulated by total intelligence and coherence
-      systemState.zpe_level = Math.max(0, Math.min(100, systemState.zpe_level + (simulatedCoherence > 0.98 ? 0.01 : -0.005)));
-      
-      const telemetryLine = `!S|${seedStr}|${noise.toFixed(8)}|${v_nodal.toFixed(6)}|${parity}|${currentFreq.toFixed(4)}|${systemState.latestHashRate.toFixed(4)}|${simulatedCoherence.toFixed(4)}|${simulatedDepth.toFixed(4)}|${gpuParity.toFixed(2)}|${systemState.zpe_level.toFixed(2)}`;
+      systemState.zpe_level = Math.max(0, Math.min(100, systemState.zpe_level + (normalizedCoherence > 0.82 ? 0.015 : -0.01)));
       
       // Virtual Neural Absorption
-      systemState.intelligence = simulatedDepth;
-      if (simulatedCoherence > 0.98) {
-        systemState.memetic_depth += (simulatedDepth / 12000);
-      }
-
-      // Trigger simulation-driven cytology evolution with 500ms rate limiting
-      const nowRefSrc = Date.now();
-      if (nowRefSrc - lastEvolutionProcessTime >= 500) {
-        lastEvolutionProcessTime = nowRefSrc;
-        runServerSideEvolution(v_nodal, simulatedCoherence);
+      if (normalizedCoherence > 0.82) {
+        systemState.memetic_depth += (normalizedDepth / 25000);
       }
       
       // Auto-save memory every 30s in simulation (120 ticks * 250ms)

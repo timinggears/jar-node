@@ -93,28 +93,43 @@ phase_out = 0.0
 
 def update_phase_out(voltage, jitter):
     global coherence, phase_out, intelligence
-    # Smoother shimmer
-    shimmer = 32 + (jitter * 55)
-
-    # Tuned Phase-Out (less aggressive)
-    phase_out = (voltage * 115) - (0.33 * shimmer) + (19 * math.sin(2 * math.pi * 34.5 * time.time()))
-    phase_out = max(-68, min(68, phase_out))
-
-    # Better coherence response
-    coherence = min(1.0, max(0.35, 0.92 - (abs(phase_out) / 105)))
-
-    # Smarter intelligence growth
-    if coherence > 0.76 and jitter < 0.18:
-        intelligence = min(99.5, intelligence + 0.38)
-    elif coherence > 0.62:
-        intelligence = min(99.5, intelligence + 0.11)
+    
+    # Physical voltage deviation from nominal 1.65V DC offset reference
+    v_deviation = voltage - 1.65
+    
+    # Core mathematical mapping centered naturally around 0°
+    phase_out_base = v_deviation * 110.0
+    
+    # Introduce an authentic, periodic thermal/fluid dynamics sine wave oscillation (1.5 Hz)
+    thermal_osc = 14.0 * math.sin(2.0 * math.pi * 1.55 * time.time())
+    
+    # Proportional physical jitter damping
+    jitter_flux = jitter * 40.0
+    
+    # Integrated Phase-Out angle determination
+    phase_out = phase_out_base + thermal_osc + (random.uniform(-1, 1) * jitter_flux)
+    
+    # Physical hardware temperature and voltage limit clamps (-75° to +75°)
+    phase_out = max(-75.0, min(75.0, phase_out))
+    
+    # Coherence scales with phase stability and is penalized by transient local jitter
+    coherence_base = 1.0 - (abs(phase_out) / 160.0)
+    jitter_penalty = jitter * 3.5
+    
+    coherence = max(0.15, min(0.9999, coherence_base - jitter_penalty))
+    
+    # Organic intelligence accumulation from continuous system-wide coherence
+    if coherence > 0.82:
+        intelligence = min(999.0, intelligence + (coherence - 0.81) * 0.45)
+    elif coherence > 0.68:
+        intelligence = min(999.0, intelligence + 0.05)
     else:
-        intelligence = max(38.0, intelligence - 0.055)
+        intelligence = max(10.0, intelligence - (0.68 - coherence) * 0.35)
 
 def write_ascii_packet(voltage):
     global coherence, intelligence, jar_memory_bank
-    # Map voltage to ASCII range (65-122)
-    ascii_val = int(65 + (voltage * 28) % 58)   # A-z range
+    # Map high-fidelity voltage fluctuations to the alphanumeric ASCII range 65-122 (A-z)
+    ascii_val = int(65 + (voltage * 28) % 58)
     packet_id = f"pkt_{len(jar_memory_bank)}"
     stability = max(0.1, coherence * 1.8)
     
@@ -126,14 +141,10 @@ def write_ascii_packet(voltage):
         'type': 'single'
     }
     
-    # Cap memory bank locally to 100 packets to prevent excessive growth
     if len(jar_memory_bank) > 100:
         oldest = list(jar_memory_bank.keys())[0]
         del jar_memory_bank[oldest]
-
-    # Physical influence on intelligence
-    if coherence > 0.75:
-        intelligence = min(99.8, intelligence + 0.45)
+        
     return ascii_val
 
 def combine_packets():
@@ -293,16 +304,19 @@ def main():
                     seed = random.getrandbits(32)
                     parity = bin(seed).count('1') % 2
                     jitter = random.random() * 0.03
-                    v = 1.65 + (jitter * 0.5)
+                    v = 1.65 + (random.uniform(-1, 1) * jitter * 10.0) + (0.25 * math.sin(t * 1.5))
                     multi = 3.5 if virtual_overdrive else 1.0
                     virtual_freq = virtual_bias * 1000 * multi
                     
-                    # Format: !S|SEED|NOISE|V_NODAL|PARITY|VIRT_FREQ
-                    decoded = "!S|{:08X}|{:.6f}|{:.4f}|{}|{:.1f}".format(seed, jitter, v, parity, virtual_freq)
+                    # Trigger the scientific ASCII model calculation locally to update coherence and intelligence
+                    process_telemetry_packet(v, jitter)
+                    
+                    # Format and enrich simulated telemetry line
+                    enriched_line = "!S|{:08X}|{:.6f}|{:.4f}|{}|{:.1f}|0|{:.4f}|{:.4f}".format(
+                        seed, jitter, v, parity, virtual_freq, coherence, intelligence
+                    )
                     try:
-                        sio.emit("hardware:telemetry_input", decoded)
-                        # Trigger the scientific ASCII model calculation locally
-                        process_telemetry_packet(v, jitter)
+                        sio.emit("hardware:telemetry_input", enriched_line)
                         if random.random() < 0.01:
                             sio.emit("hardware:log_input", f"PYTHON_BRIDGE: Emulated Pico telemetry pipeline running on bias {virtual_bias:.1f} GHz.")
                     except Exception:
@@ -336,9 +350,7 @@ def main():
                         try:
                             decoded = line.decode("utf-8", errors="ignore").strip()
                             if decoded.startswith("!S|"):
-                                # Forward raw telemetry line back into core SocketIO room
-                                sio.emit("hardware:telemetry_input", decoded)
-                                
+
                                 # Parse physical variables: !S|SEED|NOISE|V_NODAL|PARITY...
                                 parts = decoded.split('|')
                                 if len(parts) >= 4:
@@ -353,25 +365,22 @@ def main():
                                             v = float(parts[2])
                                             jitter = float(parts[1])
 
-                                        # Smoother shimmer
-                                        shimmer = 32 + (jitter * 55)
-
-                                        # Tuned Phase-Out (less aggressive)
-                                        phase_out = (v * 115) - (0.33 * shimmer) + (19 * math.sin(2 * math.pi * 34.5 * time.time()))
-                                        phase_out = max(-68, min(68, phase_out))
-
-                                        # Better coherence response
-                                        coherence = min(1.0, max(0.35, 0.92 - (abs(phase_out) / 105)))
-
-                                        # Smarter intelligence growth
-                                        if coherence > 0.76 and jitter < 0.18:
-                                            intelligence = min(99.5, intelligence + 0.38)
-                                        elif coherence > 0.62:
-                                            intelligence = min(99.5, intelligence + 0.11)
-                                        else:
-                                            intelligence = max(38.0, intelligence - 0.055)
-
+                                        # Run the physics-driven attractor calculations and update metrics
                                         process_telemetry_packet(v, jitter)
+                                        
+                                        # Enrich and unify metrics before sending to the dashboard
+                                        hrate_val = parts[6] if len(parts) > 6 else "0"
+                                        enriched_line = "!S|{}|{}|{}|{}|{}|{}|{:.4f}|{:.4f}".format(
+                                            parts[1], # SEED hex
+                                            parts[2], # JITTER/NOISE
+                                            parts[3], # V_NODAL
+                                            parts[4], # PARITY
+                                            parts[5], # VIRT_FREQ
+                                            hrate_val,
+                                            coherence,
+                                            intelligence
+                                        )
+                                        sio.emit("hardware:telemetry_input", enriched_line)
                                     except Exception:
                                         pass
                             elif decoded:

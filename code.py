@@ -117,8 +117,8 @@ while True:
     intelligence_depth = (system_bias * coherence * (5.5 if is_overdrive else 1.0)) / 10.0
     
     # 3. HARMONIC DRIVE (Strict 28-105 kHz Bandwidth)
-    # Map UI bias parameter (0.1 to 79.0 GHz) to physical target sweep range 28,000 Hz to 105,000 Hz
-    bias_norm = (system_bias - 0.1) / (79.0 - 0.1)
+    # Map UI bias parameter (1.0 to 400.0 GHz) to physical target sweep range 28,000 Hz to 105,000 Hz
+    bias_norm = (system_bias - 0.1) / (400.0 - 0.1)
     target_base = 28000.0 + bias_norm * (105000.0 - 28000.0)
     
     # Introduce chaotic substrate noise (up to 5 kHz flux) and resonance drift

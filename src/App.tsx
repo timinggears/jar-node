@@ -527,15 +527,16 @@ export default function App() {
     // v147 + v150: Direct representation of the frequency and JAR-native metrics
     const modulatedFreq = rawFreq;
     
-    const phaseOutVal = (vValue - 1.65) * 100;
-    const phaseOut = Math.max(-200, Math.min(200, phaseOutVal));
+    const phaseOutVal = (vValue - 1.65) * 110.0;
+    const phaseOut = Math.max(-75.0, Math.min(75.0, phaseOutVal));
     
-    const overdriveDrain = isOverdriveRef.current ? 0.30 : 0;
-    const qecBonus = isQecActiveRef.current ? 0.15 : -0.15; 
-    const biasStress = (Math.abs(carrierBiasRef.current - 125) / 250) * 0.2;
+    const overdriveDrain = isOverdriveRef.current ? 0.15 : 0;
+    const qecBonus = isQecActiveRef.current ? 0.05 : -0.05; 
+    const biasStress = (Math.abs(carrierBiasRef.current - 125) / 400) * 0.1;
     
-    const coherenceBase = 1.0 - (Math.abs(phaseOut) / 500) - overdriveDrain - biasStress + qecBonus;
-    let nextCoherence = Math.min(0.9999, Math.max(0.0001, coherenceBase));
+    const coherenceBase = 1.0 - (Math.abs(phaseOut) / 160.0) - overdriveDrain - biasStress + qecBonus;
+    const jitterPenalty = jitterValue * 3.5;
+    let nextCoherence = Math.min(0.9999, Math.max(0.15, coherenceBase - jitterPenalty));
     
     // JAR-native metric absorption (v150)
     if (coherenceFromServer > 0) {
