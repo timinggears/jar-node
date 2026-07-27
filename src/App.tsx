@@ -1187,7 +1187,7 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3">
-          <span className="text-zinc-500 hidden md:inline">| FLASK DWARF INSTALLED [PORT 3000 CONSOLE] |</span>
+          <span className="text-zinc-500 hidden md:inline">| FLASK DWARF INSTALLED [PORT {typeof window !== 'undefined' ? (window.location.port || '80') : '3000'} CONSOLE] |</span>
           <button 
             onClick={() => {
               window.open(window.location.origin, '_blank');

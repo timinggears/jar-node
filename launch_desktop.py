@@ -21,7 +21,7 @@ except ImportError:
 
 # Default development app link provided by the workspace proxy
 DEFAULT_URL = "https://ais-dev-hltv4y4usao3e5terlhjvj-107549292245.us-west2.run.app"
-LOCAL_URL = "http://localhost:3000"
+LOCAL_URL = os.environ.get("LOCAL_URL", "http://localhost:3001")
 
 def main():
     print("\033[1;34m========================================================\033[0m")
@@ -29,7 +29,7 @@ def main():
     print("\033[1;34m========================================================\033[0m")
     print("Select application route:")
     print(f" [1] Cloud Live Node URL (Standard Remote Deployment)")
-    print(f" [2] Local Loopback URL (Running inside container via Port 3000)")
+    print(f" [2] Local Loopback URL (Running on local machine via Port 3001)")
     
     choice = input("\nEnter system choice [1-2] (default: 1): ").strip()
     

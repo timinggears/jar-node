@@ -20,11 +20,11 @@ echo -e "${CYAN}========================================================${NC}"
 echo -e "Readying hardware-accelerated program viewport...\n"
 
 LIVE_URL="https://ais-dev-hltv4y4usao3e5terlhjvj-107549292245.us-west2.run.app"
-LOCAL_URL="http://localhost:3000"
+LOCAL_URL="${LOCAL_URL:-http://localhost:3001}"
 
 echo -e "Which target node core would you like to latch onto?"
 echo -e " [1] Cloud Live Node Core (Standard Remote Host)"
-echo -e " [2] Local Loopback Core (Running on Localmachine Node on Port 3000)"
+echo -e " [2] Local Loopback Core (Running on Localmachine Node on Port 3001)"
 read -r -p "Enter Choice [1-2] (default: 1): " choice
 
 if [[ "$choice" == "2" ]]; then

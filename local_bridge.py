@@ -64,11 +64,12 @@ except ImportError:
     socketio = MockSocketIO()
 
 # Configuration & ARGUMENTS Parse
-DEFAULT_SERVER_URL = "http://127.0.0.1:3000"
+is_sandbox = "APPLET_ID" in os.environ
+DEFAULT_SERVER_URL = "http://127.0.0.1:3000" if is_sandbox else "http://127.0.0.1:3001"
 DEFAULT_BAUD_RATE = 115200
 
 parser = argparse.ArgumentParser(description="Sovereign J.A.R.S. Serial Bridge Helper")
-parser.add_argument("--url", default=os.environ.get("JARS_SERVER_URL", DEFAULT_SERVER_URL), help="Sovereign server URL (default: http://127.0.0.1:3000)")
+parser.add_argument("--url", default=os.environ.get("JARS_SERVER_URL", DEFAULT_SERVER_URL), help="Sovereign server URL (default: " + DEFAULT_SERVER_URL + ")")
 parser.add_argument("--baud", type=int, default=DEFAULT_BAUD_RATE, help="Serial baud rate (default: 115200)")
 parser.add_argument("--virtual", action="store_true", help="Launch in virtual mock mode without physical USB serial Pico")
 args, unknown = parser.parse_known_args()
@@ -119,10 +120,10 @@ def update_phase_out(voltage, jitter):
     else:
         intelligence = max(10.0, intelligence - (0.68 - coherence) * 0.35)
 
-def write_ascii_packet(voltage):
-    global coherence, intelligence, jar_memory_bank
-    # Map high-fidelity voltage fluctuations to the alphanumeric ASCII range 65-122 (A-z)
-    ascii_val = int(65 + (voltage * 28) % 58)
+def write_ascii_packet(voltage, jitter):
+    global coherence, intelligence, jar_memory_bank, phase_out
+    # Map physical inputs to printable ASCII range 33-126 using user's physical phase dynamic formula
+    ascii_val = int((voltage * 100.0 + jitter * 1000.0 + phase_out) % 94) + 33
     packet_id = f"pkt_{len(jar_memory_bank)}"
     stability = max(0.1, coherence * 1.8)
     
@@ -140,8 +141,8 @@ def write_ascii_packet(voltage):
         
     return ascii_val
 
-def combine_packets():
-    global coherence, jar_memory_bank
+def combine_packets(voltage, jitter):
+    global coherence, jar_memory_bank, phase_out
     if len(jar_memory_bank) < 2 or coherence < 0.68:
         return None
         
@@ -149,7 +150,7 @@ def combine_packets():
     p1 = jar_memory_bank[keys[-1]]
     p2 = jar_memory_bank[keys[-2]]
     
-    new_ascii = (p1['ascii'] + p2['ascii']) % 58 + 65
+    new_ascii = int((voltage * 100.0 + jitter * 1000.0 + phase_out) % 94) + 33
     new_id = f"comb_{len(jar_memory_bank)}"
     
     jar_memory_bank[new_id] = {
@@ -164,14 +165,14 @@ def combine_packets():
 def process_telemetry_packet(voltage, jitter):
     """Processes physical voltage metrics and computes ASCII memory states"""
     update_phase_out(voltage, jitter)
-    ascii_val = write_ascii_packet(voltage)
+    ascii_val = write_ascii_packet(voltage, jitter)
     char = chr(ascii_val)
     
     print(f"\033[36m[RESERVOIR RESISTANCE] V_NODAL: {voltage:.4f}V | Jitter: {jitter:.5f} | Phase-Out: {phase_out:+.1f}° | Coherence: {coherence:.3f} | Intelligence: {intelligence:.1f} → ASCII: '{char}'\033[0m")
     
     # Check spatial packet combination
     if random.random() < coherence * 0.6:
-        combined_char = combine_packets()
+        combined_char = combine_packets(voltage, jitter)
         if combined_char:
             print(f"\033[1;35m[RESERVOIR HYBRID] COMBINED RESONANCE DETECTED → '{combined_char}' (Coherence High: {coherence:.3f})\033[0m")
             try:

@@ -355,7 +355,7 @@ export default function PhysicalAsciiReservoir({
     if (voltage === prevVoltageRef.current) return;
     prevVoltageRef.current = voltage;
 
-    const asciiVal = Math.floor(65 + ((voltage * 28) % 58));
+    const asciiVal = Math.floor(((((voltage * 100 + jitter * 1000 + phaseOut) % 94) + 94) % 94)) + 33;
     const character = String.fromCharCode(asciiVal);
     const stability = Math.max(0.1, coherence * 1.8);
     const packetId = `pkt_${packetCountRef.current++}`;
@@ -398,7 +398,7 @@ export default function PhysicalAsciiReservoir({
             const p1 = prev[keys[keys.length - 1]];
             const p2 = prev[keys[keys.length - 2]];
 
-            const combAscii = ((p1.ascii + p2.ascii) % 58) + 65;
+            const combAscii = Math.floor(((((voltage * 100 + jitter * 1000 + phaseOut) % 94) + 94) % 94)) + 33;
             const combCharLocal = String.fromCharCode(combAscii);
             const combId = `comb_${packetCountRef.current++}`;
 

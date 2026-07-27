@@ -444,7 +444,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     }
   }
 
-  function runServerSideEvolution(voltage: number, coherence: number) {
+  function runServerSideEvolution(voltage: number, coherence: number, jitter: number = 0.01, phaseOut: number = 200) {
     if (!systemState.memoryBank) systemState.memoryBank = {};
     if (!systemState.trigramHistory) systemState.trigramHistory = [];
     if (!systemState.morphicPhrases) systemState.morphicPhrases = [];
@@ -452,7 +452,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     if (systemState.packetCount === undefined) systemState.packetCount = 0;
     if (systemState.prevCombChars === undefined) systemState.prevCombChars = '';
 
-    const asciiVal = Math.floor(65 + ((voltage * 28) % 58));
+    const asciiVal = Math.floor(((((voltage * 100 + jitter * 1000 + phaseOut) % 94) + 94) % 94)) + 33;
     const character = String.fromCharCode(asciiVal);
     const stability = Math.max(0.1, coherence * 1.8);
     const packetId = `pkt_${systemState.packetCount++}`;
@@ -485,7 +485,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         const p1 = systemState.memoryBank[keysAfter[keysAfter.length - 1]];
         const p2 = systemState.memoryBank[keysAfter[keysAfter.length - 2]];
 
-        const combAscii = ((p1.ascii + p2.ascii) % 58) + 65;
+        const combAscii = Math.floor(((((voltage * 100 + jitter * 1000 + phaseOut) % 94) + 94) % 94)) + 33;
         const combCharLocal = String.fromCharCode(combAscii);
         const combId = `comb_${systemState.packetCount++}`;
 
@@ -586,6 +586,11 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     const parity = parseInt(parts[4]) || 0;
     const freq = parseFloat(parts[5]) || (systemState.bias * 1000);
 
+    const shimmer = 45.0 + (jitter * 85.0);
+    const f = 35.0;
+    const t = Date.now() / 1000;
+    const phaseOut = (vNodal * 142.0) - (0.41 * shimmer) + (28.0 * Math.sin(2.0 * Math.PI * f * t));
+
     // If hashrate (index 6) is missing, <= 0 or not a number, inject real subprocess speed
     let hrate = parseFloat(parts[6]);
     if (isNaN(hrate) || hrate <= 0) {
@@ -597,11 +602,6 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     // Intercept if missing, <= 0, or if it represents raw unreactive Pico coherence (which hovers > 0.98)
     const isPicoUnreactiveCoherence = coherence > 0.985 && parts[7] !== undefined;
     if (isNaN(coherence) || coherence <= 0 || isPicoUnreactiveCoherence) {
-      const shimmer = 45.0 + (jitter * 85.0);
-      const f = 35.0;
-      const t = Date.now() / 1000;
-      const phaseOut = (vNodal * 142.0) - (0.41 * shimmer) + (28.0 * Math.sin(2.0 * Math.PI * f * t));
-      
       const overdriveDrain = systemState.overdrive ? 0.15 : 0;
       const biasStress = (Math.abs(systemState.bias - 125) / 400) * 0.1;
       
@@ -652,7 +652,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     if (nowRef - lastEvolutionProcessTime >= 500) {
       lastEvolutionProcessTime = nowRef;
       process.nextTick(() => {
-        runServerSideEvolution(vNodal, coherence);
+        runServerSideEvolution(vNodal, coherence, jitter, phaseOut);
       });
     }
 
@@ -881,7 +881,17 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     });
   });
 
-  const PORT = process.env.APP_PORT ? parseInt(process.env.APP_PORT) : 3000;
+  let resolvedPort = 3000;
+  if (process.env.APPLET_ID) {
+    // Inside AI Studio container sandbox, force port 3000 to keep preview iframe working properly
+    resolvedPort = 3000;
+  } else if (process.env.APP_PORT && !isNaN(parseInt(process.env.APP_PORT))) {
+    resolvedPort = parseInt(process.env.APP_PORT);
+  } else {
+    // Outside of AI Studio (downloaded / local), run on port 3001 as requested
+    resolvedPort = 3001;
+  }
+  const PORT = resolvedPort;
   
   // --- MINING IDENTITY ---
   let POOL_URL = systemState.pool_url || "rx.unmineable.com:3333";
