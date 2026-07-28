@@ -26,6 +26,12 @@ latest_hrate = 0.0
 base_hw_freq = 35000
 phase_accumulator = 0.0
 
+# Dual-Tone Physical Combining State
+freq_a = 32000
+freq_b = 32000
+use_dual = False
+dual_switch_time = 0.004   # 4 ms each side
+
 # Neural Metrics (JAR-native processing)
 coherence = 0.98
 intelligence_depth = 0.0
@@ -89,6 +95,14 @@ while True:
             elif buffer.startswith("HRATE:"):
                 try: latest_hrate = float(buffer.split(":")[1])
                 except: pass
+            elif buffer.startswith("FREQ_A:"):
+                try: freq_a = int(float(buffer.split(":")[1]))
+                except: pass
+            elif buffer.startswith("FREQ_B:"):
+                try: freq_b = int(float(buffer.split(":")[1]))
+                except: pass
+            elif buffer.startswith("DUAL:"):
+                use_dual = (buffer.split(":")[1].strip() == "1")
             elif buffer == "SAVE":
                 save_state()
             elif buffer == "LOAD":
@@ -142,7 +156,14 @@ while True:
     duty_cycle = max(16384, min(49152, duty_cycle))
     
     try:
-        coil.frequency = drive_freq
+        if use_dual:
+            # Alternate rapidly between the two dual-tone frequencies
+            if int(time.monotonic() / dual_switch_time) % 2 == 0:
+                coil.frequency = min(1000000, max(1000, freq_a))
+            else:
+                coil.frequency = min(1000000, max(1000, freq_b))
+        else:
+            coil.frequency = drive_freq
         coil.duty_cycle = duty_cycle
     except Exception:
         pass

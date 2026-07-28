@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -1381,12 +1381,12 @@ export default function App() {
             <DesktopWindow 
               key="visualizer"
               id="visualizer" 
-              title="Vector_Topology" 
-              icon={<Layout size={16} />}
+              title="Jar_Reservoir_Cube" 
+              icon={<Box size={16} />}
               onClose={() => closeWindow('visualizer')}
               onFocus={() => setActiveWindow('visualizer')}
               isActive={activeWindow === 'visualizer'}
-              initialPos={{ x: 400, y: 100 }}
+              initialPos={{ x: 380, y: 80 }}
             >
               <div className="h-full bg-black relative">
                 <WarpVisualizerMemo 
@@ -1404,9 +1404,6 @@ export default function App() {
                   isEntangled={isEntangled}
                   parity={stats.parity}
                 />
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <p className="text-[8px] text-white/20 font-black tracking-[1em] uppercase">Phase_Projection</p>
-                </div>
               </div>
             </DesktopWindow>
           )}

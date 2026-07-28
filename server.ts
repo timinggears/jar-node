@@ -795,6 +795,40 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       }
     });
 
+    socket.on('hardware:dual_tone', (data: any) => {
+      const freqA = Math.max(1000, Math.min(1000000, Number(data?.freqA) || 32500));
+      const freqB = Math.max(1000, Math.min(1000000, Number(data?.freqB) || 33800));
+      const durationMs = Math.max(500, Math.min(10000, Number(data?.durationMs) || 2000));
+
+      console.log(`[DUAL_TONE] Initiating physical dual-frequency drive: FREQ_A=${freqA}, FREQ_B=${freqB}, DURATION=${durationMs}ms`);
+
+      io.emit('hardware:command', `FREQ_A:${freqA}`);
+      io.emit('hardware:command', `FREQ_B:${freqB}`);
+      io.emit('hardware:command', `DUAL:1`);
+
+      if (hardwarePort && hardwarePort.isOpen) {
+        hardwarePort.write(`FREQ_A:${freqA}\n`);
+        hardwarePort.write(`FREQ_B:${freqB}\n`);
+        hardwarePort.write(`DUAL:1\n`);
+      }
+
+      io.emit('log', `DUAL_TONE_ACTIVE: Driving frequencies A:${freqA}Hz & B:${freqB}Hz into reservoir substrate.`);
+
+      setTimeout(() => {
+        io.emit('hardware:command', `DUAL:0`);
+        if (hardwarePort && hardwarePort.isOpen) {
+          hardwarePort.write(`DUAL:0\n`);
+        }
+        io.emit('log', `DUAL_TONE_COMPLETE: Dual drive disengaged. Combined physical resonance pattern formed.`);
+        io.emit('hardware:resonance_event', {
+          token: data?.token || 'k4x',
+          freqA,
+          freqB,
+          timestamp: Date.now()
+        });
+      }, durationMs);
+    });
+
     socket.on('vault:save', () => {
       const entry = {
         id: Math.random().toString(36).substring(7).toUpperCase(),
@@ -1249,6 +1283,39 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
   // Start miner and the Python bridge daemon side-car service
   startMining();
   startPythonBridge();
+
+  // --- DUAL-TONE COMBINING HARDWARE ENDPOINT ---
+  app.post('/api/hardware/dual_tone', (req, res) => {
+    const { freqA = 32500, freqB = 33800, durationMs = 2000, token = 'k4x' } = req.body || {};
+    
+    io.emit('hardware:command', `FREQ_A:${freqA}`);
+    io.emit('hardware:command', `FREQ_B:${freqB}`);
+    io.emit('hardware:command', `DUAL:1`);
+
+    if (hardwarePort && hardwarePort.isOpen) {
+      hardwarePort.write(`FREQ_A:${freqA}\n`);
+      hardwarePort.write(`FREQ_B:${freqB}\n`);
+      hardwarePort.write(`DUAL:1\n`);
+    }
+
+    io.emit('log', `DUAL_TONE_ACTIVE: Physical resonance dual-frequency drive [${freqA}Hz & ${freqB}Hz] engaged.`);
+
+    setTimeout(() => {
+      io.emit('hardware:command', `DUAL:0`);
+      if (hardwarePort && hardwarePort.isOpen) {
+        hardwarePort.write(`DUAL:0\n`);
+      }
+      io.emit('log', `DUAL_TONE_COMPLETE: Dual drive disengaged. Combined physical state formed.`);
+      io.emit('hardware:resonance_event', {
+        token,
+        freqA,
+        freqB,
+        timestamp: Date.now()
+      });
+    }, durationMs);
+
+    res.json({ success: true, freqA, freqB, durationMs, token });
+  });
 
   // --- PYTHON BRIDGE CONTROLLERS ---
   app.get('/api/bridge/status', (req, res) => {

@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -101,8 +101,8 @@ export default function Taskbar({
       />
       <AppIcon 
         id="visualizer"
-        icon={<Layout size={20} />} 
-        label="Visualizer" 
+        icon={<Box size={20} />} 
+        label="The Cube" 
         isOpen={openWindows.includes('visualizer')} 
         isActive={activeWindow === 'visualizer'}
         onClick={() => onToggleWindow('visualizer')}
