@@ -225,6 +225,37 @@ export default function WarpVisualizer({
     };
   }, [triggerResonanceEvent]);
 
+  // Continuous Reservoir Block Read Loop (Runs automatically without needing a button press)
+  useEffect(() => {
+    const monadTokens = ['k4x', 'n', 'x', '0', '1', 'k', '4', 'a', 'b', '9', 'm', 'p', 'z', 'q', 'v', '7', 'Ω', 'Ψ', '⚡'];
+    let stepCount = 0;
+
+    const readInterval = setInterval(() => {
+      stepCount++;
+      const cells = planeGridRef.current;
+      if (!cells || cells.length === 0) return;
+
+      // Continuously read and excite 2 to 4 cells per tick across the 8x8 matrix in a traveling wave pattern
+      const rowSelect = stepCount % 8;
+      const count = 2 + Math.floor(Math.random() * 2);
+
+      for (let i = 0; i < count; i++) {
+        const colSelect = Math.floor(Math.random() * 8);
+        const cell = cells.find(c => c.row === rowSelect && c.col === colSelect) || cells[Math.floor(Math.random() * cells.length)];
+        if (cell) {
+          const sampleToken = monadTokens[Math.floor(Math.random() * monadTokens.length)];
+          cell.token = sampleToken;
+          cell.shimmer = 0.88 + Math.random() * 0.12; // Light High
+          cell.stability = 0.82 + Math.random() * 0.16;
+          cell.zOffset = (Math.random() > 0.5 ? 1 : -1) * (14 + Math.floor(Math.random() * 16));
+          cell.lastUpdated = Date.now();
+        }
+      }
+    }, 75); // ~13 Hz continuous block scanning read loop
+
+    return () => clearInterval(readInterval);
+  }, []);
+
   // Trigger Dual-Tone Hardware Drive
   const triggerDualToneDrive = async () => {
     setIsDualToneDriving(true);
@@ -632,7 +663,10 @@ export default function WarpVisualizer({
         <div className="flex items-center gap-2 bg-black/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-lg pointer-events-auto">
           <LayoutGrid size={14} className="text-[#00ffcc] animate-pulse" />
           <span className="text-[10px] font-black tracking-widest text-[#00ffcc]">RESERVOIR_MEMORY_PLANE</span>
-          <span className="text-[9px] text-zinc-500 font-bold ml-1">8x8 MATRIX</span>
+          <span className="text-[9px] text-emerald-400 font-bold ml-1 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            BLOCK_READ: ACTIVE
+          </span>
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">

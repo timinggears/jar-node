@@ -604,15 +604,15 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
 
     // Coherence (index 7)
     let coherence = parseFloat(parts[7]);
-    // Intercept if missing or <= 0, ensuring high coherence active state
-    if (isNaN(coherence) || coherence <= 0) {
+    // Intercept if missing or < 0.50, ensuring high coherence active state
+    if (isNaN(coherence) || coherence < 0.50) {
       const overdriveDrain = systemState.overdrive ? 0.05 : 0;
       const biasStress = (Math.abs(systemState.bias - 125) / 400) * 0.05;
       
       const phaseDeviation = Math.abs(phaseOut - 215.2);
       const coherenceBase = 0.95 - (phaseDeviation / 800.0);
       const jitterPenalty = jitter * 2.0;
-      coherence = Math.min(0.995, Math.max(0.72, coherenceBase - jitterPenalty - overdriveDrain - biasStress));
+      coherence = Math.min(0.995, Math.max(0.78, coherenceBase - jitterPenalty - overdriveDrain - biasStress));
     }
 
     // Depth / Intelligence (index 8)
