@@ -70,6 +70,7 @@ export default function WarpVisualizer({
 
   // Mode: '3d_iso' (Isometric Perspective Plane) or '2d_flat' (Direct Flat Grid Matrix)
   const [viewMode, setViewMode] = useState<'3d_iso' | '2d_flat'>('3d_iso');
+  const [gridSize, setGridSize] = useState<8 | 12 | 16>(12); // Default to 12x12 matrix (cleaner, optimal spacing)
   const [showInstructions, setShowInstructions] = useState(false);
   const [isDualToneDriving, setIsDualToneDriving] = useState(false);
   const [dualFreqA, setDualFreqA] = useState(28000);
@@ -375,12 +376,12 @@ export default function WarpVisualizer({
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
 
-      const gridSize = 16; // 16x16 Matrix
+      const curGridSize = gridSize;
 
-      // --- RENDER MODE A: 2D FLAT GRIDDED RESERVOIR PLANE (16x16) ---
+      // --- RENDER MODE A: 2D FLAT GRIDDED RESERVOIR PLANE ---
       if (viewMode === '2d_flat') {
         const maxPlaneSize = Math.min(width - 60, height - 130);
-        const cellSize = maxPlaneSize / gridSize;
+        const cellSize = maxPlaneSize / curGridSize;
         const startX = centerX - (maxPlaneSize / 2);
         const startY = centerY - (maxPlaneSize / 2);
 
@@ -396,9 +397,9 @@ export default function WarpVisualizer({
         const omegaB = isDualToneDriving ? (dualFreqB / 28000) * 3.2 : omegaA + 0.4;
         const systemCoh = propsRef.current.coherence;
 
-        // Render 16x16 Grid Cells with Wave / Particle Duality
-        for (let r = 0; r < gridSize; r++) {
-          for (let c = 0; c < gridSize; c++) {
+        // Render Grid Cells with Wave / Particle Duality
+        for (let r = 0; r < curGridSize; r++) {
+          for (let c = 0; c < curGridSize; c++) {
             const cellData = planeGridRef.current.find(cell => cell.row === r && cell.col === c);
             const rawShimmer = isFlash ? 1.0 : (cellData ? cellData.shimmer : 0.1);
             const stability = cellData ? cellData.stability : 0.5;
@@ -468,10 +469,10 @@ export default function WarpVisualizer({
           }
         }
       } 
-      // --- RENDER MODE B: 3D ISOMETRIC GRIDDED RESERVOIR PLANE (16x16) ---
+      // --- RENDER MODE B: 3D ISOMETRIC GRIDDED RESERVOIR PLANE ---
       else {
-        const planeExtent = Math.min(width, height) * 0.26;
-        const cellSize = (planeExtent * 2) / gridSize;
+        const planeExtent = Math.min(width, height) * (curGridSize === 8 ? 0.22 : (curGridSize === 12 ? 0.26 : 0.28));
+        const cellSize = (planeExtent * 2) / curGridSize;
 
         const cosY = Math.cos(rotYRef.current);
         const sinY = Math.sin(rotYRef.current);
@@ -515,7 +516,7 @@ export default function WarpVisualizer({
         // Render Z = 0 NULL PLANE WIREFRAME (No Shimmer on Z=0, clean dark baseline grid)
         ctx.strokeStyle = 'rgba(0, 255, 204, 0.16)';
         ctx.lineWidth = 0.8;
-        for (let i = 0; i <= gridSize; i++) {
+        for (let i = 0; i <= curGridSize; i++) {
           const pos = -planeExtent + i * cellSize;
           const pA1 = project3D(pos, 0, -planeExtent);
           const pA2 = project3D(pos, 0, planeExtent);
@@ -537,9 +538,9 @@ export default function WarpVisualizer({
         const omegaB = isDualToneDriving ? (dualFreqB / 28000) * 3.2 : omegaA + 0.4;
         const systemCoh = propsRef.current.coherence;
 
-        // Render 16x16 Isometric Cells with Wave / Particle Duality
-        for (let r = 0; r < gridSize; r++) {
-          for (let c = 0; c < gridSize; c++) {
+        // Render Isometric Cells with Wave / Particle Duality
+        for (let r = 0; r < curGridSize; r++) {
+          for (let c = 0; c < curGridSize; c++) {
             const cellData = planeGridRef.current.find(cell => cell.row === r && cell.col === c);
             const rawShimmer = isFlash ? 1.0 : (cellData ? cellData.shimmer : 0.1);
             const stability = cellData ? cellData.stability : 0.5;
@@ -718,7 +719,7 @@ export default function WarpVisualizer({
 
     animationId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animationId);
-  }, [viewMode]);
+  }, [viewMode, gridSize]);
 
   return (
     <section ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-[#030508] overflow-hidden font-mono text-xs text-white">
@@ -742,18 +743,36 @@ export default function WarpVisualizer({
           <span className="text-[10px] font-black tracking-widest text-[#00ffcc]">RESERVOIR_MEMORY_PLANE</span>
           <span className="text-[9px] text-emerald-400 font-bold ml-1 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            BLOCK_READ: ACTIVE (16x16)
+            READ: ACTIVE ({gridSize}×{gridSize})
           </span>
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">
+          {/* Matrix Size Dimension Selector */}
+          <div className="flex items-center gap-1 border border-white/10 rounded-lg p-1 bg-black/80 backdrop-blur-md">
+            <span className="text-[8px] text-zinc-400 font-bold px-1 uppercase">DIM:</span>
+            {([8, 12, 16] as const).map(dim => (
+              <button
+                key={dim}
+                onClick={() => setGridSize(dim)}
+                className={`px-2 py-0.5 rounded text-[9px] font-black tracking-wider transition-all ${
+                  gridSize === dim
+                    ? 'bg-[#00ffcc] text-black shadow-[0_0_8px_rgba(0,255,204,0.4)]'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                {dim}×{dim}
+              </button>
+            ))}
+          </div>
+
           {/* View Mode Toggle: 3D ISOMETRIC vs 2D FLAT */}
           <button
             onClick={() => setViewMode(viewMode === '3d_iso' ? '2d_flat' : '3d_iso')}
             className="px-3 py-1.5 rounded-lg border border-[#00ffcc]/30 bg-[#00ffcc]/10 hover:bg-[#00ffcc]/20 text-[#00ffcc] text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(0,255,204,0.15)]"
           >
             <Eye size={12} />
-            {viewMode === '3d_iso' ? 'VIEW: 3D ISOMETRIC PLANE' : 'VIEW: 2D FLAT PLANE'}
+            {viewMode === '3d_iso' ? 'VIEW: 3D ISOMETRIC' : 'VIEW: 2D FLAT'}
           </button>
 
           <button
