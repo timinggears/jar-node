@@ -322,6 +322,7 @@ async function startServer() {
 
   function emitPendingTelemetry() {
     if (pendingTelemetryToEmit) {
+      io.emit('telemetry', pendingTelemetryToEmit);
       io.to('telemetry').emit('telemetry', pendingTelemetryToEmit);
       pendingTelemetryToEmit = null;
       lastTelemetryEmitTime = Date.now();
@@ -584,7 +585,11 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     const jitter = parseFloat(parts[2]) || 0.01;
     const vNodal = parseFloat(parts[3]) || 1.65;
     const parity = parseInt(parts[4]) || 0;
-    const freq = parseFloat(parts[5]) || (systemState.bias * 1000);
+    let freq = parseFloat(parts[5]);
+    if (isNaN(freq) || freq < 1000) {
+      // Physical carrier frequency driven in tens of kHz range (e.g. 35,200 Hz to 105,000 Hz)
+      freq = 35200.0 + (vNodal * 2800) + (jitter * 60000.0);
+    }
 
     const shimmer = 45.0 + (jitter * 85.0);
     const f = 35.0;
@@ -599,16 +604,15 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
 
     // Coherence (index 7)
     let coherence = parseFloat(parts[7]);
-    // Intercept if missing, <= 0, or if it represents raw unreactive Pico coherence (which hovers > 0.98)
-    const isPicoUnreactiveCoherence = coherence > 0.985 && parts[7] !== undefined;
-    if (isNaN(coherence) || coherence <= 0 || isPicoUnreactiveCoherence) {
-      const overdriveDrain = systemState.overdrive ? 0.15 : 0;
-      const biasStress = (Math.abs(systemState.bias - 125) / 400) * 0.1;
+    // Intercept if missing or <= 0, ensuring high coherence active state
+    if (isNaN(coherence) || coherence <= 0) {
+      const overdriveDrain = systemState.overdrive ? 0.05 : 0;
+      const biasStress = (Math.abs(systemState.bias - 125) / 400) * 0.05;
       
       const phaseDeviation = Math.abs(phaseOut - 215.2);
-      const coherenceBase = 1.0 - (phaseDeviation / 400.0);
-      const jitterPenalty = jitter * 3.5;
-      coherence = Math.min(0.9999, Math.max(0.15, coherenceBase - jitterPenalty - overdriveDrain - biasStress));
+      const coherenceBase = 0.95 - (phaseDeviation / 800.0);
+      const jitterPenalty = jitter * 2.0;
+      coherence = Math.min(0.995, Math.max(0.72, coherenceBase - jitterPenalty - overdriveDrain - biasStress));
     }
 
     // Depth / Intelligence (index 8)
@@ -1034,7 +1038,22 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         saveState();
       }
       
-      queueTelemetryEmission(telemetryLine);
+      queueTelemetryEmission(normalizedLine);
+
+      // Periodically transmit monad packet events to drive 8x8 plane grid matrix twinkling
+      if (Math.random() < 0.6) {
+        const monadTokens = ['k4x', 'n', 'x', '0', '1', 'k', '4', 'a', 'b', '9', 'm', 'p', 'z', 'q', 'v', '7'];
+        const sampleToken = monadTokens[Math.floor(Math.random() * monadTokens.length)];
+        io.emit('hardware:monad_packet', {
+          token: sampleToken,
+          row: Math.floor(Math.random() * 8),
+          col: Math.floor(Math.random() * 8),
+          zOffset: (Math.random() > 0.5 ? 1 : -1) * (10 + Math.random() * 20),
+          stability: 0.82 + Math.random() * 0.17,
+          coherence: normalizedCoherence,
+          freq: parseFloat(parts[5]) || 35200
+        });
+      }
 
       // Virtual Hashrate Simulation
       if (virtualSubstrateActive) {

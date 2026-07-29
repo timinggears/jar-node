@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, LayoutGrid, HelpCircle, X, Sparkles, Eye, Layers, RefreshCw } from 'lucide-react';
+import { Zap, LayoutGrid, HelpCircle, X, Sparkles, Eye } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface WarpVisualizerProps {
@@ -31,9 +31,10 @@ interface PlaneCell {
   col: number; // 0..7
   token: string;
   shimmer: number; // 0.0 (DARK) to 1.0 (LIGHT HIGH)
-  stability: number;
+  stability: number; // 0.1 to 1.0 (High stability stays bright longer)
   isCombined: boolean;
   lastUpdated: number;
+  zOffset: number; // Z elevation in px above (+12 to +28) or below (-12 to -28) null Z=0
 }
 
 interface Shockwave {
@@ -43,16 +44,29 @@ interface Shockwave {
 }
 
 export default function WarpVisualizer({ 
-  coherence, 
-  jitter, 
-  frequency, 
+  coherence: initialCoherence, 
+  jitter: initialJitter, 
+  frequency: initialFrequency, 
   bias,
   vNodal,
   intelligence 
 }: WarpVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const propsRef = useRef({ coherence, jitter, frequency, bias, vNodal, intelligence });
+
+  // Live telemetry state
+  const [liveCoherence, setLiveCoherence] = useState(initialCoherence > 0.3 ? initialCoherence : 0.885);
+  const [liveFrequency, setLiveFrequency] = useState(initialFrequency > 1000 ? initialFrequency : 35200);
+  const [liveJitter, setLiveJitter] = useState(initialJitter || 0.012);
+
+  const propsRef = useRef({ 
+    coherence: liveCoherence, 
+    jitter: liveJitter, 
+    frequency: liveFrequency, 
+    bias, 
+    vNodal, 
+    intelligence 
+  });
 
   // Mode: '3d_iso' (Isometric Perspective Plane) or '2d_flat' (Direct Flat Grid Matrix)
   const [viewMode, setViewMode] = useState<'3d_iso' | '2d_flat'>('3d_iso');
@@ -76,19 +90,21 @@ export default function WarpVisualizer({
   // 8x8 Gridded Reservoir Plane Matrix (64 Memory Block Cells)
   const planeGridRef = useRef<PlaneCell[]>((() => {
     const cells: PlaneCell[] = [];
-    const sampleTokens = ['n', 'x', 'k4x', 'k', '4', '0', '1', 'a', 'b', '9', 'm', 'p', 'z', 'q', 'v', '7'];
+    const sampleTokens = ['n', 'x', 'k4x', 'k', '4', '0', '1', 'a', 'b', '9', 'm', 'p', 'z', 'q', 'v', '7', 'Ω', 'Ψ', '⚡'];
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
-        const isHigh = (r === 3 && c === 4) || (r === 2 && c === 2) || (r === 5 && c === 6);
+        const isHigh = (r === 3 && c === 4) || (r === 2 && c === 2) || (r === 5 && c === 6) || (r === 1 && c === 5) || (r === 6 && c === 2);
+        const zDir = (r + c) % 2 === 0 ? 1 : -1;
         cells.push({
           id: `r${r}_c${c}`,
           row: r,
           col: c,
-          token: isHigh ? (r === 3 && c === 4 ? 'k4x' : 'n') : sampleTokens[Math.floor(Math.random() * sampleTokens.length)],
-          shimmer: isHigh ? 0.95 : Math.random() * 0.18, // Light Highs vs Dark Lows
-          stability: Math.random() * 0.5 + 0.5,
+          token: isHigh ? (r === 3 && c === 4 ? 'k4x' : (r % 2 === 0 ? 'n' : 'x')) : sampleTokens[Math.floor(Math.random() * sampleTokens.length)],
+          shimmer: isHigh ? (0.85 + Math.random() * 0.15) : (0.15 + Math.random() * 0.25),
+          stability: isHigh ? 0.88 : Math.random() * 0.5 + 0.3,
           isCombined: r === 3 && c === 4,
-          lastUpdated: Date.now() - Math.floor(Math.random() * 8000)
+          lastUpdated: Date.now() - Math.floor(Math.random() * 8000),
+          zOffset: isHigh ? zDir * (14 + Math.floor(Math.random() * 12)) : zDir * (6 + Math.floor(Math.random() * 8))
         });
       }
     }
@@ -97,12 +113,19 @@ export default function WarpVisualizer({
 
   // Sync propsRef
   useEffect(() => {
-    propsRef.current = { coherence, jitter, frequency, bias, vNodal, intelligence };
-  }, [coherence, jitter, frequency, bias, vNodal, intelligence]);
+    propsRef.current = { 
+      coherence: liveCoherence, 
+      jitter: liveJitter, 
+      frequency: liveFrequency, 
+      bias, 
+      vNodal, 
+      intelligence 
+    };
+  }, [liveCoherence, liveJitter, liveFrequency, bias, vNodal, intelligence]);
 
   // Trigger Combined Resonance Event
   const triggerResonanceEvent = useCallback((tokenStr: string = 'k4x') => {
-    flashFramesRef.current = 16;
+    flashFramesRef.current = 18;
     floatingTokenRef.current = { token: tokenStr, alpha: 1.0, yOffset: 0 };
     setActiveToken(tokenStr);
 
@@ -112,7 +135,7 @@ export default function WarpVisualizer({
       hue: 160
     });
 
-    // Illuminate a cluster of cells on the gridded plane (Light Highs)
+    // Illuminate a vibrant cluster of cells across the 8x8 plane grid
     const cells = planeGridRef.current;
     const centerRow = 3 + Math.floor(Math.random() * 2);
     const centerCol = 3 + Math.floor(Math.random() * 2);
@@ -120,17 +143,53 @@ export default function WarpVisualizer({
     cells.forEach(cell => {
       const dist = Math.abs(cell.row - centerRow) + Math.abs(cell.col - centerCol);
       if (dist <= 2) {
-        cell.shimmer = 1.0 - dist * 0.2; // Peak light at center
+        cell.shimmer = 1.0 - dist * 0.15; // Peak light at center
         cell.token = dist === 0 ? tokenStr : (Math.random() > 0.5 ? 'n' : 'x');
         cell.isCombined = dist === 0;
+        cell.stability = 0.95;
+        cell.zOffset = (dist % 2 === 0 ? 1 : -1) * (18 + (2 - dist) * 6); // Elevated above/below Z=0
         cell.lastUpdated = Date.now();
       }
     });
   }, []);
 
-  // Listen for hardware socket events
+  // Listen for hardware socket events and live telemetry stream
   useEffect(() => {
     const socket = io();
+
+    socket.on('telemetry', (line: string) => {
+      if (line && line.startsWith('!S|')) {
+        const parts = line.split('|');
+        const seedStr = parts[1] || '000';
+        const jit = parseFloat(parts[2]);
+        const freqVal = parseFloat(parts[5]);
+        const cohVal = parseFloat(parts[7]);
+
+        if (!isNaN(cohVal) && cohVal > 0) {
+          setLiveCoherence(cohVal);
+        }
+        if (!isNaN(freqVal) && freqVal > 1000) {
+          setLiveFrequency(freqVal);
+        }
+        if (!isNaN(jit) && jit > 0) {
+          setLiveJitter(jit);
+        }
+
+        // Live telemetry write into 8x8 matrix
+        const sampleToken = seedStr.substring(0, 3) || 'k4x';
+        setActiveToken(sampleToken);
+
+        const cells = planeGridRef.current;
+        const targetIdx = Math.floor(Math.random() * cells.length);
+        if (cells[targetIdx]) {
+          cells[targetIdx].token = sampleToken;
+          cells[targetIdx].shimmer = 0.95;
+          cells[targetIdx].stability = Math.min(0.99, 0.7 + (cohVal || 0.85) * 0.28);
+          cells[targetIdx].zOffset = (Math.random() > 0.5 ? 1 : -1) * (12 + Math.floor(Math.random() * 18));
+          cells[targetIdx].lastUpdated = Date.now();
+        }
+      }
+    });
 
     socket.on('hardware:resonance_event', (data: any) => {
       triggerResonanceEvent(data?.token || 'k4x');
@@ -142,12 +201,21 @@ export default function WarpVisualizer({
         setActiveToken(tokenStr);
 
         const cells = planeGridRef.current;
-        const targetIdx = Math.floor(Math.random() * cells.length);
-        if (cells[targetIdx]) {
-          cells[targetIdx].token = tokenStr;
-          cells[targetIdx].shimmer = 1.0; // Light High
-          cells[targetIdx].isCombined = !!data?.isCombined;
-          cells[targetIdx].lastUpdated = Date.now();
+        const r = typeof data.row === 'number' ? data.row : Math.floor(Math.random() * 8);
+        const c = typeof data.col === 'number' ? data.col : Math.floor(Math.random() * 8);
+        const targetCell = cells.find(cell => cell.row === r && cell.col === c) || cells[Math.floor(Math.random() * cells.length)];
+
+        if (targetCell) {
+          targetCell.token = tokenStr;
+          targetCell.shimmer = 1.0; // Light High
+          targetCell.stability = data?.stability || 0.88;
+          targetCell.isCombined = !!data?.isCombined;
+          if (typeof data.zOffset === 'number' && data.zOffset !== 0) {
+            targetCell.zOffset = data.zOffset;
+          } else {
+            targetCell.zOffset = (Math.random() > 0.5 ? 1 : -1) * (12 + Math.floor(Math.random() * 18));
+          }
+          targetCell.lastUpdated = Date.now();
         }
       }
     });
@@ -234,7 +302,7 @@ export default function WarpVisualizer({
       ctx.save();
       ctx.scale(dpr, dpr);
 
-      // Deep Dark Substrate Background
+      // Deep Dark Substrate Canvas
       ctx.fillStyle = '#030508';
       ctx.fillRect(0, 0, width, height);
 
@@ -242,17 +310,16 @@ export default function WarpVisualizer({
       const centerY = height / 2;
       const t = (time - startTime) / 1000;
 
-      const { coherence: coh } = propsRef.current;
-
       // Slow auto-yaw rotation in 3D ISO mode
       if (viewMode === '3d_iso' && !isDraggingRef.current) {
         rotYRef.current += 0.003;
       }
 
-      // Decay Cell Shimmers gently over time (shimmer highs -> lows)
+      // Decay Cell Shimmers based on cell stability (High stability stays bright longer)
       planeGridRef.current.forEach(cell => {
-        if (cell.shimmer > 0.12) {
-          cell.shimmer = Math.max(0.08, cell.shimmer - 0.003);
+        const decayRate = 0.0012 / Math.max(0.2, cell.stability);
+        if (cell.shimmer > 0.15) {
+          cell.shimmer = Math.max(0.12, cell.shimmer - decayRate);
         }
       });
 
@@ -283,7 +350,10 @@ export default function WarpVisualizer({
         for (let r = 0; r < gridSize; r++) {
           for (let c = 0; c < gridSize; c++) {
             const cellData = planeGridRef.current.find(cell => cell.row === r && cell.col === c);
-            const shimmer = isFlash ? 1.0 : (cellData ? cellData.shimmer : 0.1);
+            const rawShimmer = isFlash ? 1.0 : (cellData ? cellData.shimmer : 0.1);
+            const microTwinkle = (rawShimmer > 0.2) ? Math.sin(t * 12 + r * 2.5 + c * 3.1) * 0.08 : 0;
+            const shimmer = Math.min(1.0, Math.max(0.08, rawShimmer + microTwinkle));
+
             const isCombined = cellData ? cellData.isCombined : false;
             const tokenStr = cellData ? cellData.token : '';
 
@@ -291,7 +361,7 @@ export default function WarpVisualizer({
             const cy = startY + r * cellSize;
 
             // Cell Fill (LIGHT HIGH vs DARK LOW)
-            if (shimmer > 0.45) {
+            if (shimmer > 0.4) {
               // HIGH LIGHT CELL
               const alpha = Math.min(0.9, shimmer);
               ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${alpha})` : `rgba(0, 225, 180, ${alpha * 0.8})`;
@@ -304,7 +374,7 @@ export default function WarpVisualizer({
               ctx.strokeRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);
             } else {
               // DARK DORMANT CELL
-              const alpha = Math.max(0.04, shimmer * 0.2);
+              const alpha = Math.max(0.05, shimmer * 0.2);
               ctx.fillStyle = `rgba(0, 255, 170, ${alpha})`;
               ctx.fillRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);
 
@@ -314,11 +384,11 @@ export default function WarpVisualizer({
             }
 
             // Cell Token String
-            if (tokenStr && shimmer > 0.2) {
+            if (tokenStr && shimmer > 0.18) {
               ctx.save();
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              if (shimmer > 0.45) {
+              if (shimmer > 0.4) {
                 ctx.fillStyle = '#ffffff';
                 ctx.font = isCombined ? '900 14px monospace' : '800 11px monospace';
                 ctx.shadowBlur = 8;
@@ -378,27 +448,85 @@ export default function WarpVisualizer({
         });
         shockwavesRef.current = shockwavesRef.current.filter(sw => sw.alpha > 0);
 
-        // Render 8x8 Isometric Block Cells
+        // Render Z=0 Null Baseline Grid Wireframe
+        ctx.strokeStyle = 'rgba(0, 255, 204, 0.18)';
+        ctx.lineWidth = 1.0;
+        for (let i = 0; i <= gridSize; i++) {
+          const pos = -planeExtent + i * cellSize;
+          const pA1 = project3D(pos, 0, -planeExtent);
+          const pA2 = project3D(pos, 0, planeExtent);
+          ctx.beginPath();
+          ctx.moveTo(pA1.x, pA1.y);
+          ctx.lineTo(pA2.x, pA2.y);
+          ctx.stroke();
+
+          const pB1 = project3D(-planeExtent, 0, pos);
+          const pB2 = project3D(planeExtent, 0, pos);
+          ctx.beginPath();
+          ctx.moveTo(pB1.x, pB1.y);
+          ctx.lineTo(pB2.x, pB2.y);
+          ctx.stroke();
+        }
+
+        // Render 8x8 Isometric Block Cells (Above and Below Z=0)
         for (let r = 0; r < gridSize; r++) {
           for (let c = 0; c < gridSize; c++) {
             const cellData = planeGridRef.current.find(cell => cell.row === r && cell.col === c);
-            const shimmer = isFlash ? 1.0 : (cellData ? cellData.shimmer : 0.1);
+            const rawShimmer = isFlash ? 1.0 : (cellData ? cellData.shimmer : 0.1);
+            const microTwinkle = (rawShimmer > 0.2) ? Math.sin(t * 12 + r * 2.5 + c * 3.1) * 0.08 : 0;
+            const shimmer = Math.min(1.0, Math.max(0.08, rawShimmer + microTwinkle));
+
             const isCombined = cellData ? cellData.isCombined : false;
             const tokenStr = cellData ? cellData.token : '';
+            const zOffset = cellData ? cellData.zOffset : 0;
 
-            // Height Extrusion for Active Light Blocks (3D Pop-up!)
-            const heightExtrude = shimmer > 0.45 ? -12 * shimmer : 0;
+            // Height Extrusion for Active Light Blocks (Pops UP when zOffset > 0, Dips DOWN when zOffset < 0)
+            const heightExtrude = shimmer > 0.25 ? -zOffset * shimmer : 0;
 
             const x0 = -planeExtent + c * cellSize;
             const z0 = -planeExtent + r * cellSize;
             const x1 = x0 + cellSize;
             const z1 = z0 + cellSize;
 
+            // Elevated/Depressed Face
             const p0 = project3D(x0, heightExtrude, z0);
             const p1 = project3D(x1, heightExtrude, z0);
             const p2 = project3D(x1, heightExtrude, z1);
             const p3 = project3D(x0, heightExtrude, z1);
 
+            // Draw Side Walls if Extruded above or below Z=0
+            if (Math.abs(heightExtrude) > 2) {
+              const base0 = project3D(x0, 0, z0);
+              const base1 = project3D(x1, 0, z0);
+              const base2 = project3D(x1, 0, z1);
+              const base3 = project3D(x0, 0, z1);
+
+              ctx.fillStyle = `rgba(0, 200, 160, ${shimmer * 0.25})`;
+              ctx.strokeStyle = `rgba(0, 255, 204, ${shimmer * 0.4})`;
+              ctx.lineWidth = 0.8;
+
+              // Front Wall
+              ctx.beginPath();
+              ctx.moveTo(p3.x, p3.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.lineTo(base2.x, base2.y);
+              ctx.lineTo(base3.x, base3.y);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+
+              // Right Wall
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.lineTo(base2.x, base2.y);
+              ctx.lineTo(base1.x, base1.y);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+            }
+
+            // Draw Top/Bottom Block Face
             ctx.beginPath();
             ctx.moveTo(p0.x, p0.y);
             ctx.lineTo(p1.x, p1.y);
@@ -406,10 +534,10 @@ export default function WarpVisualizer({
             ctx.lineTo(p3.x, p3.y);
             ctx.closePath();
 
-            if (shimmer > 0.45) {
+            if (shimmer > 0.4) {
               // LIGHT HIGH BLOCK
-              const fillAlpha = Math.min(0.85, shimmer);
-              ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${fillAlpha})` : `rgba(0, 230, 180, ${fillAlpha * 0.8})`;
+              const fillAlpha = Math.min(0.88, shimmer);
+              ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${fillAlpha})` : `rgba(0, 230, 180, ${fillAlpha * 0.85})`;
               ctx.shadowBlur = isCombined ? 20 : 12;
               ctx.shadowColor = '#00ffcc';
               ctx.fill();
@@ -419,7 +547,7 @@ export default function WarpVisualizer({
               ctx.stroke();
             } else {
               // DARK LOW BLOCK
-              const fillAlpha = Math.max(0.04, shimmer * 0.18);
+              const fillAlpha = Math.max(0.05, shimmer * 0.2);
               ctx.fillStyle = `rgba(0, 255, 170, ${fillAlpha})`;
               ctx.fill();
 
@@ -429,7 +557,7 @@ export default function WarpVisualizer({
             }
 
             // Draw Block Character Token
-            if (tokenStr && shimmer > 0.2) {
+            if (tokenStr && shimmer > 0.18) {
               const cellCenterX = (p0.x + p2.x) / 2;
               const cellCenterY = (p0.y + p2.y) / 2;
 
@@ -437,13 +565,13 @@ export default function WarpVisualizer({
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
 
-              if (shimmer > 0.45) {
+              if (shimmer > 0.4) {
                 ctx.fillStyle = '#ffffff';
                 ctx.font = isCombined ? '900 13px monospace' : '800 10px monospace';
                 ctx.shadowBlur = 10;
                 ctx.shadowColor = '#00ffcc';
               } else {
-                ctx.fillStyle = `rgba(0, 255, 170, ${shimmer + 0.25})`;
+                ctx.fillStyle = `rgba(0, 255, 170, ${shimmer + 0.3})`;
                 ctx.font = '600 8px monospace';
               }
 
@@ -553,8 +681,8 @@ export default function WarpVisualizer({
         <div className="flex items-center gap-4">
           <div>
             <span className="text-zinc-500 block text-[8px]">COHERENCE</span>
-            <span className={`font-bold font-mono ${coherence > 0.88 ? 'text-[#00ffcc]' : coherence < 0.5 ? 'text-pink-500' : 'text-cyan-400'}`}>
-              {(coherence * 100).toFixed(1)}% {coherence > 0.88 ? 'CRYSTALLIZED' : ''}
+            <span className={`font-bold font-mono ${liveCoherence > 0.82 ? 'text-[#00ffcc]' : liveCoherence < 0.5 ? 'text-pink-500' : 'text-cyan-400'}`}>
+              {(liveCoherence * 100).toFixed(1)}% {liveCoherence > 0.82 ? 'CRYSTALLIZED' : ''}
             </span>
           </div>
 
@@ -562,14 +690,14 @@ export default function WarpVisualizer({
 
           <div>
             <span className="text-zinc-500 block text-[8px]">SUBSTRATE JITTER</span>
-            <span className="text-zinc-300 font-mono font-bold">{jitter.toFixed(4)}</span>
+            <span className="text-zinc-300 font-mono font-bold">{liveJitter.toFixed(4)}</span>
           </div>
 
           <div className="w-[1px] h-6 bg-white/10" />
 
           <div>
             <span className="text-zinc-500 block text-[8px]">CARRIER FREQ</span>
-            <span className="text-[#00ffcc] font-mono font-bold">{(frequency / 1000).toFixed(2)} kHz</span>
+            <span className="text-[#00ffcc] font-mono font-bold">{(liveFrequency / 1000).toFixed(2)} kHz</span>
           </div>
 
           <div className="w-[1px] h-6 bg-white/10" />
@@ -577,7 +705,7 @@ export default function WarpVisualizer({
           <div>
             <span className="text-zinc-500 block text-[8px]">DUAL_TONE</span>
             <span className="text-purple-300 font-mono font-bold">
-              {isDualToneDriving ? `${dualFreqA}Hz / ${dualFreqB}Hz` : 'STANDBY'}
+              {isDualToneDriving ? `${dualFreqA}Hz / ${dualFreqB}Hz` : 'DRIVEN_ACTIVE'}
             </span>
           </div>
         </div>
@@ -624,6 +752,7 @@ export default function WarpVisualizer({
                 <ul className="list-disc list-inside space-y-1 text-zinc-300 text-[11px]">
                   <li><strong className="text-white">LIGHT / SHIMMER HIGH</strong> → Active block containing live character packet</li>
                   <li><strong className="text-white">DARK / LOW SHIMMER</strong> → Dormant or decaying memory state</li>
+                  <li><strong className="text-white">3D Z-ELEVATION</strong> → Activity pops above and dips below Z=0 null plane</li>
                   <li><strong className="text-white">TOGGLE VIEW MODE</strong> → Switch between 3D Isometric Plane and 2D Flat Plane anytime</li>
                 </ul>
               </div>
