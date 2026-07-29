@@ -587,8 +587,9 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     const parity = parseInt(parts[4]) || 0;
     let freq = parseFloat(parts[5]);
     if (isNaN(freq) || freq < 1000) {
-      // Physical carrier frequency driven in tens of kHz range (e.g. 35,200 Hz to 105,000 Hz)
-      freq = 35200.0 + (vNodal * 2800) + (jitter * 60000.0);
+      // Physical carrier frequency driven near ~28 kHz target (lower edge of 28–105 kHz band)
+      const overdriveBoost = systemState.overdrive ? 18000.0 : 0.0;
+      freq = 28000.0 + (jitter * 800.0) + (vNodal * 120.0) + overdriveBoost;
     }
 
     const shimmer = 45.0 + (jitter * 85.0);
@@ -1040,18 +1041,18 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       
       queueTelemetryEmission(normalizedLine);
 
-      // Periodically transmit monad packet events to drive 8x8 plane grid matrix twinkling
+      // Periodically transmit monad packet events to drive 16x16 plane grid matrix twinkling
       if (Math.random() < 0.6) {
         const monadTokens = ['k4x', 'n', 'x', '0', '1', 'k', '4', 'a', 'b', '9', 'm', 'p', 'z', 'q', 'v', '7'];
         const sampleToken = monadTokens[Math.floor(Math.random() * monadTokens.length)];
         io.emit('hardware:monad_packet', {
           token: sampleToken,
-          row: Math.floor(Math.random() * 8),
-          col: Math.floor(Math.random() * 8),
+          row: Math.floor(Math.random() * 16),
+          col: Math.floor(Math.random() * 16),
           zOffset: (Math.random() > 0.5 ? 1 : -1) * (10 + Math.random() * 20),
           stability: 0.82 + Math.random() * 0.17,
           coherence: normalizedCoherence,
-          freq: parseFloat(parts[5]) || 35200
+          freq: parseFloat(parts[5]) || 28000
         });
       }
 

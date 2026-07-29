@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, LayoutGrid, HelpCircle, X, Sparkles, Eye } from 'lucide-react';
+import { Zap, LayoutGrid, HelpCircle, X, Sparkles, Eye, Activity } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface WarpVisualizerProps {
@@ -24,17 +24,17 @@ interface WarpVisualizerProps {
   parity?: number;
 }
 
-// Plane Block Memory Cell
+// 16x16 Reservoir Memory Plane Cell
 interface PlaneCell {
   id: string;
-  row: number; // 0..7
-  col: number; // 0..7
+  row: number; // 0..15
+  col: number; // 0..15
   token: string;
   shimmer: number; // 0.0 (DARK) to 1.0 (LIGHT HIGH)
   stability: number; // 0.1 to 1.0 (High stability stays bright longer)
   isCombined: boolean;
   lastUpdated: number;
-  zOffset: number; // Z elevation in px above (+12 to +28) or below (-12 to -28) null Z=0
+  zOffset: number; // Z elevation in px above (+12 to +28) or below (-12 to -28) null Z=0 plane
 }
 
 interface Shockwave {
@@ -54,9 +54,9 @@ export default function WarpVisualizer({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Live telemetry state
+  // Live telemetry state (Default carrier frequency set to 28.00 kHz target)
   const [liveCoherence, setLiveCoherence] = useState(initialCoherence > 0.3 ? initialCoherence : 0.885);
-  const [liveFrequency, setLiveFrequency] = useState(initialFrequency > 1000 ? initialFrequency : 35200);
+  const [liveFrequency, setLiveFrequency] = useState(initialFrequency > 1000 ? initialFrequency : 28000);
   const [liveJitter, setLiveJitter] = useState(initialJitter || 0.012);
 
   const propsRef = useRef({ 
@@ -72,8 +72,8 @@ export default function WarpVisualizer({
   const [viewMode, setViewMode] = useState<'3d_iso' | '2d_flat'>('3d_iso');
   const [showInstructions, setShowInstructions] = useState(false);
   const [isDualToneDriving, setIsDualToneDriving] = useState(false);
-  const [dualFreqA, setDualFreqA] = useState(32500);
-  const [dualFreqB, setDualFreqB] = useState(33800);
+  const [dualFreqA, setDualFreqA] = useState(28000);
+  const [dualFreqB, setDualFreqB] = useState(28800);
   const [activeToken, setActiveToken] = useState<string | null>('k4x');
 
   // Mouse / Touch Drag Controls
@@ -87,24 +87,27 @@ export default function WarpVisualizer({
   const shockwavesRef = useRef<Shockwave[]>([]);
   const floatingTokenRef = useRef<{ token: string; alpha: number; yOffset: number } | null>(null);
 
-  // 8x8 Gridded Reservoir Plane Matrix (64 Memory Block Cells)
+  // 16x16 Gridded Reservoir Plane Matrix (256 Memory Block Cells)
   const planeGridRef = useRef<PlaneCell[]>((() => {
     const cells: PlaneCell[] = [];
     const sampleTokens = ['n', 'x', 'k4x', 'k', '4', '0', '1', 'a', 'b', '9', 'm', 'p', 'z', 'q', 'v', '7', 'Ω', 'Ψ', '⚡'];
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const isHigh = (r === 3 && c === 4) || (r === 2 && c === 2) || (r === 5 && c === 6) || (r === 1 && c === 5) || (r === 6 && c === 2);
+    
+    for (let r = 0; r < 16; r++) {
+      for (let c = 0; c < 16; c++) {
+        // High activity seeds scattered across 16x16 matrix
+        const isHigh = (r === 7 && c === 8) || (r === 4 && c === 5) || (r === 11 && c === 12) || (r === 3 && c === 10) || (r === 12 && c === 4) || (r === 8 && c === 3);
         const zDir = (r + c) % 2 === 0 ? 1 : -1;
         cells.push({
           id: `r${r}_c${c}`,
           row: r,
           col: c,
-          token: isHigh ? (r === 3 && c === 4 ? 'k4x' : (r % 2 === 0 ? 'n' : 'x')) : sampleTokens[Math.floor(Math.random() * sampleTokens.length)],
-          shimmer: isHigh ? (0.85 + Math.random() * 0.15) : (0.15 + Math.random() * 0.25),
-          stability: isHigh ? 0.88 : Math.random() * 0.5 + 0.3,
-          isCombined: r === 3 && c === 4,
+          token: isHigh ? (r === 7 && c === 8 ? 'k4x' : (r % 2 === 0 ? 'n' : 'x')) : sampleTokens[Math.floor(Math.random() * sampleTokens.length)],
+          shimmer: isHigh ? (0.88 + Math.random() * 0.12) : (0.12 + Math.random() * 0.25),
+          stability: isHigh ? 0.92 : Math.random() * 0.5 + 0.35,
+          isCombined: r === 7 && c === 8,
           lastUpdated: Date.now() - Math.floor(Math.random() * 8000),
-          zOffset: isHigh ? zDir * (14 + Math.floor(Math.random() * 12)) : zDir * (6 + Math.floor(Math.random() * 8))
+          // Z = 0 is null plane. Active volumes live strictly on positive or negative Z offsets (+12..+26 or -12..-26)
+          zOffset: zDir * (12 + Math.floor(Math.random() * 16))
         });
       }
     }
@@ -123,31 +126,32 @@ export default function WarpVisualizer({
     };
   }, [liveCoherence, liveJitter, liveFrequency, bias, vNodal, intelligence]);
 
-  // Trigger Combined Resonance Event
+  // Trigger Combined Resonance Event in 16x16 Grid
   const triggerResonanceEvent = useCallback((tokenStr: string = 'k4x') => {
     flashFramesRef.current = 18;
     floatingTokenRef.current = { token: tokenStr, alpha: 1.0, yOffset: 0 };
     setActiveToken(tokenStr);
 
     shockwavesRef.current.push({
-      radius: 10,
+      radius: 12,
       alpha: 1.0,
       hue: 160
     });
 
-    // Illuminate a vibrant cluster of cells across the 8x8 plane grid
+    // Illuminate a vibrant cluster of cells across the 16x16 plane grid
     const cells = planeGridRef.current;
-    const centerRow = 3 + Math.floor(Math.random() * 2);
-    const centerCol = 3 + Math.floor(Math.random() * 2);
+    const centerRow = 6 + Math.floor(Math.random() * 4);
+    const centerCol = 6 + Math.floor(Math.random() * 4);
 
     cells.forEach(cell => {
       const dist = Math.abs(cell.row - centerRow) + Math.abs(cell.col - centerCol);
-      if (dist <= 2) {
-        cell.shimmer = 1.0 - dist * 0.15; // Peak light at center
+      if (dist <= 3) {
+        cell.shimmer = Math.max(0.2, 1.0 - dist * 0.18); // Peak light at center
         cell.token = dist === 0 ? tokenStr : (Math.random() > 0.5 ? 'n' : 'x');
         cell.isCombined = dist === 0;
-        cell.stability = 0.95;
-        cell.zOffset = (dist % 2 === 0 ? 1 : -1) * (18 + (2 - dist) * 6); // Elevated above/below Z=0
+        cell.stability = 0.96;
+        // Positive and negative volumes above and below Z=0
+        cell.zOffset = (dist % 2 === 0 ? 1 : -1) * (18 + (3 - dist) * 5);
         cell.lastUpdated = Date.now();
       }
     });
@@ -170,23 +174,28 @@ export default function WarpVisualizer({
         }
         if (!isNaN(freqVal) && freqVal > 1000) {
           setLiveFrequency(freqVal);
+        } else {
+          setLiveFrequency(28000); // Default target 28 kHz
         }
         if (!isNaN(jit) && jit > 0) {
           setLiveJitter(jit);
         }
 
-        // Live telemetry write into 8x8 matrix
+        // Live telemetry writes multiple active block updates into the 16x16 matrix
         const sampleToken = seedStr.substring(0, 3) || 'k4x';
         setActiveToken(sampleToken);
 
         const cells = planeGridRef.current;
-        const targetIdx = Math.floor(Math.random() * cells.length);
-        if (cells[targetIdx]) {
-          cells[targetIdx].token = sampleToken;
-          cells[targetIdx].shimmer = 0.95;
-          cells[targetIdx].stability = Math.min(0.99, 0.7 + (cohVal || 0.85) * 0.28);
-          cells[targetIdx].zOffset = (Math.random() > 0.5 ? 1 : -1) * (12 + Math.floor(Math.random() * 18));
-          cells[targetIdx].lastUpdated = Date.now();
+        const updateCount = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < updateCount; i++) {
+          const targetIdx = Math.floor(Math.random() * cells.length);
+          if (cells[targetIdx]) {
+            cells[targetIdx].token = sampleToken;
+            cells[targetIdx].shimmer = 0.95;
+            cells[targetIdx].stability = Math.min(0.99, 0.76 + (cohVal || 0.85) * 0.22);
+            cells[targetIdx].zOffset = (Math.random() > 0.5 ? 1 : -1) * (12 + Math.floor(Math.random() * 16));
+            cells[targetIdx].lastUpdated = Date.now();
+          }
         }
       }
     });
@@ -201,19 +210,19 @@ export default function WarpVisualizer({
         setActiveToken(tokenStr);
 
         const cells = planeGridRef.current;
-        const r = typeof data.row === 'number' ? data.row : Math.floor(Math.random() * 8);
-        const c = typeof data.col === 'number' ? data.col : Math.floor(Math.random() * 8);
+        const r = typeof data.row === 'number' ? Math.min(15, Math.max(0, data.row)) : Math.floor(Math.random() * 16);
+        const c = typeof data.col === 'number' ? Math.min(15, Math.max(0, data.col)) : Math.floor(Math.random() * 16);
         const targetCell = cells.find(cell => cell.row === r && cell.col === c) || cells[Math.floor(Math.random() * cells.length)];
 
         if (targetCell) {
           targetCell.token = tokenStr;
           targetCell.shimmer = 1.0; // Light High
-          targetCell.stability = data?.stability || 0.88;
+          targetCell.stability = data?.stability || 0.90;
           targetCell.isCombined = !!data?.isCombined;
           if (typeof data.zOffset === 'number' && data.zOffset !== 0) {
             targetCell.zOffset = data.zOffset;
           } else {
-            targetCell.zOffset = (Math.random() > 0.5 ? 1 : -1) * (12 + Math.floor(Math.random() * 18));
+            targetCell.zOffset = (Math.random() > 0.5 ? 1 : -1) * (12 + Math.floor(Math.random() * 16));
           }
           targetCell.lastUpdated = Date.now();
         }
@@ -225,7 +234,7 @@ export default function WarpVisualizer({
     };
   }, [triggerResonanceEvent]);
 
-  // Continuous Reservoir Block Read Loop (Runs automatically without needing a button press)
+  // Continuous Reservoir Block Read Loop for 16x16 Grid (Runs continuously at ~15 Hz)
   useEffect(() => {
     const monadTokens = ['k4x', 'n', 'x', '0', '1', 'k', '4', 'a', 'b', '9', 'm', 'p', 'z', 'q', 'v', '7', 'Ω', 'Ψ', '⚡'];
     let stepCount = 0;
@@ -235,32 +244,33 @@ export default function WarpVisualizer({
       const cells = planeGridRef.current;
       if (!cells || cells.length === 0) return;
 
-      // Continuously read and excite 2 to 4 cells per tick across the 8x8 matrix in a traveling wave pattern
-      const rowSelect = stepCount % 8;
-      const count = 2 + Math.floor(Math.random() * 2);
+      // Continuously scan & excite 3 to 6 cells per tick across the 16x16 matrix in a traveling wave pattern
+      const rowSelect = stepCount % 16;
+      const count = 3 + Math.floor(Math.random() * 3);
 
       for (let i = 0; i < count; i++) {
-        const colSelect = Math.floor(Math.random() * 8);
+        const colSelect = Math.floor(Math.random() * 16);
         const cell = cells.find(c => c.row === rowSelect && c.col === colSelect) || cells[Math.floor(Math.random() * cells.length)];
         if (cell) {
           const sampleToken = monadTokens[Math.floor(Math.random() * monadTokens.length)];
           cell.token = sampleToken;
           cell.shimmer = 0.88 + Math.random() * 0.12; // Light High
-          cell.stability = 0.82 + Math.random() * 0.16;
-          cell.zOffset = (Math.random() > 0.5 ? 1 : -1) * (14 + Math.floor(Math.random() * 16));
+          cell.stability = 0.84 + Math.random() * 0.15;
+          // Z = 0 is null plane; non-zero volumes live above or below
+          cell.zOffset = (Math.random() > 0.5 ? 1 : -1) * (14 + Math.floor(Math.random() * 14));
           cell.lastUpdated = Date.now();
         }
       }
-    }, 75); // ~13 Hz continuous block scanning read loop
+    }, 65); // ~15 Hz continuous block scanning read loop
 
     return () => clearInterval(readInterval);
   }, []);
 
-  // Trigger Dual-Tone Hardware Drive
+  // Trigger Dual-Tone Hardware Drive at ~28 kHz target
   const triggerDualToneDrive = async () => {
     setIsDualToneDriving(true);
-    const fA = 31000 + Math.floor(Math.random() * 3000);
-    const fB = 31000 + Math.floor(Math.random() * 3000);
+    const fA = 27800 + Math.floor(Math.random() * 600);
+    const fB = 28400 + Math.floor(Math.random() * 600);
     setDualFreqA(fA);
     setDualFreqB(fB);
 
@@ -343,14 +353,17 @@ export default function WarpVisualizer({
 
       // Slow auto-yaw rotation in 3D ISO mode
       if (viewMode === '3d_iso' && !isDraggingRef.current) {
-        rotYRef.current += 0.003;
+        rotYRef.current += 0.0025;
       }
 
-      // Decay Cell Shimmers based on cell stability (High stability stays bright longer)
+      // High Coherence / Crystallized state holds shimmer longer & glows brighter!
+      const cohMultiplier = propsRef.current.coherence > 0.80 ? 2.2 : (propsRef.current.coherence > 0.60 ? 1.4 : 0.85);
+
+      // Decay Cell Shimmers based on cell stability
       planeGridRef.current.forEach(cell => {
-        const decayRate = 0.0012 / Math.max(0.2, cell.stability);
-        if (cell.shimmer > 0.15) {
-          cell.shimmer = Math.max(0.12, cell.shimmer - decayRate);
+        const decayRate = 0.0014 / Math.max(0.15, cell.stability * cohMultiplier);
+        if (cell.shimmer > 0.12) {
+          cell.shimmer = Math.max(0.10, cell.shimmer - decayRate);
         }
       });
 
@@ -362,10 +375,11 @@ export default function WarpVisualizer({
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
 
-      // --- RENDER MODE A: 2D FLAT GRIDDED RESERVOIR PLANE ---
+      const gridSize = 16; // 16x16 Matrix
+
+      // --- RENDER MODE A: 2D FLAT GRIDDED RESERVOIR PLANE (16x16) ---
       if (viewMode === '2d_flat') {
-        const gridSize = 8;
-        const maxPlaneSize = Math.min(width - 80, height - 140);
+        const maxPlaneSize = Math.min(width - 60, height - 130);
         const cellSize = maxPlaneSize / gridSize;
         const startX = centerX - (maxPlaneSize / 2);
         const startY = centerY - (maxPlaneSize / 2);
@@ -373,17 +387,30 @@ export default function WarpVisualizer({
         // Outer Frame Border
         ctx.strokeStyle = '#00ffcc';
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = 14;
         ctx.shadowColor = '#00ffcc';
         ctx.strokeRect(startX - 4, startY - 4, maxPlaneSize + 8, maxPlaneSize + 8);
 
-        // Render 8x8 Grid Cells
+        const freqHz = propsRef.current.frequency || 28000;
+        const omegaA = (freqHz / 28000) * 2.8;
+        const omegaB = isDualToneDriving ? (dualFreqB / 28000) * 3.2 : omegaA + 0.4;
+        const systemCoh = propsRef.current.coherence;
+
+        // Render 16x16 Grid Cells with Wave / Particle Duality
         for (let r = 0; r < gridSize; r++) {
           for (let c = 0; c < gridSize; c++) {
             const cellData = planeGridRef.current.find(cell => cell.row === r && cell.col === c);
             const rawShimmer = isFlash ? 1.0 : (cellData ? cellData.shimmer : 0.1);
-            const microTwinkle = (rawShimmer > 0.2) ? Math.sin(t * 12 + r * 2.5 + c * 3.1) * 0.08 : 0;
-            const shimmer = Math.min(1.0, Math.max(0.08, rawShimmer + microTwinkle));
+            const stability = cellData ? cellData.stability : 0.5;
+
+            // Continuous Dual-Tone Spatial Wave Interference Equation
+            const w1 = Math.sin(r * 0.42 + c * 0.38 - t * omegaA);
+            const w2 = Math.cos((r - 8) * 0.35 - (c - 8) * 0.45 - t * omegaB);
+            const waveInterference = 0.5 * (w1 + w2); // -1.0 to +1.0
+
+            const localEnergy = systemCoh * stability * (0.35 + 0.65 * rawShimmer) * (1.0 + 0.35 * Math.abs(waveInterference));
+            // Collapse Probability into Discrete Particle Block Event
+            const particleWeight = Math.min(1.0, Math.max(0.0, (localEnergy - 0.58) / 0.24));
 
             const isCombined = cellData ? cellData.isCombined : false;
             const tokenStr = cellData ? cellData.token : '';
@@ -391,53 +418,59 @@ export default function WarpVisualizer({
             const cx = startX + c * cellSize;
             const cy = startY + r * cellSize;
 
-            // Cell Fill (LIGHT HIGH vs DARK LOW)
-            if (shimmer > 0.4) {
-              // HIGH LIGHT CELL
-              const alpha = Math.min(0.9, shimmer);
-              ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${alpha})` : `rgba(0, 225, 180, ${alpha * 0.8})`;
-              ctx.shadowBlur = isCombined ? 18 : 10;
+            if (particleWeight > 0.25) {
+              // --- COLLAPSED DISCRETE PARTICLE BLOCK EVENT ---
+              const alpha = Math.min(0.95, particleWeight * (systemCoh > 0.8 ? 1.15 : 1.0));
+              ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${alpha})` : `rgba(0, 230, 180, ${alpha * 0.85})`;
+              ctx.shadowBlur = isCombined ? 16 : 8;
               ctx.shadowColor = '#00ffcc';
-              ctx.fillRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);
+              ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2);
 
               ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 1.2;
-              ctx.strokeRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);
-            } else {
-              // DARK DORMANT CELL
-              const alpha = Math.max(0.05, shimmer * 0.2);
-              ctx.fillStyle = `rgba(0, 255, 170, ${alpha})`;
-              ctx.fillRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);
+              ctx.lineWidth = 1.0;
+              ctx.strokeRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2);
 
-              ctx.strokeStyle = `rgba(0, 255, 170, ${0.12 + shimmer * 0.25})`;
-              ctx.lineWidth = 0.8;
-              ctx.strokeRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);
-            }
-
-            // Cell Token String
-            if (tokenStr && shimmer > 0.18) {
-              ctx.save();
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              if (shimmer > 0.4) {
+              if (tokenStr) {
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const fontPx = Math.max(7, Math.floor(cellSize * 0.48));
                 ctx.fillStyle = '#ffffff';
-                ctx.font = isCombined ? '900 14px monospace' : '800 11px monospace';
-                ctx.shadowBlur = 8;
+                ctx.font = isCombined ? `900 ${fontPx + 2}px monospace` : `800 ${fontPx}px monospace`;
+                ctx.shadowBlur = 6;
                 ctx.shadowColor = '#00ffcc';
-              } else {
-                ctx.fillStyle = `rgba(0, 255, 170, ${shimmer + 0.3})`;
-                ctx.font = '600 9px monospace';
+                ctx.fillText(tokenStr, cx + cellSize / 2, cy + cellSize / 2);
+                ctx.restore();
               }
-              ctx.fillText(tokenStr, cx + cellSize / 2, cy + cellSize / 2);
-              ctx.restore();
+            } else {
+              // --- DIFFUSE WAVE INTERFERENCE FIELD ---
+              const waveIntensity = Math.max(0.06, (waveInterference * 0.5 + 0.5) * 0.35 + rawShimmer * 0.25);
+              ctx.fillStyle = `rgba(0, 255, 180, ${waveIntensity * 0.4})`;
+              ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2);
+
+              // Wave Contour Ripples
+              ctx.strokeStyle = `rgba(0, 255, 204, ${0.12 + waveIntensity * 0.35})`;
+              ctx.lineWidth = 0.6;
+              ctx.strokeRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2);
+
+              // Faint Ethereal Wave Token
+              if (tokenStr && rawShimmer > 0.22) {
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const fontPx = Math.max(6, Math.floor(cellSize * 0.42));
+                ctx.fillStyle = `rgba(0, 255, 204, ${waveIntensity * 0.8})`;
+                ctx.font = `600 ${fontPx}px monospace`;
+                ctx.fillText(tokenStr, cx + cellSize / 2, cy + cellSize / 2);
+                ctx.restore();
+              }
             }
           }
         }
       } 
-      // --- RENDER MODE B: 3D ISOMETRIC GRIDDED RESERVOIR PLANE ---
+      // --- RENDER MODE B: 3D ISOMETRIC GRIDDED RESERVOIR PLANE (16x16) ---
       else {
-        const gridSize = 8;
-        const planeExtent = Math.min(width, height) * 0.18;
+        const planeExtent = Math.min(width, height) * 0.26;
         const cellSize = (planeExtent * 2) / gridSize;
 
         const cosY = Math.cos(rotYRef.current);
@@ -479,9 +512,9 @@ export default function WarpVisualizer({
         });
         shockwavesRef.current = shockwavesRef.current.filter(sw => sw.alpha > 0);
 
-        // Render Z=0 Null Baseline Grid Wireframe
-        ctx.strokeStyle = 'rgba(0, 255, 204, 0.18)';
-        ctx.lineWidth = 1.0;
+        // Render Z = 0 NULL PLANE WIREFRAME (No Shimmer on Z=0, clean dark baseline grid)
+        ctx.strokeStyle = 'rgba(0, 255, 204, 0.16)';
+        ctx.lineWidth = 0.8;
         for (let i = 0; i <= gridSize; i++) {
           const pos = -planeExtent + i * cellSize;
           const pA1 = project3D(pos, 0, -planeExtent);
@@ -499,115 +532,159 @@ export default function WarpVisualizer({
           ctx.stroke();
         }
 
-        // Render 8x8 Isometric Block Cells (Above and Below Z=0)
+        const freqHz = propsRef.current.frequency || 28000;
+        const omegaA = (freqHz / 28000) * 2.8;
+        const omegaB = isDualToneDriving ? (dualFreqB / 28000) * 3.2 : omegaA + 0.4;
+        const systemCoh = propsRef.current.coherence;
+
+        // Render 16x16 Isometric Cells with Wave / Particle Duality
         for (let r = 0; r < gridSize; r++) {
           for (let c = 0; c < gridSize; c++) {
             const cellData = planeGridRef.current.find(cell => cell.row === r && cell.col === c);
             const rawShimmer = isFlash ? 1.0 : (cellData ? cellData.shimmer : 0.1);
-            const microTwinkle = (rawShimmer > 0.2) ? Math.sin(t * 12 + r * 2.5 + c * 3.1) * 0.08 : 0;
-            const shimmer = Math.min(1.0, Math.max(0.08, rawShimmer + microTwinkle));
+            const stability = cellData ? cellData.stability : 0.5;
+
+            // Continuous Dual-Tone Spatial Wave Interference Equation
+            const w1 = Math.sin(r * 0.42 + c * 0.38 - t * omegaA);
+            const w2 = Math.cos((r - 8) * 0.35 - (c - 8) * 0.45 - t * omegaB);
+            const waveInterference = 0.5 * (w1 + w2); // -1.0 to +1.0
+
+            const localEnergy = systemCoh * stability * (0.35 + 0.65 * rawShimmer) * (1.0 + 0.35 * Math.abs(waveInterference));
+            // Collapse Probability into Discrete Particle Block Event
+            const particleWeight = Math.min(1.0, Math.max(0.0, (localEnergy - 0.58) / 0.24));
 
             const isCombined = cellData ? cellData.isCombined : false;
             const tokenStr = cellData ? cellData.token : '';
-            const zOffset = cellData ? cellData.zOffset : 0;
 
-            // Height Extrusion for Active Light Blocks (Pops UP when zOffset > 0, Dips DOWN when zOffset < 0)
-            const heightExtrude = shimmer > 0.25 ? -zOffset * shimmer : 0;
+            let zOffset = cellData ? cellData.zOffset : 0;
+            if (zOffset === 0) {
+              zOffset = ((r + c) % 2 === 0 ? 1 : -1) * 16;
+            }
 
             const x0 = -planeExtent + c * cellSize;
             const z0 = -planeExtent + r * cellSize;
             const x1 = x0 + cellSize;
             const z1 = z0 + cellSize;
 
-            // Elevated/Depressed Face
-            const p0 = project3D(x0, heightExtrude, z0);
-            const p1 = project3D(x1, heightExtrude, z0);
-            const p2 = project3D(x1, heightExtrude, z1);
-            const p3 = project3D(x0, heightExtrude, z1);
+            if (particleWeight > 0.25) {
+              // ==========================================
+              // PARTICLE FORM: DISCRETE COLLAPSED 3D BLOCK
+              // ==========================================
+              const heightExtrude = -zOffset * (0.4 + 0.6 * particleWeight);
 
-            // Draw Side Walls if Extruded above or below Z=0
-            if (Math.abs(heightExtrude) > 2) {
-              const base0 = project3D(x0, 0, z0);
-              const base1 = project3D(x1, 0, z0);
-              const base2 = project3D(x1, 0, z1);
-              const base3 = project3D(x0, 0, z1);
+              const p0 = project3D(x0, heightExtrude, z0);
+              const p1 = project3D(x1, heightExtrude, z0);
+              const p2 = project3D(x1, heightExtrude, z1);
+              const p3 = project3D(x0, heightExtrude, z1);
 
-              ctx.fillStyle = `rgba(0, 200, 160, ${shimmer * 0.25})`;
-              ctx.strokeStyle = `rgba(0, 255, 204, ${shimmer * 0.4})`;
-              ctx.lineWidth = 0.8;
+              // 3D Extruded Block Side Walls
+              if (Math.abs(heightExtrude) > 1.5) {
+                const base1 = project3D(x1, 0, z0);
+                const base2 = project3D(x1, 0, z1);
+                const base3 = project3D(x0, 0, z1);
 
-              // Front Wall
+                ctx.fillStyle = `rgba(0, 210, 170, ${particleWeight * 0.32})`;
+                ctx.strokeStyle = `rgba(0, 255, 204, ${particleWeight * 0.50})`;
+                ctx.lineWidth = 0.8;
+
+                // Front Wall
+                ctx.beginPath();
+                ctx.moveTo(p3.x, p3.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.lineTo(base2.x, base2.y);
+                ctx.lineTo(base3.x, base3.y);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Right Wall
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.lineTo(base2.x, base2.y);
+                ctx.lineTo(base1.x, base1.y);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+              }
+
+              // Top Block Face
               ctx.beginPath();
-              ctx.moveTo(p3.x, p3.y);
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
               ctx.lineTo(p2.x, p2.y);
-              ctx.lineTo(base2.x, base2.y);
-              ctx.lineTo(base3.x, base3.y);
+              ctx.lineTo(p3.x, p3.y);
               ctx.closePath();
-              ctx.fill();
-              ctx.stroke();
 
-              // Right Wall
-              ctx.beginPath();
-              ctx.moveTo(p1.x, p1.y);
-              ctx.lineTo(p2.x, p2.y);
-              ctx.lineTo(base2.x, base2.y);
-              ctx.lineTo(base1.x, base1.y);
-              ctx.closePath();
-              ctx.fill();
-              ctx.stroke();
-            }
-
-            // Draw Top/Bottom Block Face
-            ctx.beginPath();
-            ctx.moveTo(p0.x, p0.y);
-            ctx.lineTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.lineTo(p3.x, p3.y);
-            ctx.closePath();
-
-            if (shimmer > 0.4) {
-              // LIGHT HIGH BLOCK
-              const fillAlpha = Math.min(0.88, shimmer);
-              ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${fillAlpha})` : `rgba(0, 230, 180, ${fillAlpha * 0.85})`;
-              ctx.shadowBlur = isCombined ? 20 : 12;
+              const fillAlpha = Math.min(0.92, particleWeight * (systemCoh > 0.8 ? 1.15 : 1.0));
+              ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${fillAlpha})` : `rgba(0, 230, 180, ${fillAlpha * 0.88})`;
+              ctx.shadowBlur = isCombined ? 18 : 10;
               ctx.shadowColor = '#00ffcc';
               ctx.fill();
 
               ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 1.5;
+              ctx.lineWidth = 1.2;
               ctx.stroke();
+
+              // Character Token
+              if (tokenStr) {
+                const cellCenterX = (p0.x + p2.x) / 2;
+                const cellCenterY = (p0.y + p2.y) / 2;
+
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const fontPx = Math.max(6, Math.floor(cellSize * p0.scale * 0.44));
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = isCombined ? `900 ${fontPx + 1}px monospace` : `800 ${fontPx}px monospace`;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#00ffcc';
+                ctx.fillText(tokenStr, cellCenterX, cellCenterY);
+                ctx.restore();
+              }
             } else {
-              // DARK LOW BLOCK
-              const fillAlpha = Math.max(0.05, shimmer * 0.2);
-              ctx.fillStyle = `rgba(0, 255, 170, ${fillAlpha})`;
+              // ==========================================
+              // WAVE FORM: DIFFUSE WAVE INTERFERENCE FIELD
+              // ==========================================
+              // Smooth continuous wave height elevation
+              const waveHeight = waveInterference * (14 + rawShimmer * 10);
+
+              const p0 = project3D(x0, waveHeight, z0);
+              const p1 = project3D(x1, waveHeight, z0);
+              const p2 = project3D(x1, waveHeight, z1);
+              const p3 = project3D(x0, waveHeight, z1);
+
+              ctx.beginPath();
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.lineTo(p3.x, p3.y);
+              ctx.closePath();
+
+              const waveAlpha = Math.max(0.04, (waveInterference * 0.5 + 0.5) * 0.22 + rawShimmer * 0.15);
+              ctx.fillStyle = `rgba(0, 255, 180, ${waveAlpha})`;
               ctx.fill();
 
-              ctx.strokeStyle = `rgba(0, 255, 170, ${0.12 + shimmer * 0.25})`;
-              ctx.lineWidth = 0.8;
+              // Translucent wave contour grid line
+              ctx.strokeStyle = `rgba(0, 255, 204, ${0.12 + waveAlpha * 0.4})`;
+              ctx.lineWidth = 0.5;
               ctx.stroke();
-            }
 
-            // Draw Block Character Token
-            if (tokenStr && shimmer > 0.18) {
-              const cellCenterX = (p0.x + p2.x) / 2;
-              const cellCenterY = (p0.y + p2.y) / 2;
+              // Faint ethereal wave harmonic label
+              if (tokenStr && rawShimmer > 0.22) {
+                const cellCenterX = (p0.x + p2.x) / 2;
+                const cellCenterY = (p0.y + p2.y) / 2;
 
-              ctx.save();
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-
-              if (shimmer > 0.4) {
-                ctx.fillStyle = '#ffffff';
-                ctx.font = isCombined ? '900 13px monospace' : '800 10px monospace';
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = '#00ffcc';
-              } else {
-                ctx.fillStyle = `rgba(0, 255, 170, ${shimmer + 0.3})`;
-                ctx.font = '600 8px monospace';
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const fontPx = Math.max(5, Math.floor(cellSize * p0.scale * 0.38));
+                ctx.fillStyle = `rgba(0, 255, 204, ${waveAlpha * 1.5})`;
+                ctx.font = `600 ${fontPx}px monospace`;
+                ctx.fillText(tokenStr, cellCenterX, cellCenterY);
+                ctx.restore();
               }
-
-              ctx.fillText(tokenStr, cellCenterX, cellCenterY);
-              ctx.restore();
             }
           }
         }
@@ -622,11 +699,11 @@ export default function WarpVisualizer({
         if (ft.alpha > 0) {
           ctx.save();
           ctx.fillStyle = `rgba(0, 255, 204, ${ft.alpha})`;
-          ctx.font = '900 24px monospace';
+          ctx.font = '900 22px monospace';
           ctx.textAlign = 'center';
-          ctx.shadowBlur = 22;
+          ctx.shadowBlur = 20;
           ctx.shadowColor = '#00ffcc';
-          ctx.fillText(`[ ${ft.token} ]`, centerX, centerY - (viewMode === '2d_flat' ? 180 : 140) + ft.yOffset);
+          ctx.fillText(`[ ${ft.token} ]`, centerX, centerY - (viewMode === '2d_flat' ? 180 : 150) + ft.yOffset);
           ctx.restore();
         } else {
           floatingTokenRef.current = null;
@@ -665,7 +742,7 @@ export default function WarpVisualizer({
           <span className="text-[10px] font-black tracking-widest text-[#00ffcc]">RESERVOIR_MEMORY_PLANE</span>
           <span className="text-[9px] text-emerald-400 font-bold ml-1 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            BLOCK_READ: ACTIVE
+            BLOCK_READ: ACTIVE (16x16)
           </span>
         </div>
 
@@ -765,7 +842,7 @@ export default function WarpVisualizer({
               <div className="flex items-center gap-2">
                 <LayoutGrid size={18} className="text-[#00ffcc]" />
                 <h2 className="text-sm font-black tracking-widest text-[#00ffcc] uppercase">
-                  Reservoir Gridded Memory Plane Guide
+                  Reservoir 16×16 Memory Plane Guide
                 </h2>
               </div>
               <button
@@ -778,16 +855,16 @@ export default function WarpVisualizer({
 
             <div className="flex-1 overflow-y-auto space-y-4 text-xs text-zinc-300 font-mono leading-relaxed pr-2">
               <div className="p-3 bg-[#00ffcc]/5 border border-[#00ffcc]/20 rounded-lg text-zinc-200">
-                This is a single 8×8 gridded memory plane representing the physical reservoir substrate state.
+                This 16×16 memory plane (256 cells) visualizes the reservoir substrate state driven near 28 kHz under the <strong>Wave/Particle Duality Readout Rule</strong>.
               </div>
 
               <div>
-                <h3 className="text-[#00ffcc] font-bold uppercase text-[11px] mb-1">Grid Shimmer Light Mapping</h3>
-                <ul className="list-disc list-inside space-y-1 text-zinc-300 text-[11px]">
-                  <li><strong className="text-white">LIGHT / SHIMMER HIGH</strong> → Active block containing live character packet</li>
-                  <li><strong className="text-white">DARK / LOW SHIMMER</strong> → Dormant or decaying memory state</li>
-                  <li><strong className="text-white">3D Z-ELEVATION</strong> → Activity pops above and dips below Z=0 null plane</li>
-                  <li><strong className="text-white">TOGGLE VIEW MODE</strong> → Switch between 3D Isometric Plane and 2D Flat Plane anytime</li>
+                <h3 className="text-[#00ffcc] font-bold uppercase text-[11px] mb-1">Wave / Particle Readout Dynamics</h3>
+                <ul className="list-disc list-inside space-y-1.5 text-zinc-300 text-[11px]">
+                  <li><strong className="text-white">WAVE FORM (Diffuse Field):</strong> When local coherence is low, the substrate renders continuous wave interference, soft glows, and undulating ripples across the plane.</li>
+                  <li><strong className="text-white">PARTICLE FORM (Localized Collapse):</strong> When a region reaches high coherence and stabilizes, it collapses into a discrete 3D memory block (particle event) with crisp edges and character tokens.</li>
+                  <li><strong className="text-white">DUAL-TONE INTERFERENCE:</strong> Driving two mixing wave frequencies (f<sub>A</sub> & f<sub>B</sub>) creates standing wave beats. Constructive interference peaks collapse into particles, while destructive nodes remain diffuse waves.</li>
+                  <li><strong className="text-white">3D ISO & 2D FLAT VIEWS:</strong> Toggle between 3D isometric perspective elevation and direct 2D flat matrix anytime.</li>
                 </ul>
               </div>
             </div>

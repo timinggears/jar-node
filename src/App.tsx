@@ -45,7 +45,7 @@ export default function App() {
     errors: 0,
     jitter: 0.0,
     vNodal: 0.0,
-    frequency: 50000,
+    frequency: 28000,
     hugePages: 0,
     loadAvg: 0.0,
     neuralLoad: 0.0,
