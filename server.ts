@@ -68,6 +68,15 @@ function startPythonBridge() {
     pythonBridgeProcess = spawn(pythonCmd, [scriptPath, '--virtual']);
     pythonBridgeActive = true;
     
+    pythonBridgeProcess.on('error', (err: any) => {
+      console.warn(`[PYTHON_BRIDGE] Python process error (${err.message}). Substrate side-car bridge disabled.`);
+      pythonBridgeProcess = null;
+      pythonBridgeActive = false;
+      if (ioInstance) {
+        ioInstance.emit('log', `SYSTEM_BRIDGE: Python runtime unavailable or disabled (${err.message}).`);
+      }
+    });
+
     pythonBridgeProcess.stdout?.on('data', (data) => {
       const line = data.toString().trim();
       console.log(`[PYTHON_BRIDGE] stdout: ${line}`);
@@ -94,6 +103,7 @@ function startPythonBridge() {
     });
   } catch (err: any) {
     console.error(`[PYTHON_BRIDGE] Failed to spawn python daemon: ${err.message}`);
+    pythonBridgeProcess = null;
     pythonBridgeActive = false;
   }
 }
@@ -920,17 +930,9 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     });
   });
 
-  let resolvedPort = 3000;
-  if (process.env.APPLET_ID) {
-    // Inside AI Studio container sandbox, force port 3000 to keep preview iframe working properly
-    resolvedPort = 3000;
-  } else if (process.env.APP_PORT && !isNaN(parseInt(process.env.APP_PORT))) {
-    resolvedPort = parseInt(process.env.APP_PORT);
-  } else {
-    // Outside of AI Studio (downloaded / local), run on port 3001 as requested
-    resolvedPort = 3001;
-  }
-  const PORT = resolvedPort;
+  // In AI Studio / Cloud Run, PORT is injected by the platform (port 3000).
+  // For local or external deployment, allow PORT, APP_PORT, or default to 8080.
+  const PORT = Number(process.env.PORT) || Number(process.env.APP_PORT) || 8080;
   
   // --- MINING IDENTITY ---
   let POOL_URL = systemState.pool_url || "rx.unmineable.com:3333";
@@ -1230,6 +1232,15 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       io.emit('log', `SYSTEM: Spawning ${isMock ? 'Mock' : 'Real'} XMRig process [${xmrigPath}]...`);
       
       xmrigProcess = spawn(xmrigPath, args);
+
+      xmrigProcess.on('error', (err: any) => {
+        console.warn(`[MINER] Process spawn error (${err.message}). Redirecting to virtual resonance substrate.`);
+        xmrigProcess = null;
+        virtualSubstrateActive = true;
+        if (ioInstance) {
+          ioInstance.emit('log', `SYSTEM: Substrate process error (${err.message}). Virtual substrate active.`);
+        }
+      });
       
       xmrigProcess.stdout?.on('data', (data) => {
         const rawLines = data.toString().split('\n');

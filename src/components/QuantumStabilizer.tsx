@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { ShieldCheck, Zap, Activity, Info, AlertOctagon, RefreshCw, GitBranch } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface QuantumStabilizerProps {
   coherence: number;
@@ -35,19 +35,27 @@ export default function QuantumStabilizer({
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('09:42:01');
 
-  // v147: Unified state representation - no fake jitter
+  // v147: Unified state representation - sampled safely via ref interval
+  const coherenceRef = useRef(coherence);
   useEffect(() => {
-    // Error history now reflects the inverse of coherence (stability representation)
-    const errVal = 1 - coherence;
-    setErrorHistory(prev => {
-      const next = [...prev, {
-        id: Date.now().toString(),
-        val: errVal
-      }];
-      if (next.length > 20) return next.slice(1);
-      return next;
-    });
+    coherenceRef.current = coherence;
   }, [coherence]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const errVal = 1 - coherenceRef.current;
+      setErrorHistory(prev => {
+        const next = [...prev, {
+          id: Date.now().toString(),
+          val: errVal
+        }];
+        if (next.length > 20) return next.slice(1);
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSync = () => {
     setIsSyncing(true);
