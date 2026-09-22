@@ -1559,6 +1559,42 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     }
   });
 
+  // Recall / read back all stored memory cells or reconstruct encoded strings
+  app.get('/api/reservoir/recall', (req, res) => {
+    try {
+      const bank = systemState.memoryBank || {};
+      const cells = Object.values(bank) as any[];
+
+      // Reconstructed raw text from sequentially stored single/combined packets
+      const reconstructedText = cells.map(c => c.char || '').join('');
+      
+      // Calculate average retention stability
+      const avgStability = cells.length > 0 
+        ? cells.reduce((acc, c) => acc + (c.stability || 0), 0) / cells.length 
+        : 0;
+
+      const bitCells = cells.filter(c => c.type === 'bit_cell').map(c => ({
+        id: c.id,
+        bit: c.char === '1' ? 1 : 0,
+        voltage_hold: c.voltage_hold,
+        stability: c.stability,
+        timestamp: c.timestamp,
+        label: c.label
+      }));
+
+      res.json({
+        success: true,
+        total_cells: cells.length,
+        reconstructed_string: reconstructedText,
+        average_stability: parseFloat(avgStability.toFixed(3)),
+        bit_cells: bitCells,
+        raw_cells: cells
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // --- PYTHON BRIDGE CONTROLLERS ---
   app.get('/api/bridge/status', (req, res) => {
     res.json({

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio, HardDrive, Plus } from 'lucide-react';
+import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio, HardDrive, Plus, Eye, BookOpen, Check } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface AsciiPacket {
@@ -665,6 +665,37 @@ export default function PhysicalAsciiReservoir({
     }
   };
 
+  const [recallData, setRecallData] = useState<{
+    text: string;
+    total: number;
+    avgStability: number;
+    bits: { id: string; bit: number; voltage_hold?: number }[];
+  } | null>(null);
+  const [isRecalling, setIsRecalling] = useState(false);
+
+  const recallMemoryBank = async () => {
+    setIsRecalling(true);
+    try {
+      const res = await fetch('/api/reservoir/recall');
+      const data = await res.json();
+      if (data.success) {
+        setRecallData({
+          text: data.reconstructed_string || '',
+          total: data.total_cells || 0,
+          avgStability: data.average_stability || 0,
+          bits: data.bit_cells || []
+        });
+        if (onAddLog) {
+          onAddLog(`[STORAGE_RECALL]: Read ${data.total_cells} cells. Reconstructed: "${data.reconstructed_string || '(empty)'}" (Stab: ${data.average_stability})`, 'info');
+        }
+      }
+    } catch (e: any) {
+      if (onAddLog) onAddLog(`[RECALL_ERR]: ${e.message}`, 'error');
+    } finally {
+      setIsRecalling(false);
+    }
+  };
+
   return (
     <div 
       className="min-h-[520px] max-h-[720px] flex flex-col bg-[#010602] text-[#00ff66] font-mono text-xs select-none p-4 gap-4 overflow-y-auto border border-[#00ff66]/30 shadow-[0_0_20px_rgba(0,255,102,0.15),_inset_0_0_15px_rgba(0,255,102,0.08)] custom-scrollbar" 
@@ -861,6 +892,15 @@ export default function PhysicalAsciiReservoir({
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button 
+                        onClick={recallMemoryBank}
+                        disabled={isRecalling}
+                        className="flex items-center gap-1 bg-[#ffff00]/10 hover:bg-[#ffff00]/20 border border-[#ffff00]/30 hover:border-[#ffff00]/60 px-2 py-0.5 rounded text-[8px] tracking-wider uppercase font-black text-[#ffff00] transition-all disabled:opacity-40 cursor-pointer shadow-[0_0_8px_rgba(255,255,0,0.15)]"
+                        title="Recall and reconstruct all stored reservoir memory cells"
+                      >
+                        <BookOpen size={10} className={isRecalling ? "animate-spin" : ""} />
+                        <span>{isRecalling ? "RECALLING..." : "RECALL"}</span>
+                      </button>
+                      <button 
                         onClick={() => setShowMemWriter(!showMemWriter)}
                         className={`flex items-center gap-1 border px-2 py-0.5 rounded text-[8px] tracking-wider uppercase font-black transition-all ${
                           showMemWriter
@@ -882,6 +922,33 @@ export default function PhysicalAsciiReservoir({
                       </button>
                     </div>
                   </div>
+
+                  {/* Recall Readout Box */}
+                  {recallData && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-amber-950/20 border border-amber-500/30 rounded-lg p-2.5 text-[9px] space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between text-amber-400 font-black uppercase tracking-wider">
+                        <span className="flex items-center gap-1">
+                          <Eye size={11} />
+                          RECALLED SUBSTRATE MEMORY ({recallData.total} cells)
+                        </span>
+                        <span className="text-zinc-400 text-[8px]">
+                          Avg Coherence: {(recallData.avgStability * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="bg-black/70 border border-amber-500/20 rounded px-2.5 py-1.5 text-white font-mono text-xs select-all flex items-center justify-between">
+                        <span className="font-bold text-amber-200">
+                          {recallData.text ? `"${recallData.text}"` : '<No characters stored>'}
+                        </span>
+                        <span className="text-[8px] text-zinc-500 uppercase">
+                          {recallData.bits.length > 0 ? `${recallData.bits.length} RC bits active` : ''}
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
 
                   {/* Direct Memory Writer Panel */}
                   {showMemWriter && (
