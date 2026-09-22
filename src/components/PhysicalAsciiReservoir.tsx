@@ -665,6 +665,10 @@ export default function PhysicalAsciiReservoir({
           onAddLog(`[STORAGE_NVM]: Stored "${rawText}" across ${data.written_count} substrate memory cells.`, 'success');
         }
         setMemInputText('');
+        // Automatically trigger recall after writing so output updates immediately
+        setTimeout(() => {
+          recallMemoryBank();
+        }, 150);
       }
     } catch (e: any) {
       if (onAddLog) onAddLog(`[STORAGE_ERR]: ${e.message}`, 'error');
@@ -1047,26 +1051,29 @@ export default function PhysicalAsciiReservoir({
                       </div>
 
                       {/* Text / Character sequence write */}
-                      <div className="flex items-center gap-1.5 pt-1">
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          writeTextToReservoir();
+                        }}
+                        className="flex items-center gap-1.5 pt-1"
+                      >
                         <input
                           type="text"
                           value={memInputText}
                           onChange={(e) => setMemInputText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') writeTextToReservoir();
-                          }}
                           placeholder="Type text/bytes to lock in reservoir cells..."
                           className="flex-1 bg-black/60 border border-white/10 rounded px-2 py-1 text-white placeholder-zinc-600 focus:outline-none focus:border-[#00ffcc]/60 font-mono text-[9px]"
                         />
                         <button
-                          onClick={writeTextToReservoir}
+                          type="submit"
                           disabled={isWritingMem || !memInputText.trim()}
                           className="px-2.5 py-1 bg-[#00ffcc]/20 hover:bg-[#00ffcc]/30 border border-[#00ffcc]/40 text-[#00ffcc] font-black rounded transition-all disabled:opacity-30 cursor-pointer flex items-center gap-1"
                         >
                           <Plus size={10} />
                           STORE
                         </button>
-                      </div>
+                      </form>
                     </motion.div>
                   )}
 

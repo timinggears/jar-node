@@ -99,7 +99,7 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] text-zinc-200 font-mono text-xs p-4 gap-4 select-none">
+    <div className="flex flex-col h-full bg-[#050505] text-zinc-200 font-mono text-xs p-4 gap-4">
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
         <div className="flex items-center gap-2">
@@ -137,7 +137,13 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
             <span className="text-[9px] text-zinc-500">Press ENTER or click WRITE</span>
           </div>
 
-          <div className="flex-1 flex flex-col gap-2">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              doWrite();
+            }}
+            className="flex-1 flex flex-col gap-2"
+          >
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -156,15 +162,15 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
                 {lastWritten ? `Last Sent: "${lastWritten}"` : 'Ready to write'}
               </span>
               <button
-                onClick={doWrite}
+                type="submit"
                 disabled={status === 'writing' || !inputText.trim()}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-xs uppercase tracking-wider transition-all disabled:opacity-30 cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.4)]"
               >
-                <span>WRITE</span>
+                <span>{status === 'writing' ? 'WRITING...' : 'WRITE'}</span>
                 <Send size={13} />
               </button>
             </div>
-          </div>
+          </form>
         </div>
 
         {/* OUTPUT BOX */}

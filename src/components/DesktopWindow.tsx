@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { motion, useDragControls } from 'motion/react';
 import { X, Minus, Maximize2 } from 'lucide-react';
 import { ReactNode } from 'react';
 
@@ -24,9 +24,13 @@ export default function DesktopWindow({
   isActive, 
   initialPos = { x: 50, y: 50 } 
 }: DesktopWindowProps) {
+  const dragControls = useDragControls();
+
   return (
     <motion.div
       drag
+      dragControls={dragControls}
+      dragListener={false}
       dragMomentum={false}
       onPointerDown={onFocus}
       initial={{ opacity: 0, scale: 0.9, x: initialPos.x, y: initialPos.y }}
@@ -41,7 +45,10 @@ export default function DesktopWindow({
       id={`window-${id}`}
     >
       {/* Title Bar */}
-      <div className="h-10 shrink-0 bg-white/5 border-b border-white/10 flex items-center justify-between px-4 cursor-grab active:cursor-grabbing select-none">
+      <div 
+        onPointerDown={(e) => dragControls.start(e)}
+        className="h-10 shrink-0 bg-white/5 border-b border-white/10 flex items-center justify-between px-4 cursor-grab active:cursor-grabbing select-none"
+      >
         <div className="flex items-center gap-3">
           <div className={`p-1 rounded ${isActive ? 'text-[#00ffcc]' : 'text-zinc-500'}`}>
             {icon}
@@ -71,7 +78,7 @@ export default function DesktopWindow({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
         {children}
       </div>
 
