@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio } from 'lucide-react';
+import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio, HardDrive, Plus } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface AsciiPacket {
@@ -621,9 +621,53 @@ export default function PhysicalAsciiReservoir({
     }
   };
 
+  const [isWritingMem, setIsWritingMem] = useState(false);
+  const [memInputText, setMemInputText] = useState('');
+  const [showMemWriter, setShowMemWriter] = useState(true);
+
+  const writeBitToReservoir = async (bit: 0 | 1) => {
+    setIsWritingMem(true);
+    try {
+      const res = await fetch('/api/reservoir/write-bit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bit, label: `RC_CELL_${bit}` })
+      });
+      const data = await res.json();
+      if (data.success && onAddLog) {
+        onAddLog(`[STORAGE_NVM]: Bit ${bit} locked into substrate capacitor bank. V_hold=${data.packet.voltage_hold?.toFixed(2)}V`, 'success');
+      }
+    } catch (e: any) {
+      if (onAddLog) onAddLog(`[STORAGE_ERR]: ${e.message}`, 'error');
+    } finally {
+      setIsWritingMem(false);
+    }
+  };
+
+  const writeTextToReservoir = async () => {
+    if (!memInputText.trim()) return;
+    setIsWritingMem(true);
+    try {
+      const res = await fetch('/api/reservoir/write-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: memInputText.trim() })
+      });
+      const data = await res.json();
+      if (data.success && onAddLog) {
+        onAddLog(`[STORAGE_NVM]: Stored "${memInputText.trim()}" across ${data.written_count} substrate memory cells.`, 'success');
+        setMemInputText('');
+      }
+    } catch (e: any) {
+      if (onAddLog) onAddLog(`[STORAGE_ERR]: ${e.message}`, 'error');
+    } finally {
+      setIsWritingMem(false);
+    }
+  };
+
   return (
     <div 
-      className="h-[445px] max-h-[445px] flex flex-col bg-[#010602] text-[#00ff66] font-mono text-xs select-none p-4 gap-4 overflow-y-auto border border-[#00ff66]/30 shadow-[0_0_20px_rgba(0,255,102,0.15),_inset_0_0_15px_rgba(0,255,102,0.08)] custom-scrollbar" 
+      className="min-h-[520px] max-h-[720px] flex flex-col bg-[#010602] text-[#00ff66] font-mono text-xs select-none p-4 gap-4 overflow-y-auto border border-[#00ff66]/30 shadow-[0_0_20px_rgba(0,255,102,0.15),_inset_0_0_15px_rgba(0,255,102,0.08)] custom-scrollbar" 
       id="ascii-reservoir-container"
     >
       {/* Header bar and connection stats */}
@@ -815,15 +859,84 @@ export default function PhysicalAsciiReservoir({
                       <Binary className="w-3.5 h-3.5 text-amber-500" />
                       <span className="text-[9px] font-black uppercase text-zinc-400">active memory bank cells ({Object.keys(memoryBank).length}/24)</span>
                     </div>
-                    <button 
-                      onClick={clearBank}
-                      className="flex items-center gap-1 hover:bg-red-500/10 hover:text-red-400 border border-white/5 hover:border-red-500/30 px-2 py-0.5 rounded text-[8px] tracking-widest text-zinc-500 uppercase transition-all"
-                      title="Wipe current reservoir state"
-                    >
-                      <Trash2 size={10} />
-                      WIPE BANK
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button 
+                        onClick={() => setShowMemWriter(!showMemWriter)}
+                        className={`flex items-center gap-1 border px-2 py-0.5 rounded text-[8px] tracking-wider uppercase font-black transition-all ${
+                          showMemWriter
+                            ? 'bg-[#00ffcc]/20 border-[#00ffcc] text-[#00ffcc]'
+                            : 'bg-white/5 border-white/10 hover:border-[#00ffcc]/40 text-zinc-400 hover:text-white'
+                        }`}
+                        title="Open direct memory write console"
+                      >
+                        <HardDrive size={10} />
+                        <span>WRITE MEMORY</span>
+                      </button>
+                      <button 
+                        onClick={clearBank}
+                        className="flex items-center gap-1 hover:bg-red-500/10 hover:text-red-400 border border-white/5 hover:border-red-500/30 px-2 py-0.5 rounded text-[8px] tracking-widest text-zinc-500 uppercase transition-all"
+                        title="Wipe current reservoir state"
+                      >
+                        <Trash2 size={10} />
+                        WIPE BANK
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Direct Memory Writer Panel */}
+                  {showMemWriter && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="bg-zinc-950/80 border border-[#00ffcc]/30 rounded-lg p-2.5 space-y-2 text-[9px]"
+                    >
+                      <div className="flex items-center justify-between text-zinc-400 font-bold uppercase">
+                        <span className="text-[#00ffcc]">JAR SUBSTRATE DIRECT STORAGE</span>
+                        <span>RC Bit Retention Mode</span>
+                      </div>
+
+                      {/* Fast Bit Write (Charge Stick RC Mode) */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-zinc-500 uppercase text-[8px]">Force RC Bit:</span>
+                        <button
+                          onClick={() => writeBitToReservoir(1)}
+                          disabled={isWritingMem}
+                          className="flex-1 py-1 bg-emerald-950/40 hover:bg-emerald-800/40 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 font-black rounded text-center transition-all disabled:opacity-40 cursor-pointer"
+                        >
+                          WRITE BIT 1 (HIGH HOLD)
+                        </button>
+                        <button
+                          onClick={() => writeBitToReservoir(0)}
+                          disabled={isWritingMem}
+                          className="flex-1 py-1 bg-sky-950/40 hover:bg-sky-800/40 border border-sky-500/40 hover:border-sky-400 text-sky-300 font-black rounded text-center transition-all disabled:opacity-40 cursor-pointer"
+                        >
+                          WRITE BIT 0 (LOW HOLD)
+                        </button>
+                      </div>
+
+                      {/* Text / Character sequence write */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <input
+                          type="text"
+                          value={memInputText}
+                          onChange={(e) => setMemInputText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') writeTextToReservoir();
+                          }}
+                          placeholder="Type text/bytes to lock in reservoir cells..."
+                          className="flex-1 bg-black/60 border border-white/10 rounded px-2 py-1 text-white placeholder-zinc-600 focus:outline-none focus:border-[#00ffcc]/60 font-mono text-[9px]"
+                        />
+                        <button
+                          onClick={writeTextToReservoir}
+                          disabled={isWritingMem || !memInputText.trim()}
+                          className="px-2.5 py-1 bg-[#00ffcc]/20 hover:bg-[#00ffcc]/30 border border-[#00ffcc]/40 text-[#00ffcc] font-black rounded transition-all disabled:opacity-30 cursor-pointer flex items-center gap-1"
+                        >
+                          <Plus size={10} />
+                          STORE
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
 
                   {/* The Grid */}
                   <div className="flex-1 bg-[#020202] border border-white/5 rounded-lg p-2.5 overflow-y-auto max-h-[190px]">

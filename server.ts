@@ -1443,6 +1443,122 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     });
   });
 
+  // --- SUBSTRATE MEMORY STORAGE API ---
+  // Write a bit into the reservoir physical/simulated cell bank
+  app.post('/api/reservoir/write-bit', (req, res) => {
+    try {
+      const bit = req.body?.bit === 1 || req.body?.bit === '1' ? 1 : 0;
+      const label = req.body?.label || `bit_${Date.now() % 10000}`;
+      const vHold = bit === 1 ? 2.45 + (Math.random() * 0.4) : 0.45 + (Math.random() * 0.3);
+      const stability = bit === 1 ? 0.95 : 0.88;
+
+      if (!systemState.memoryBank) systemState.memoryBank = {};
+      if (systemState.packetCount === undefined) systemState.packetCount = 0;
+
+      const packetId = `mem_b${bit}_${systemState.packetCount++}`;
+      const character = bit === 1 ? '1' : '0';
+
+      const packet = {
+        id: packetId,
+        ascii: character.charCodeAt(0),
+        char: character,
+        stability: parseFloat(stability.toFixed(3)),
+        timestamp: Date.now(),
+        type: 'bit_cell',
+        voltage_hold: vHold,
+        label
+      };
+
+      systemState.memoryBank[packetId] = packet;
+      const keys = Object.keys(systemState.memoryBank);
+      if (keys.length > 24) {
+        delete systemState.memoryBank[keys[0]];
+      }
+
+      const logMsg = `STORAGE_WRITE [BIT]: Encoded bit=${bit} into cell [${packetId}] (V_hold: ${vHold.toFixed(2)}V, stab: ${stability.toFixed(2)})`;
+      systemState.logEntries.push({
+        id: `log_bit_${Date.now()}`,
+        text: logMsg,
+        type: 'physical'
+      });
+      if (systemState.logEntries.length > 30) systemState.logEntries.shift();
+
+      saveState();
+
+      io.emit('evolution:state', {
+        memoryBank: systemState.memoryBank,
+        trigramHistory: systemState.trigramHistory,
+        morphicPhrases: systemState.morphicPhrases,
+        logEntries: systemState.logEntries
+      });
+      io.emit('log', logMsg);
+
+      // If hardware serial port connected, write hold trigger to microcontroller
+      if (hardwarePort && hardwarePort.isOpen) {
+        hardwarePort.write(`WRITE_BIT:${bit}\n`);
+      }
+
+      res.json({ success: true, packet, total_cells: Object.keys(systemState.memoryBank).length });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // Write ASCII text / word directly into reservoir capacitor memory cells
+  app.post('/api/reservoir/write-text', (req, res) => {
+    try {
+      const text = (req.body?.text || '').toString().trim();
+      if (!text) return res.status(400).json({ success: false, error: 'Empty text parameter' });
+
+      if (!systemState.memoryBank) systemState.memoryBank = {};
+      if (systemState.packetCount === undefined) systemState.packetCount = 0;
+
+      const written: any[] = [];
+      for (const ch of text.slice(0, 16)) {
+        const ascii = ch.charCodeAt(0);
+        const packetId = `mem_${systemState.packetCount++}`;
+        const packet = {
+          id: packetId,
+          ascii,
+          char: ch,
+          stability: parseFloat((0.85 + Math.random() * 0.14).toFixed(3)),
+          timestamp: Date.now(),
+          type: 'single'
+        };
+        systemState.memoryBank[packetId] = packet;
+        written.push(packet);
+      }
+
+      const keys = Object.keys(systemState.memoryBank);
+      while (keys.length > 24) {
+        const oldest = keys.shift();
+        if (oldest) delete systemState.memoryBank[oldest];
+      }
+
+      const logMsg = `STORAGE_WRITE [TEXT]: Encoded "${text.slice(0, 16)}" (${written.length} cells locked into reservoir memory bank)`;
+      systemState.logEntries.push({
+        id: `log_txt_${Date.now()}`,
+        text: logMsg,
+        type: 'combined'
+      });
+      if (systemState.logEntries.length > 30) systemState.logEntries.shift();
+
+      saveState();
+
+      io.emit('evolution:state', {
+        memoryBank: systemState.memoryBank,
+        trigramHistory: systemState.trigramHistory,
+        morphicPhrases: systemState.morphicPhrases,
+        logEntries: systemState.logEntries
+      });
+      io.emit('log', logMsg);
+
+      res.json({ success: true, written_count: written.length, memoryBank: systemState.memoryBank });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // --- PYTHON BRIDGE CONTROLLERS ---
   app.get('/api/bridge/status', (req, res) => {
     res.json({
