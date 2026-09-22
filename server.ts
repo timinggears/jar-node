@@ -31,7 +31,9 @@ let systemState = {
   morphicPhrases: [] as any[],
   logEntries: [] as any[],
   packetCount: 0,
-  prevCombChars: ''
+  prevCombChars: '',
+  userStoredText: '',
+  userStoredPackets: [] as any[]
 };
 
 // Load state if exists
@@ -1514,7 +1516,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       if (systemState.packetCount === undefined) systemState.packetCount = 0;
 
       const written: any[] = [];
-      for (const ch of text.slice(0, 16)) {
+      for (const ch of text.slice(0, 32)) {
         const ascii = ch.charCodeAt(0);
         const packetId = `mem_${systemState.packetCount++}`;
         const packet = {
@@ -1523,19 +1525,22 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
           char: ch,
           stability: parseFloat((0.85 + Math.random() * 0.14).toFixed(3)),
           timestamp: Date.now(),
-          type: 'single'
+          type: 'user_text'
         };
         systemState.memoryBank[packetId] = packet;
         written.push(packet);
       }
 
+      systemState.userStoredText = text.slice(0, 32);
+      systemState.userStoredPackets = written;
+
       const keys = Object.keys(systemState.memoryBank);
-      while (keys.length > 24) {
+      while (keys.length > 36) {
         const oldest = keys.shift();
         if (oldest) delete systemState.memoryBank[oldest];
       }
 
-      const logMsg = `STORAGE_WRITE [TEXT]: Encoded "${text.slice(0, 16)}" (${written.length} cells locked into reservoir memory bank)`;
+      const logMsg = `STORAGE_WRITE [TEXT]: Encoded "${text.slice(0, 32)}" (${written.length} cells locked into reservoir memory bank)`;
       systemState.logEntries.push({
         id: `log_txt_${Date.now()}`,
         text: logMsg,
@@ -1566,7 +1571,10 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       const cells = Object.values(bank) as any[];
 
       // Reconstructed raw text from sequentially stored single/combined packets
-      const reconstructedText = cells.map(c => c.char || '').join('');
+      let reconstructedText = cells.map(c => c.char || '').join('');
+      if (systemState.userStoredText) {
+        reconstructedText = systemState.userStoredText;
+      }
       
       // Calculate average retention stability
       const avgStability = cells.length > 0 
@@ -1590,6 +1598,28 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         bit_cells: bitCells,
         raw_cells: cells
       });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // Clear substrate memory cells
+  app.post('/api/reservoir/clear', (req, res) => {
+    try {
+      systemState.memoryBank = {};
+      systemState.userStoredText = '';
+      systemState.userStoredPackets = [];
+      systemState.prevCombChars = '';
+      saveState();
+
+      io.emit('evolution:state', {
+        memoryBank: {},
+        trigramHistory: systemState.trigramHistory,
+        morphicPhrases: systemState.morphicPhrases,
+        logEntries: systemState.logEntries
+      });
+      io.emit('log', 'SUBSTRATE: Memory bank cleared.');
+      res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }

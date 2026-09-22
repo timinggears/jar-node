@@ -12,6 +12,8 @@ interface DesktopWindowProps {
   onFocus: () => void;
   isActive: boolean;
   initialPos?: { x: number; y: number };
+  width?: string;
+  height?: string;
 }
 
 export default function DesktopWindow({ 
@@ -22,7 +24,9 @@ export default function DesktopWindow({
   onClose, 
   onFocus, 
   isActive, 
-  initialPos = { x: 50, y: 50 } 
+  initialPos = { x: 50, y: 50 },
+  width = 'max-w-2xl w-full',
+  height = 'h-auto max-h-[85vh]'
 }: DesktopWindowProps) {
   const dragControls = useDragControls();
 
@@ -33,15 +37,15 @@ export default function DesktopWindow({
       dragListener={false}
       dragMomentum={false}
       onPointerDown={onFocus}
-      initial={{ opacity: 0, scale: 0.9, x: initialPos.x, y: initialPos.y }}
+      initial={{ opacity: 0, scale: 0.95, x: initialPos.x, y: initialPos.y }}
       animate={{ 
         opacity: 1, 
         scale: 1,
         zIndex: isActive ? 50 : 10,
-        boxShadow: isActive ? '0 20px 50px rgba(0,0,0,0.5), 0 0 20px rgba(0,255,204,0.1)' : '0 10px 30px rgba(0,0,0,0.3)'
+        boxShadow: isActive ? '0 20px 50px rgba(0,0,0,0.6), 0 0 20px rgba(0,255,204,0.15)' : '0 10px 30px rgba(0,0,0,0.4)'
       }}
-      transition={{ type: 'spring', damping: 20, stiffness: 200 }}
-      className={`absolute w-full max-w-2xl h-[500px] flex flex-col bg-black/85 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden pointer-events-auto ${isActive ? 'ring-1 ring-[#00ffcc]/30' : ''}`}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
+      className={`absolute ${width} ${height} flex flex-col bg-[#050807]/95 backdrop-blur-xl border border-white/15 rounded-xl overflow-hidden pointer-events-auto ${isActive ? 'ring-1 ring-[#00ffcc]/40' : ''}`}
       id={`window-${id}`}
     >
       {/* Title Bar */}

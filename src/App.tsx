@@ -1471,9 +1471,11 @@ export default function App() {
             onClose={() => closeWindow('substrate_io')}
             onFocus={() => setActiveWindow('substrate_io')}
             isActive={activeWindow === 'substrate_io'}
-            initialPos={{ x: 120, y: 140 }}
+            initialPos={{ x: 100, y: 120 }}
+            width="w-[580px] max-w-[95vw]"
+            height="h-auto"
           >
-            <div className="w-[520px] max-w-[90vw] h-[380px]">
+            <div className="w-full min-h-[390px] max-h-[580px] flex flex-col">
               <SubstrateIOBoxMemo onAddLog={addLog} />
             </div>
           </DesktopWindow>
