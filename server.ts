@@ -332,6 +332,7 @@ async function startServer() {
 
   function emitPendingTelemetry() {
     if (pendingTelemetryToEmit) {
+      latestTelemetryLine = pendingTelemetryToEmit;
       io.emit('telemetry', pendingTelemetryToEmit);
       io.to('telemetry').emit('telemetry', pendingTelemetryToEmit);
       pendingTelemetryToEmit = null;
@@ -680,6 +681,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
   // Track if we have a real hardware connection to decide whether to simulate
   let hardwareActive = false;
   let lastHardwareTelemetryTime = 0;
+  let latestTelemetryLine = '';
 
   // --- SUBSCRIPTION LOGIC ---
   io.on('connection', (socket) => {
@@ -994,6 +996,8 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
   setInterval(async () => {
     try {
       if (hardwarePort && hardwarePort.isOpen) return;
+      // If live hardware telemetry was received within the last 4 seconds, pause virtual simulation
+      if (Date.now() - lastHardwareTelemetryTime < 4000) return;
 
       // v148: Experimental Simulation Layer
       // Replicates the chaotic nodal fluctuations of the liquid substrate
@@ -1346,6 +1350,97 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     }, durationMs);
 
     res.json({ success: true, freqA, freqB, durationMs, token });
+  });
+
+  // --- PUBLIC TELEMETRY INGEST & BROADCAST FEED ---
+  // Ingest live telemetry line from Pico / local forwarder via HTTP POST
+  app.post('/api/telemetry/ingest', (req, res) => {
+    try {
+      const line = (typeof req.body === 'string' ? req.body : req.body?.telemetry || req.body?.line || '').trim();
+      if (!line) {
+        return res.status(400).json({ success: false, error: 'Empty telemetry payload' });
+      }
+
+      lastHardwareTelemetryTime = Date.now();
+      const normalized = normalizeTelemetryLine(line);
+      queueTelemetryEmission(normalized);
+
+      // Also log if a hardware message or packet was pushed
+      if (req.body?.log) {
+        io.emit('log', `INGEST_FEED: ${req.body.log}`);
+      }
+
+      res.json({ 
+        success: true, 
+        normalized,
+        lastHardwareTelemetryTime,
+        status: 'streaming_to_subscribers'
+      });
+    } catch (err: any) {
+      console.error('[TELEMETRY_INGEST_ERR]', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Public live JSON feed of the latest substrate metrics
+  app.get('/api/telemetry/latest', (req, res) => {
+    const raw = latestTelemetryLine || '';
+    const parts = raw.startsWith('!S|') ? raw.split('|') : [];
+    
+    res.json({
+      success: true,
+      timestamp: Date.now(),
+      is_live_hardware: Date.now() - lastHardwareTelemetryTime < 4000,
+      last_hardware_time: lastHardwareTelemetryTime,
+      system_state: {
+        bias: systemState.bias,
+        overdrive: systemState.overdrive,
+        hashrate: systemState.latestHashRate,
+        zpe_level: systemState.zpe_level,
+        intelligence: systemState.intelligence,
+        memetic_depth: systemState.memetic_depth
+      },
+      telemetry: {
+        raw: raw,
+        seed: parts[1] || null,
+        jitter: parts[2] ? parseFloat(parts[2]) : null,
+        voltage_nodal: parts[3] ? parseFloat(parts[3]) : null,
+        parity: parts[4] ? parseInt(parts[4]) : null,
+        frequency_carrier: parts[5] ? parseFloat(parts[5]) : null,
+        hashrate: parts[6] ? parseFloat(parts[6]) : null,
+        coherence: parts[7] ? parseFloat(parts[7]) : null,
+        intelligence_depth: parts[8] ? parseFloat(parts[8]) : null,
+        gpu_parity: parts[9] ? parseFloat(parts[9]) : null,
+        zpe: parts[10] ? parseFloat(parts[10]) : null
+      }
+    });
+  });
+
+  // Public Server-Sent Events (SSE) stream for peers without WebSockets
+  app.get('/api/telemetry/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    res.write(`data: ${JSON.stringify({ type: 'init', state: systemState })}\n\n`);
+
+    const handleTelemetry = (data: string) => {
+      res.write(`data: ${JSON.stringify({ type: 'telemetry', line: data, timestamp: Date.now() })}\n\n`);
+    };
+
+    const handleLog = (logMsg: string) => {
+      res.write(`data: ${JSON.stringify({ type: 'log', message: logMsg, timestamp: Date.now() })}\n\n`);
+    };
+
+    io.on('telemetry', handleTelemetry);
+    io.on('log', handleLog);
+
+    req.on('close', () => {
+      io.off('telemetry', handleTelemetry);
+      io.off('log', handleLog);
+      res.end();
+    });
   });
 
   // --- PYTHON BRIDGE CONTROLLERS ---

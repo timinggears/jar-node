@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert } from 'lucide-react';
+import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface AsciiPacket {
@@ -588,10 +588,37 @@ export default function PhysicalAsciiReservoir({
     setComputeStatus('completed');
   };
 
+  const [isSampling, setIsSampling] = useState(false);
+
   const clearBank = () => {
     setMemoryBank({});
     const uniqueClearId = `log_${Date.now()}_clear_${logIdCounterRef.current++}_${Math.random().toString(36).substring(2, 9)}`;
     setLogEntries(prev => [...prev, { id: uniqueClearId, text: '--- MEMORY BANK PURGED ---', type: 'physical' }]);
+  };
+
+  const triggerPulseSample = async () => {
+    if (isSampling) return;
+    setIsSampling(true);
+    try {
+      // Send manual carrier probe excitation to hardware or backend
+      const res = await fetch('/api/telemetry/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          line: `!S|${Math.floor(Math.random()*9000+1000)}|${jitter.toFixed(4)}|${voltage.toFixed(2)}|1|${Math.round(bias * 1000)}|${(coherence * 50).toFixed(1)}|${coherence.toFixed(2)}|${intelligence.toFixed(1)}|1|${(Math.random()*0.8).toFixed(2)}`,
+          log: `OPERATOR MANUAL PULSE PROBE [Bias ${bias.toFixed(1)} GHz, Volts ${voltage.toFixed(2)}V]`
+        })
+      });
+      if (onAddLog) {
+        onAddLog(`[PROBE_PULSE]: Sample triggered. Voltage: ${voltage.toFixed(2)}V, Coherence: ${coherence.toFixed(2)}`, 'success');
+      }
+    } catch (e: any) {
+      if (onAddLog) {
+        onAddLog(`[PROBE_PULSE_ERR]: ${e.message}`, 'error');
+      }
+    } finally {
+      setTimeout(() => setIsSampling(false), 500);
+    }
   };
 
   return (
@@ -605,7 +632,18 @@ export default function PhysicalAsciiReservoir({
           <Database className="w-4 h-4 text-[#ff88ff] animate-pulse" />
           <h2 className="text-sm font-black tracking-widest text-[#ff88ff]">PHYSICAL ASCII RESERVOIR v0.10</h2>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Action Button: Pulse Sample / Force Read */}
+          <button
+            onClick={triggerPulseSample}
+            disabled={isSampling}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#00ffcc]/10 hover:bg-[#00ffcc]/25 active:scale-95 border border-[#00ffcc]/40 text-[#00ffcc] text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer shadow-[0_0_8px_rgba(0,255,204,0.2)]"
+            title="Fire a manual pulse probe and sample current reservoir node"
+          >
+            <Radio size={11} className={isSampling ? "animate-spin" : "animate-pulse"} />
+            <span>{isSampling ? "SAMPLING..." : "PULSE SAMPLE"}</span>
+          </button>
+
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] uppercase">
             <span className={`w-2 h-2 rounded-full ${hardwareState === 'connected' ? 'bg-[#00ffcc] animate-ping' : hardwareState === 'bridged' ? 'bg-orange-500' : 'bg-red-500'}`} />
             <span className="text-zinc-400">

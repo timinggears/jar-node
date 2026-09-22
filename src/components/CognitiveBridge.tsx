@@ -230,7 +230,13 @@ export default function CognitiveBridge({
           )}
 
           {errorStatus && (
-            <div className="p-3 bg-red-950/30 border border-red-500/20 text-red-400 rounded-lg text-xs font-mono">
+            <motion.div 
+              key="error-status"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              className="p-3 bg-red-950/30 border border-red-500/20 text-red-400 rounded-lg text-xs font-mono"
+            >
               <span className="text-red-500 font-bold block mb-1">SYSTEM EXCEPTION</span>
               {errorStatus}
               {errorStatus.includes("GEMINI_API_KEY") && (
@@ -238,7 +244,7 @@ export default function CognitiveBridge({
                   Please supply a valid <span className="text-white">GEMINI_API_KEY</span> in the AI Studio Settings menu.
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
         </AnimatePresence>
         <div ref={messagesEndRef} />

@@ -1266,201 +1266,199 @@ export default function App() {
 
       {/* DESKTOP AREA */}
       <div className="relative flex-1 z-10 pointer-events-none">
-        <AnimatePresence>
-          {openWindows.includes('terminal') && (
-            <DesktopWindow 
-              key="terminal"
-              id="terminal" 
-              title="Reservoir_Terminal" 
-              icon={<Terminal size={16} />}
-              onClose={() => closeWindow('terminal')}
-              onFocus={() => setActiveWindow('terminal')}
-              isActive={activeWindow === 'terminal'}
-              initialPos={{ x: 60, y: 40 }}
-            >
-              <ConsoleLog logs={logs} onCommand={handleCommand} />
-            </DesktopWindow>
-          )}
+        {openWindows.includes('terminal') && (
+          <DesktopWindow 
+            key="terminal"
+            id="terminal" 
+            title="Reservoir_Terminal" 
+            icon={<Terminal size={16} />}
+            onClose={() => closeWindow('terminal')}
+            onFocus={() => setActiveWindow('terminal')}
+            isActive={activeWindow === 'terminal'}
+            initialPos={{ x: 60, y: 40 }}
+          >
+            <ConsoleLog logs={logs} onCommand={handleCommand} />
+          </DesktopWindow>
+        )}
 
-          {openWindows.includes('stats') && (
-            <DesktopWindow 
-              key="stats"
-              id="stats" 
-              title="System_Monitor" 
-              icon={<Activity size={16} />}
-              onClose={() => closeWindow('stats')}
-              onFocus={() => setActiveWindow('stats')}
-              isActive={activeWindow === 'stats'}
-              initialPos={{ x: 680, y: 200 }}
-            >
-              <div className="p-4 bg-black/40 h-full overflow-hidden flex flex-col">
-                <StatsGridMemo stats={stats} />
-                <MiningMonitorChart stats={stats} isMining={isMining} />
-              </div>
-            </DesktopWindow>
-          )}
+        {openWindows.includes('stats') && (
+          <DesktopWindow 
+            key="stats"
+            id="stats" 
+            title="System_Monitor" 
+            icon={<Activity size={16} />}
+            onClose={() => closeWindow('stats')}
+            onFocus={() => setActiveWindow('stats')}
+            isActive={activeWindow === 'stats'}
+            initialPos={{ x: 680, y: 200 }}
+          >
+            <div className="p-4 bg-black/40 h-full overflow-hidden flex flex-col">
+              <StatsGridMemo stats={stats} />
+              <MiningMonitorChart stats={stats} isMining={isMining} />
+            </div>
+          </DesktopWindow>
+        )}
 
-          {openWindows.includes('settings') && (
-            <DesktopWindow 
-              key="settings"
-              id="settings" 
-              title="Central_Governance" 
-              icon={<Settings size={16} />}
-              onClose={() => closeWindow('settings')}
-              onFocus={() => setActiveWindow('settings')}
-              isActive={activeWindow === 'settings'}
-              initialPos={{ x: 740, y: 60 }}
-            >
-              <SystemSettings 
-                carrierBias={carrierBias}
-                setCarrierBias={handleCarrierBiasChange}
-                isOverdrive={isOverdrive}
-                setIsOverdrive={handleOverdriveChange}
-                isAiActive={isAiAnalysisActive}
-                setIsAiActive={setIsAiAnalysisActive}
-                isEntangled={isEntangled}
-                setIsEntangled={setIsEntangled}
-                isBoost2B={isBoost2B}
-                setIsBoost2B={handleToggleBoost2B}
-                systemVersion={systemVersion}
-                currentFreq={stats.frequency}
-                onSendCommand={sendHardwareCommand}
-                vault={stats.vault}
-                onSaveVault={saveToVault}
-                onLoadVault={loadFromVault}
-                onDeleteVault={deleteFromVault}
-                poolUrl={poolUrl}
-                minerUser={minerUser}
-                minerPass={minerPass}
-                onUpdateMinerConfig={handleUpdateMinerConfig}
-                pythonBridgeActive={pythonBridgeActive}
-                onTogglePythonBridge={handleTogglePythonBridge}
-              />
-            </DesktopWindow>
-          )}
+        {openWindows.includes('settings') && (
+          <DesktopWindow 
+            key="settings"
+            id="settings" 
+            title="Central_Governance" 
+            icon={<Settings size={16} />}
+            onClose={() => closeWindow('settings')}
+            onFocus={() => setActiveWindow('settings')}
+            isActive={activeWindow === 'settings'}
+            initialPos={{ x: 740, y: 60 }}
+          >
+            <SystemSettings 
+              carrierBias={carrierBias}
+              setCarrierBias={handleCarrierBiasChange}
+              isOverdrive={isOverdrive}
+              setIsOverdrive={handleOverdriveChange}
+              isAiActive={isAiAnalysisActive}
+              setIsAiActive={setIsAiAnalysisActive}
+              isEntangled={isEntangled}
+              setIsEntangled={setIsEntangled}
+              isBoost2B={isBoost2B}
+              setIsBoost2B={handleToggleBoost2B}
+              systemVersion={systemVersion}
+              currentFreq={stats.frequency}
+              onSendCommand={sendHardwareCommand}
+              vault={stats.vault}
+              onSaveVault={saveToVault}
+              onLoadVault={loadFromVault}
+              onDeleteVault={deleteFromVault}
+              poolUrl={poolUrl}
+              minerUser={minerUser}
+              minerPass={minerPass}
+              onUpdateMinerConfig={handleUpdateMinerConfig}
+              pythonBridgeActive={pythonBridgeActive}
+              onTogglePythonBridge={handleTogglePythonBridge}
+            />
+          </DesktopWindow>
+        )}
 
-          {openWindows.includes('cognitive_bridge') && (
-            <DesktopWindow 
-              key="cognitive_bridge"
-              id="cognitive_bridge" 
-              title="JAR_Cognitive_Core" 
-              icon={<Brain size={16} />}
+        {openWindows.includes('cognitive_bridge') && (
+          <DesktopWindow 
+            key="cognitive_bridge"
+            id="cognitive_bridge" 
+            title="JAR_Cognitive_Core" 
+            icon={<Brain size={16} />}
+            onClose={() => closeWindow('cognitive_bridge')}
+            onFocus={() => setActiveWindow('cognitive_bridge')}
+            isActive={activeWindow === 'cognitive_bridge'}
+            initialPos={{ x: 300, y: 120 }}
+          >
+            <CognitiveBridge 
               onClose={() => closeWindow('cognitive_bridge')}
-              onFocus={() => setActiveWindow('cognitive_bridge')}
-              isActive={activeWindow === 'cognitive_bridge'}
-              initialPos={{ x: 300, y: 120 }}
-            >
-              <CognitiveBridge 
-                onClose={() => closeWindow('cognitive_bridge')}
+              bias={carrierBias}
+              isOverdrive={isOverdrive}
+              frequency={stats.frequency}
+              coherence={stats.coherence}
+              onTuneBias={(newBias) => handleCarrierBiasChange(newBias)}
+              onToggleOverdrive={(val) => handleOverdriveChange(val)}
+            />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('files') && (
+          <DesktopWindow 
+            key="files"
+            id="files" 
+            title="Substrate_Files" 
+            icon={<Folder size={16} />}
+            onClose={() => closeWindow('files')}
+            onFocus={() => setActiveWindow('files')}
+            isActive={activeWindow === 'files'}
+            initialPos={{ x: 100, y: 150 }}
+          >
+            <FileExplorer />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('visualizer') && (
+          <DesktopWindow 
+            key="visualizer"
+            id="visualizer" 
+            title="Jar_Reservoir_Cube" 
+            icon={<Box size={16} />}
+            onClose={() => closeWindow('visualizer')}
+            onFocus={() => setActiveWindow('visualizer')}
+            isActive={activeWindow === 'visualizer'}
+            initialPos={{ x: 380, y: 80 }}
+          >
+            <div className="h-full bg-black relative">
+              <WarpVisualizerMemo 
+                coherence={stats.coherence} 
+                jitter={stats.jitter} 
+                frequency={stats.frequency} 
                 bias={carrierBias}
-                isOverdrive={isOverdrive}
-                frequency={stats.frequency}
-                coherence={stats.coherence}
-                onTuneBias={(newBias) => handleCarrierBiasChange(newBias)}
-                onToggleOverdrive={(val) => handleOverdriveChange(val)}
-              />
-            </DesktopWindow>
-          )}
-
-          {openWindows.includes('files') && (
-            <DesktopWindow 
-              key="files"
-              id="files" 
-              title="Substrate_Files" 
-              icon={<Folder size={16} />}
-              onClose={() => closeWindow('files')}
-              onFocus={() => setActiveWindow('files')}
-              isActive={activeWindow === 'files'}
-              initialPos={{ x: 100, y: 150 }}
-            >
-              <FileExplorer />
-            </DesktopWindow>
-          )}
-
-          {openWindows.includes('visualizer') && (
-            <DesktopWindow 
-              key="visualizer"
-              id="visualizer" 
-              title="Jar_Reservoir_Cube" 
-              icon={<Box size={16} />}
-              onClose={() => closeWindow('visualizer')}
-              onFocus={() => setActiveWindow('visualizer')}
-              isActive={activeWindow === 'visualizer'}
-              initialPos={{ x: 380, y: 80 }}
-            >
-              <div className="h-full bg-black relative">
-                <WarpVisualizerMemo 
-                  coherence={stats.coherence} 
-                  jitter={stats.jitter} 
-                  frequency={stats.frequency} 
-                  bias={carrierBias}
-                  vNodal={stats.vNodal}
-                  intelligence={stats.intelligence}
-                  isInstalling={isInstalling}
-                  installProgress={installProgress}
-                  isAiActive={isAiAnalysisActive}
-                  isSolving={isSolving}
-                  isQecActive={isQecActive}
-                  isEntangled={isEntangled}
-                  parity={stats.parity}
-                />
-              </div>
-            </DesktopWindow>
-          )}
-
-          {openWindows.includes('stabilizer') && (
-            <DesktopWindow 
-              key="stabilizer"
-              id="stabilizer" 
-              title="Quantum_Stabilizer" 
-              icon={<ShieldCheck size={16} />}
-              onClose={() => closeWindow('stabilizer')}
-              onFocus={() => setActiveWindow('stabilizer')}
-              isActive={activeWindow === 'stabilizer'}
-              initialPos={{ x: 300, y: 120 }}
-            >
-              <QuantumStabilizerMemo 
-                coherence={stats.coherence}
-                jitter={stats.jitter}
+                vNodal={stats.vNodal}
                 intelligence={stats.intelligence}
-                frequency={stats.frequency}
-                gpuParity={stats.gpuParity}
+                isInstalling={isInstalling}
+                installProgress={installProgress}
+                isAiActive={isAiAnalysisActive}
+                isSolving={isSolving}
                 isQecActive={isQecActive}
-                onToggleQec={handleToggleQec}
-                isCognitiveActive={isCognitiveBridgeActive}
-                onToggleCognitive={handleToggleCognitive}
-                systemModel="JAR_v3_SOVEREIGN"
                 isEntangled={isEntangled}
-                quantumShift={quantumShift}
+                parity={stats.parity}
               />
-            </DesktopWindow>
-          )}
+            </div>
+          </DesktopWindow>
+        )}
 
-          {openWindows.includes('ascii_reservoir') && (
-            <DesktopWindow 
-              key="ascii_reservoir"
-              id="ascii_reservoir" 
-              title="Physical_ASCII_Reservoir" 
-              icon={<Database size={16} />}
-              onClose={() => closeWindow('ascii_reservoir')}
-              onFocus={() => setActiveWindow('ascii_reservoir')}
-              isActive={activeWindow === 'ascii_reservoir'}
-              initialPos={{ x: 60, y: 100 }}
-            >
-              <PhysicalAsciiReservoirMemo 
-                coherence={stats.coherence}
-                intelligence={stats.intelligence}
-                phaseOut={stats.phaseOut}
-                voltage={stats.vNodal}
-                jitter={stats.jitter}
-                hardwareState={hardwareState}
-                onAddLog={addLog}
-                bias={carrierBias}
-                onTuneBias={handleCarrierBiasChange}
-              />
-            </DesktopWindow>
-          )}
-        </AnimatePresence>
+        {openWindows.includes('stabilizer') && (
+          <DesktopWindow 
+            key="stabilizer"
+            id="stabilizer" 
+            title="Quantum_Stabilizer" 
+            icon={<ShieldCheck size={16} />}
+            onClose={() => closeWindow('stabilizer')}
+            onFocus={() => setActiveWindow('stabilizer')}
+            isActive={activeWindow === 'stabilizer'}
+            initialPos={{ x: 300, y: 120 }}
+          >
+            <QuantumStabilizerMemo 
+              coherence={stats.coherence}
+              jitter={stats.jitter}
+              intelligence={stats.intelligence}
+              frequency={stats.frequency}
+              gpuParity={stats.gpuParity}
+              isQecActive={isQecActive}
+              onToggleQec={handleToggleQec}
+              isCognitiveActive={isCognitiveBridgeActive}
+              onToggleCognitive={handleToggleCognitive}
+              systemModel="JAR_v3_SOVEREIGN"
+              isEntangled={isEntangled}
+              quantumShift={quantumShift}
+            />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('ascii_reservoir') && (
+          <DesktopWindow 
+            key="ascii_reservoir"
+            id="ascii_reservoir" 
+            title="Physical_ASCII_Reservoir" 
+            icon={<Database size={16} />}
+            onClose={() => closeWindow('ascii_reservoir')}
+            onFocus={() => setActiveWindow('ascii_reservoir')}
+            isActive={activeWindow === 'ascii_reservoir'}
+            initialPos={{ x: 60, y: 100 }}
+          >
+            <PhysicalAsciiReservoirMemo 
+              coherence={stats.coherence}
+              intelligence={stats.intelligence}
+              phaseOut={stats.phaseOut}
+              voltage={stats.vNodal}
+              jitter={stats.jitter}
+              hardwareState={hardwareState}
+              onAddLog={addLog}
+              bias={carrierBias}
+              onTuneBias={handleCarrierBiasChange}
+            />
+          </DesktopWindow>
+        )}
       </div>
 
       {/* TOP STATUS BAR */}
