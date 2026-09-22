@@ -22,6 +22,7 @@ import QuantumStabilizer from './components/QuantumStabilizer';
 import SubstrateVisualizer from './components/SubstrateVisualizer';
 import MiningMonitorChart from './components/MiningMonitorChart';
 import PhysicalAsciiReservoir from './components/PhysicalAsciiReservoir';
+import SubstrateIOBox from './components/SubstrateIOBox';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -34,6 +35,7 @@ const QuantumStabilizerMemo = memo(QuantumStabilizer);
 const SubstrateVisualizerMemo = memo(SubstrateVisualizer);
 const WarpVisualizerMemo = memo(WarpVisualizer);
 const PhysicalAsciiReservoirMemo = memo(PhysicalAsciiReservoir);
+const SubstrateIOBoxMemo = memo(SubstrateIOBox);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -125,8 +127,8 @@ export default function App() {
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir']);
-  const [activeWindow, setActiveWindow] = useState<string | null>('ascii_reservoir');
+  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir', 'substrate_io']);
+  const [activeWindow, setActiveWindow] = useState<string | null>('substrate_io');
 
   // Mining Parameters
   const [poolUrl, setPoolUrl] = useState('rx.unmineable.com:3333');
@@ -1444,7 +1446,7 @@ export default function App() {
             onClose={() => closeWindow('ascii_reservoir')}
             onFocus={() => setActiveWindow('ascii_reservoir')}
             isActive={activeWindow === 'ascii_reservoir'}
-            initialPos={{ x: 60, y: 100 }}
+            initialPos={{ x: 40, y: 80 }}
           >
             <PhysicalAsciiReservoirMemo 
               coherence={stats.coherence}
@@ -1457,6 +1459,23 @@ export default function App() {
               bias={carrierBias}
               onTuneBias={handleCarrierBiasChange}
             />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('substrate_io') && (
+          <DesktopWindow 
+            key="substrate_io"
+            id="substrate_io" 
+            title="Substrate_Input_Output_Box" 
+            icon={<HardDrive size={16} className="text-[#00ffcc]" />}
+            onClose={() => closeWindow('substrate_io')}
+            onFocus={() => setActiveWindow('substrate_io')}
+            isActive={activeWindow === 'substrate_io'}
+            initialPos={{ x: 120, y: 140 }}
+          >
+            <div className="w-[520px] max-w-[90vw] h-[380px]">
+              <SubstrateIOBoxMemo onAddLog={addLog} />
+            </div>
           </DesktopWindow>
         )}
       </div>

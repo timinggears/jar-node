@@ -644,18 +644,26 @@ export default function PhysicalAsciiReservoir({
     }
   };
 
+  const [lastWritten, setLastWritten] = useState<string>('');
+  const [lastWrittenTime, setLastWrittenTime] = useState<number | null>(null);
+
   const writeTextToReservoir = async () => {
-    if (!memInputText.trim()) return;
+    const rawText = memInputText.trim();
+    if (!rawText) return;
     setIsWritingMem(true);
     try {
       const res = await fetch('/api/reservoir/write-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: memInputText.trim() })
+        body: JSON.stringify({ text: rawText })
       });
       const data = await res.json();
-      if (data.success && onAddLog) {
-        onAddLog(`[STORAGE_NVM]: Stored "${memInputText.trim()}" across ${data.written_count} substrate memory cells.`, 'success');
+      if (data.success) {
+        setLastWritten(rawText);
+        setLastWrittenTime(Date.now());
+        if (onAddLog) {
+          onAddLog(`[STORAGE_NVM]: Stored "${rawText}" across ${data.written_count} substrate memory cells.`, 'success');
+        }
         setMemInputText('');
       }
     } catch (e: any) {
@@ -670,6 +678,7 @@ export default function PhysicalAsciiReservoir({
     total: number;
     avgStability: number;
     bits: { id: string; bit: number; voltage_hold?: number }[];
+    cellChars: string[];
   } | null>(null);
   const [isRecalling, setIsRecalling] = useState(false);
 
@@ -679,11 +688,13 @@ export default function PhysicalAsciiReservoir({
       const res = await fetch('/api/reservoir/recall');
       const data = await res.json();
       if (data.success) {
+        const chars = (data.raw_cells || []).map((c: any) => c.char || '');
         setRecallData({
           text: data.reconstructed_string || '',
           total: data.total_cells || 0,
           avgStability: data.average_stability || 0,
-          bits: data.bit_cells || []
+          bits: data.bit_cells || [],
+          cellChars: chars
         });
         if (onAddLog) {
           onAddLog(`[STORAGE_RECALL]: Read ${data.total_cells} cells. Reconstructed: "${data.reconstructed_string || '(empty)'}" (Stab: ${data.average_stability})`, 'info');
@@ -923,30 +934,84 @@ export default function PhysicalAsciiReservoir({
                     </div>
                   </div>
 
-                  {/* Recall Readout Box */}
+                  {/* Recall Readout Box with Clear Input Comparison */}
                   {recallData && (
                     <motion.div
                       initial={{ opacity: 0, y: -5 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="bg-amber-950/20 border border-amber-500/30 rounded-lg p-2.5 text-[9px] space-y-1.5"
+                      className="bg-black/90 border-2 border-[#00ffcc]/60 rounded-lg p-3 text-[10px] space-y-2.5 shadow-[0_0_20px_rgba(0,255,204,0.15)]"
                     >
-                      <div className="flex items-center justify-between text-amber-400 font-black uppercase tracking-wider">
-                        <span className="flex items-center gap-1">
-                          <Eye size={11} />
-                          RECALLED SUBSTRATE MEMORY ({recallData.total} cells)
-                        </span>
-                        <span className="text-zinc-400 text-[8px]">
-                          Avg Coherence: {(recallData.avgStability * 100).toFixed(0)}%
-                        </span>
+                      <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                        <div className="flex items-center gap-1.5 text-[#00ffcc] font-black uppercase tracking-wider text-xs">
+                          <Eye size={13} className="text-[#00ffcc] animate-pulse" />
+                          <span>PHYSICAL SUBSTRATE MEMORY RECALL</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[9px]">
+                          <span className="px-2 py-0.5 rounded bg-[#00ffcc]/10 text-[#00ffcc] border border-[#00ffcc]/30 font-bold">
+                            {recallData.total} CELLS HELD
+                          </span>
+                          <span className="text-zinc-400">
+                            Coherence: {(recallData.avgStability * 100).toFixed(0)}%
+                          </span>
+                        </div>
                       </div>
-                      <div className="bg-black/70 border border-amber-500/20 rounded px-2.5 py-1.5 text-white font-mono text-xs select-all flex items-center justify-between">
-                        <span className="font-bold text-amber-200">
-                          {recallData.text ? `"${recallData.text}"` : '<No characters stored>'}
-                        </span>
-                        <span className="text-[8px] text-zinc-500 uppercase">
-                          {recallData.bits.length > 0 ? `${recallData.bits.length} RC bits active` : ''}
-                        </span>
+
+                      {/* Side by side comparison: Input Written vs Recalled Readout */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {/* What was written */}
+                        <div className="bg-zinc-900/80 border border-white/10 rounded p-2 flex flex-col justify-between gap-1">
+                          <span className="text-[8px] uppercase font-black text-zinc-500 tracking-wider">
+                            INPUT YOU STORED
+                          </span>
+                          <div className="font-mono text-base font-black text-white px-2 py-1 bg-black/60 rounded border border-white/5 truncate">
+                            {lastWritten ? `"${lastWritten}"` : <span className="text-zinc-600 italic">None logged yet</span>}
+                          </div>
+                          {lastWrittenTime && (
+                            <span className="text-[7px] text-zinc-500">
+                              Locked at {new Date(lastWrittenTime).toLocaleTimeString()}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* What is currently read out of the jar cells */}
+                        <div className="bg-[#00ffcc]/5 border border-[#00ffcc]/40 rounded p-2 flex flex-col justify-between gap-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[8px] uppercase font-black text-[#00ffcc] tracking-wider">
+                              RECALLED FROM CELLS
+                            </span>
+                            {lastWritten && recallData.text.includes(lastWritten) && (
+                              <span className="text-[8px] text-emerald-400 font-bold flex items-center gap-0.5">
+                                <Check size={10} /> 100% MATCH
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-mono text-base font-black text-[#00ffcc] px-2 py-1 bg-black/80 rounded border border-[#00ffcc]/30 tracking-widest select-all drop-shadow-[0_0_8px_rgba(0,255,204,0.4)]">
+                            {recallData.text ? `"${recallData.text}"` : <span className="text-zinc-600 italic">&lt;EMPTY&gt;</span>}
+                          </div>
+                          <span className="text-[7px] text-zinc-400">
+                            {recallData.bits.length > 0 ? `${recallData.bits.length} RC hold bits locked` : 'Sequential capacitor retention'}
+                          </span>
+                        </div>
                       </div>
+
+                      {/* Cell by Cell Breakdown Pills */}
+                      {recallData.cellChars && recallData.cellChars.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-[7px] uppercase font-bold text-zinc-500 block mb-1">
+                            Individual Cell Breakdown:
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {recallData.cellChars.map((ch, idx) => (
+                              <span
+                                key={idx}
+                                className="px-1.5 py-0.5 bg-black border border-[#00ffcc]/30 text-[#00ffcc] font-mono text-xs rounded font-bold"
+                              >
+                                {ch === ' ' ? '␣' : ch}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   )}
 

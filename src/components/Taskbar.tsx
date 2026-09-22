@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -98,6 +98,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('ascii_reservoir')} 
         isActive={activeWindow === 'ascii_reservoir'}
         onClick={() => onToggleWindow('ascii_reservoir')}
+      />
+      <AppIcon 
+        id="substrate_io"
+        icon={<HardDrive size={20} />} 
+        label="I/O Box (Memory)" 
+        isOpen={openWindows.includes('substrate_io')} 
+        isActive={activeWindow === 'substrate_io'}
+        onClick={() => onToggleWindow('substrate_io')}
       />
       <AppIcon 
         id="visualizer"
