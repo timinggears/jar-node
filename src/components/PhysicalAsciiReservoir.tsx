@@ -720,9 +720,9 @@ export default function PhysicalAsciiReservoir({
           </button>
 
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] uppercase">
-            <span className={`w-2 h-2 rounded-full ${hardwareState === 'connected' ? 'bg-[#00ffcc] animate-ping' : hardwareState === 'bridged' ? 'bg-orange-500' : 'bg-red-500'}`} />
-            <span className="text-zinc-400">
-              {hardwareState === 'connected' ? 'PICO ACTIVE' : hardwareState === 'bridged' ? 'BRIDGED (SIM)' : 'OILSIM ACTIVE'}
+            <span className={`w-2 h-2 rounded-full ${hardwareState === 'connected' ? 'bg-[#00ffcc] animate-ping' : hardwareState === 'bridged' ? 'bg-[#00ffcc]' : 'bg-emerald-500'}`} />
+            <span className="text-zinc-300 font-bold">
+              {hardwareState === 'connected' ? 'PICO HARDWARE ACTIVE' : hardwareState === 'bridged' ? 'PHYSICAL BRIDGE ONLINE' : 'JAR SUBSTRATE ONLINE'}
             </span>
           </div>
           <button 
