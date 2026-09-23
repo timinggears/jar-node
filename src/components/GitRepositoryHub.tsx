@@ -23,7 +23,11 @@ interface GitRepositoryHubProps {
 
 export default function GitRepositoryHub({ onAddLog }: GitRepositoryHubProps) {
   const [repoUrl, setRepoUrl] = useState(() => {
-    return localStorage.getItem('jar_custom_repo_url') || 'https://github.com/akuhlguy/sovereign-singularity-reservoir';
+    const saved = localStorage.getItem('jar_custom_repo_url');
+    if (saved && !saved.includes('akuhlguy/sovereign-singularity-reservoir')) {
+      return saved;
+    }
+    return 'https://github.com/timinggears/jar-node';
   });
   const [isEditingUrl, setIsEditingUrl] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -280,10 +284,10 @@ export default function GitRepositoryHub({ onAddLog }: GitRepositoryHubProps) {
                 <div className="p-2.5 bg-black/60 border border-white/5 rounded-lg flex items-center justify-between">
                   <div>
                     <span className="text-zinc-500 font-bold mr-2">STEP 1:</span>
-                    <code>cd sovereign-singularity-reservoir && npm install</code>
+                    <code>cd jar-node && npm install</code>
                   </div>
                   <button
-                    onClick={() => handleCopy('npm install', 'step1')}
+                    onClick={() => handleCopy('cd jar-node && npm install', 'step1')}
                     className="p-1 text-zinc-400 hover:text-white cursor-pointer"
                   >
                     {copiedKey === 'step1' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
