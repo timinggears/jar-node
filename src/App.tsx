@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -23,6 +23,7 @@ import SubstrateVisualizer from './components/SubstrateVisualizer';
 import MiningMonitorChart from './components/MiningMonitorChart';
 import PhysicalAsciiReservoir from './components/PhysicalAsciiReservoir';
 import SubstrateIOBox from './components/SubstrateIOBox';
+import GitRepositoryHub from './components/GitRepositoryHub';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -36,6 +37,7 @@ const SubstrateVisualizerMemo = memo(SubstrateVisualizer);
 const WarpVisualizerMemo = memo(WarpVisualizer);
 const PhysicalAsciiReservoirMemo = memo(PhysicalAsciiReservoir);
 const SubstrateIOBoxMemo = memo(SubstrateIOBox);
+const GitRepositoryHubMemo = memo(GitRepositoryHub);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -1480,6 +1482,25 @@ export default function App() {
             </div>
           </DesktopWindow>
         )}
+
+        {openWindows.includes('git_repo') && (
+          <DesktopWindow 
+            key="git_repo"
+            id="git_repo" 
+            title="Git_Repository_and_Field_Specs" 
+            icon={<GitBranch size={16} className="text-[#00ffcc]" />}
+            onClose={() => closeWindow('git_repo')}
+            onFocus={() => setActiveWindow('git_repo')}
+            isActive={activeWindow === 'git_repo'}
+            initialPos={{ x: 180, y: 70 }}
+            width="w-[660px] max-w-[95vw]"
+            height="h-auto max-h-[85vh]"
+          >
+            <div className="w-full min-h-[480px] max-h-[620px] flex flex-col">
+              <GitRepositoryHubMemo onAddLog={addLog} />
+            </div>
+          </DesktopWindow>
+        )}
       </div>
 
       {/* TOP STATUS BAR */}
@@ -1503,13 +1524,23 @@ export default function App() {
           )}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+           {/* Git Repository Link & Specs Hub */}
+           <button 
+             onClick={() => toggleWindow('git_repo')}
+             className="flex items-center gap-1.5 bg-[#00ffcc]/10 hover:bg-[#00ffcc]/25 text-[#00ffcc] border border-[#00ffcc]/30 hover:border-[#00ffcc]/60 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(0,255,204,0.2)]"
+             title="Open Git Repository Hub & Field Specifications"
+           >
+             <GitBranch size={9} />
+             <span>GIT_REPO &amp; SPECS</span>
+           </button>
+
            {/* Open Independent Window Option */}
            <a 
              href={window.location.origin} 
              target="_blank" 
              rel="noopener noreferrer"
-             className="flex items-center gap-1 bg-[#00ffcc]/10 hover:bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30 hover:border-[#00ffcc]/60 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold animate-pulse"
+             className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/10 hover:border-white/30 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold"
              title="Open application in its own browser window outside of the AI Studio frame"
            >
              <ExternalLink size={9} />
