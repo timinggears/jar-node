@@ -480,10 +480,12 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       type: 'single'
     };
 
+    // Keep ambient packets from overwriting user-written memory cells
     systemState.memoryBank[packetId] = newPacket;
-    const keys = Object.keys(systemState.memoryBank);
-    if (keys.length > 24) {
-      delete systemState.memoryBank[keys[0]];
+    const allKeys = Object.keys(systemState.memoryBank);
+    const ambientKeys = allKeys.filter(k => systemState.memoryBank[k]?.type !== 'user_text');
+    if (ambientKeys.length > 20) {
+      delete systemState.memoryBank[ambientKeys[0]];
     }
 
     const logMsg = `PHYSICAL → ASCII: "${character}" (code ${asciiVal}) | V: ${voltage.toFixed(4)}V | Stability: ${stability.toFixed(3)}`;
@@ -513,9 +515,10 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         };
 
         systemState.memoryBank[combId] = combinedPacket;
-        const finalKeys = Object.keys(systemState.memoryBank);
-        if (finalKeys.length > 24) {
-          delete systemState.memoryBank[finalKeys[0]];
+        const allKeysAfter = Object.keys(systemState.memoryBank);
+        const ambientCombKeys = allKeysAfter.filter(k => systemState.memoryBank[k]?.type !== 'user_text');
+        if (ambientCombKeys.length > 20) {
+          delete systemState.memoryBank[ambientCombKeys[0]];
         }
 
         const combineMsg = `COMBINED → RESONANCE CHARACTER: "${combCharLocal}" | Combined Stability: ${combinedPacket.stability.toFixed(3)} (Coherence: ${coherence.toFixed(3)})`;

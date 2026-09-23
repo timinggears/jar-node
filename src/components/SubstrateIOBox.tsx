@@ -26,8 +26,8 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
         setCellCount(data.total_cells || 0);
         setAvgStability(data.average_stability || 0);
 
-        const compareTo = expectedText !== undefined ? expectedText : lastWritten;
-        const isMatch = compareTo ? recalled.includes(compareTo) : true;
+        const compareTo = (expectedText !== undefined ? expectedText : lastWritten).trim();
+        const isMatch = compareTo ? (recalled.trim() === compareTo || recalled.includes(compareTo)) : true;
         setStatus(isMatch ? 'match' : 'mismatch');
 
         if (onAddLog) {
@@ -212,12 +212,12 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
             )}
           </div>
 
-          <div className="flex-1 flex flex-col gap-2">
-            <div className="flex-1 min-h-[100px] w-full bg-black/90 border border-[#00ffcc]/30 rounded-lg p-3 text-[#00ffcc] font-mono text-lg font-black tracking-wider flex items-center justify-center select-all drop-shadow-[0_0_10px_rgba(0,255,204,0.4)]">
+          <div className="flex-1 flex flex-col gap-2 min-h-0">
+            <div className="flex-1 min-h-[100px] max-h-[160px] overflow-y-auto w-full bg-black/90 border border-[#00ffcc]/30 rounded-lg p-3 text-[#00ffcc] font-mono text-base font-black tracking-wider flex items-center justify-center text-center select-all drop-shadow-[0_0_10px_rgba(0,255,204,0.4)] break-all whitespace-pre-wrap">
               {status === 'recalling' ? (
                 <span className="text-zinc-600 animate-pulse text-xs tracking-widest uppercase">READING CHARGE RETENTION...</span>
               ) : outputText ? (
-                `"${outputText}"`
+                <span>&ldquo;{outputText}&rdquo;</span>
               ) : (
                 <span className="text-zinc-700 italic text-xs">&lt;MEMORY EMPTY - WRITE SOMETHING&gt;</span>
               )}
