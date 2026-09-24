@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { Terminal, Shield, Power } from 'lucide-react';
 
 interface BootLoaderProps {
@@ -63,17 +63,14 @@ export default function BootLoader({ onBoot }: BootLoaderProps) {
 
           <div className="w-full space-y-6">
             <div className="text-center h-6">
-              <AnimatePresence mode="wait">
-                <motion.p 
-                  key={status}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  className={`text-xs font-mono tracking-tight ${isBooting ? 'text-[#00ffcc]' : 'text-white/60'}`}
-                >
-                  {status}
-                </motion.p>
-              </AnimatePresence>
+              <motion.p 
+                key={status}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`text-xs font-mono tracking-tight ${isBooting ? 'text-[#00ffcc]' : 'text-white/60'}`}
+              >
+                {status}
+              </motion.p>
             </div>
 
             {isBooting ? (

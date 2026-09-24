@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { Box, ChevronRight, ChevronLeft, Cpu, Activity } from 'lucide-react';
 import JumpingBunny from './JumpingBunny';
 import LittleSquirrel from './LittleSquirrel';
@@ -38,14 +38,12 @@ export default function PetBay({ miningState, isOverdrive, bias }: PetBayProps) 
         {isOpen ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ x: 300, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 300, opacity: 0 }}
-            className="w-72 h-[450px] bg-black/90 border-l border-y border-[#00ffcc]/20 backdrop-blur-md relative overflow-hidden flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
-          >
+      {isOpen && (
+        <motion.div
+          initial={{ x: 300, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          className="w-72 h-[450px] bg-black/90 border-l border-y border-[#00ffcc]/20 backdrop-blur-md relative overflow-hidden flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
+        >
             {/* Scanned Grid Background */}
             <div className="absolute inset-0 opacity-10 pointer-events-none" 
                  style={{ backgroundImage: 'radial-gradient(#00ffcc 1px, transparent 1px)', backgroundSize: '15px 15px' }} />
@@ -111,7 +109,6 @@ export default function PetBay({ miningState, isOverdrive, bias }: PetBayProps) 
             />
           </motion.div>
         )}
-      </AnimatePresence>
     </div>
   );
 }

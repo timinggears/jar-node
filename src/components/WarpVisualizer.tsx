@@ -4,8 +4,8 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Zap, LayoutGrid, HelpCircle, X, Sparkles, Eye, Activity } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Zap, LayoutGrid, HelpCircle, X, Sparkles, Eye, Activity, GitBranch } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface WarpVisualizerProps {
@@ -158,6 +158,8 @@ export default function WarpVisualizer({
     });
   }, []);
 
+  const lastStateUpdateRef = useRef(0);
+
   // Listen for hardware socket events and live telemetry stream
   useEffect(() => {
     const socket = io();
@@ -170,24 +172,29 @@ export default function WarpVisualizer({
         const freqVal = parseFloat(parts[5]);
         const cohVal = parseFloat(parts[7]);
 
-        if (!isNaN(cohVal) && cohVal > 0) {
-          setLiveCoherence(cohVal);
-        }
-        if (!isNaN(freqVal) && freqVal > 1000) {
-          setLiveFrequency(freqVal);
-        } else {
-          setLiveFrequency(28000); // Default target 28 kHz
-        }
-        if (!isNaN(jit) && jit > 0) {
-          setLiveJitter(jit);
-        }
-
-        // Live telemetry writes multiple active block updates into the 16x16 matrix
         const sampleToken = seedStr.substring(0, 3) || 'k4x';
-        setActiveToken(sampleToken);
 
+        // Throttle React component state updates to ~3Hz to prevent UI freezing on remote consoles
+        const now = Date.now();
+        if (now - lastStateUpdateRef.current > 350) {
+          lastStateUpdateRef.current = now;
+          if (!isNaN(cohVal) && cohVal > 0) {
+            setLiveCoherence(cohVal);
+          }
+          if (!isNaN(freqVal) && freqVal > 1000) {
+            setLiveFrequency(freqVal);
+          } else {
+            setLiveFrequency(28000); // Default target 28 kHz
+          }
+          if (!isNaN(jit) && jit > 0) {
+            setLiveJitter(jit);
+          }
+          setActiveToken(sampleToken);
+        }
+
+        // Live telemetry writes active block updates directly to ref without React render overhead
         const cells = planeGridRef.current;
-        const updateCount = 3 + Math.floor(Math.random() * 3);
+        const updateCount = 2 + Math.floor(Math.random() * 2);
         for (let i = 0; i < updateCount; i++) {
           const targetIdx = Math.floor(Math.random() * cells.length);
           if (cells[targetIdx]) {
@@ -796,6 +803,17 @@ export default function WarpVisualizer({
             RESONANCE_PULSE
           </button>
 
+          <a
+            href="/jar-node"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg border border-[#00ffcc]/40 bg-[#00ffcc]/15 hover:bg-[#00ffcc]/30 text-[#00ffcc] text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(0,255,204,0.3)] cursor-pointer"
+            title="Open dedicated Jar-Node repository specs & live showcase page"
+          >
+            <GitBranch size={12} />
+            <span>JAR_PAGE_&_REPO ↗</span>
+          </a>
+
           <button
             onClick={() => setShowInstructions(!showInstructions)}
             className="p-1.5 rounded-lg border border-white/10 bg-black/80 hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
@@ -849,47 +867,44 @@ export default function WarpVisualizer({
       </div>
 
       {/* --- INSTRUCTIONS MODAL --- */}
-      <AnimatePresence>
-        {showInstructions && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute inset-4 m-auto max-w-xl max-h-[85%] bg-black/95 backdrop-blur-xl border border-[#00ffcc]/30 rounded-2xl p-5 shadow-2xl z-50 flex flex-col pointer-events-auto overflow-hidden font-sans"
-          >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <LayoutGrid size={18} className="text-[#00ffcc]" />
-                <h2 className="text-sm font-black tracking-widest text-[#00ffcc] uppercase">
-                  Reservoir 16×16 Memory Plane Guide
-                </h2>
-              </div>
-              <button
-                onClick={() => setShowInstructions(false)}
-                className="p-1 rounded bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
-              >
-                <X size={16} />
-              </button>
+      {showInstructions && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="absolute inset-4 m-auto max-w-xl max-h-[85%] bg-black/95 backdrop-blur-xl border border-[#00ffcc]/30 rounded-2xl p-5 shadow-2xl z-50 flex flex-col pointer-events-auto overflow-hidden font-sans"
+        >
+          <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <LayoutGrid size={18} className="text-[#00ffcc]" />
+              <h2 className="text-sm font-black tracking-widest text-[#00ffcc] uppercase">
+                Reservoir 16×16 Memory Plane Guide
+              </h2>
+            </div>
+            <button
+              onClick={() => setShowInstructions(false)}
+              className="p-1 rounded bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-all"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-4 text-xs text-zinc-300 font-mono leading-relaxed pr-2">
+            <div className="p-3 bg-[#00ffcc]/5 border border-[#00ffcc]/20 rounded-lg text-zinc-200">
+              This 16×16 memory plane (256 cells) visualizes the reservoir substrate state driven near 28 kHz under the <strong>Wave/Particle Duality Readout Rule</strong>.
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-4 text-xs text-zinc-300 font-mono leading-relaxed pr-2">
-              <div className="p-3 bg-[#00ffcc]/5 border border-[#00ffcc]/20 rounded-lg text-zinc-200">
-                This 16×16 memory plane (256 cells) visualizes the reservoir substrate state driven near 28 kHz under the <strong>Wave/Particle Duality Readout Rule</strong>.
-              </div>
-
-              <div>
-                <h3 className="text-[#00ffcc] font-bold uppercase text-[11px] mb-1">Wave / Particle Readout Dynamics</h3>
-                <ul className="list-disc list-inside space-y-1.5 text-zinc-300 text-[11px]">
-                  <li><strong className="text-white">WAVE FORM (Diffuse Field):</strong> When local coherence is low, the substrate renders continuous wave interference, soft glows, and undulating ripples across the plane.</li>
-                  <li><strong className="text-white">PARTICLE FORM (Localized Collapse):</strong> When a region reaches high coherence and stabilizes, it collapses into a discrete 3D memory block (particle event) with crisp edges and character tokens.</li>
-                  <li><strong className="text-white">DUAL-TONE INTERFERENCE:</strong> Driving two mixing wave frequencies (f<sub>A</sub> & f<sub>B</sub>) creates standing wave beats. Constructive interference peaks collapse into particles, while destructive nodes remain diffuse waves.</li>
-                  <li><strong className="text-white">3D ISO & 2D FLAT VIEWS:</strong> Toggle between 3D isometric perspective elevation and direct 2D flat matrix anytime.</li>
-                </ul>
-              </div>
+            <div>
+              <h3 className="text-[#00ffcc] font-bold uppercase text-[11px] mb-1">Wave / Particle Readout Dynamics</h3>
+              <ul className="list-disc list-inside space-y-1.5 text-zinc-300 text-[11px]">
+                <li><strong className="text-white">WAVE FORM (Diffuse Field):</strong> When local coherence is low, the substrate renders continuous wave interference, soft glows, and undulating ripples across the plane.</li>
+                <li><strong className="text-white">PARTICLE FORM (Localized Collapse):</strong> When a region reaches high coherence and stabilizes, it collapses into a discrete 3D memory block (particle event) with crisp edges and character tokens.</li>
+                <li><strong className="text-white">DUAL-TONE INTERFERENCE:</strong> Driving two mixing wave frequencies (f<sub>A</sub> & f<sub>B</sub>) creates standing wave beats. Constructive interference peaks collapse into particles, while destructive nodes remain diffuse waves.</li>
+                <li><strong className="text-white">3D ISO & 2D FLAT VIEWS:</strong> Toggle between 3D isometric perspective elevation and direct 2D flat matrix anytime.</li>
+              </ul>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
     </section>
   );
 }

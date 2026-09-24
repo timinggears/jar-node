@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowRight, Send, RefreshCw, CheckCircle2, AlertCircle, HardDrive, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowRight, Send, RefreshCw, CheckCircle2, AlertCircle, HardDrive, Trash2, GitBranch, Binary } from 'lucide-react';
 
 interface IOProps {
   onAddLog?: (msg: string, type?: 'info' | 'error' | 'warning' | 'success') => void;
+  onOpenMemTest?: () => void;
 }
 
-export default function SubstrateIOBox({ onAddLog }: IOProps) {
+export default function SubstrateIOBox({ onAddLog, onOpenMemTest }: IOProps) {
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
   const [lastWritten, setLastWritten] = useState('');
@@ -13,6 +14,7 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
   const [avgStability, setAvgStability] = useState<number | null>(null);
   const [status, setStatus] = useState<'idle' | 'writing' | 'recalling' | 'match' | 'mismatch'>('idle');
   const [history, setHistory] = useState<{ id: string; in: string; out: string; time: string; match: boolean }[]>([]);
+  const historyCounterRef = useRef(0);
 
   // Function to recall immediately from backend memory
   const doRecall = async (expectedText?: string) => {
@@ -35,9 +37,10 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
         }
 
         if (compareTo) {
+          const uniqueId = `recall_${Date.now()}_${++historyCounterRef.current}_${Math.random().toString(36).slice(2, 7)}`;
           setHistory(prev => [
             {
-              id: Date.now().toString(),
+              id: uniqueId,
               in: compareTo,
               out: recalled,
               time: new Date().toLocaleTimeString(),
@@ -76,9 +79,10 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
         onAddLog(`[IO_BOX_WRITE]: Encoded "${textToWrite}" into physical memory bank.`, 'success');
       }
 
+      const writeId = `write_${Date.now()}_${++historyCounterRef.current}_${Math.random().toString(36).slice(2, 7)}`;
       setHistory(prev => [
         {
-          id: Date.now().toString(),
+          id: writeId,
           in: textToWrite,
           out: textToWrite,
           time: new Date().toLocaleTimeString(),
@@ -129,6 +133,26 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {onOpenMemTest && (
+            <button
+              onClick={onOpenMemTest}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_8px_rgba(16,185,129,0.2)]"
+              title="Open Substrate MemTest86 & Sector Block Mapper"
+            >
+              <Binary size={12} />
+              <span>MAP_BLOCKS_&_TEST ↗</span>
+            </button>
+          )}
+          <a
+            href="/jar-node"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#00ffcc]/10 hover:bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30 text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_8px_rgba(0,255,204,0.2)]"
+            title="View standalone Jar Node specifications and git repository page"
+          >
+            <GitBranch size={12} />
+            <span>JAR_PAGE_&_REPO ↗</span>
+          </a>
           <button
             onClick={() => doRecall()}
             disabled={status === 'writing' || status === 'recalling'}
@@ -236,8 +260,8 @@ export default function SubstrateIOBox({ onAddLog }: IOProps) {
         <div className="bg-black/60 border border-white/10 rounded-lg p-2.5 flex flex-col gap-1.5 max-h-[120px] overflow-y-auto">
           <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider">Recent Input ➔ Recall History:</span>
           <div className="space-y-1">
-            {history.map((h) => (
-              <div key={h.id} className="flex items-center justify-between text-[10px] py-0.5 border-b border-white/5">
+            {history.map((h, idx) => (
+              <div key={`${h.id || 'hist'}_${idx}`} className="flex items-center justify-between text-[10px] py-0.5 border-b border-white/5">
                 <div className="flex items-center gap-2">
                   <span className="text-zinc-500 text-[8px]">{h.time}</span>
                   <span className="text-emerald-300 font-bold">IN: "{h.in}"</span>

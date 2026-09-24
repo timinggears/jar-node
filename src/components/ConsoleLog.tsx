@@ -76,8 +76,8 @@ export default function ConsoleLog({ logs, onCommand }: ConsoleLogProps) {
         onScroll={checkScroll}
         className="flex-1 p-4 text-[11px] overflow-y-auto space-y-1 no-scrollbar selection:bg-[#00ffcc] selection:text-black"
       >
-        {logs.map((log) => (
-          <div key={log.id} className="flex gap-2 leading-relaxed whitespace-pre-wrap animate-in fade-in slide-in-from-left-1 duration-300">
+        {logs.map((log, idx) => (
+          <div key={`${log.id || 'log'}_${idx}`} className="flex gap-2 leading-relaxed whitespace-pre-wrap animate-in fade-in slide-in-from-left-1 duration-300">
             <span className="text-white/20 shrink-0 select-none">[{log.timestamp}]</span>
             <span className={`${getTypeStyles(log.type)}`}>{log.message}</span>
           </div>

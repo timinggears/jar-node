@@ -10,16 +10,17 @@ interface SubstrateVisualizerProps {
   coherence: number;
   frequency: number;
   zpeLevel: number;
+  lowLag?: boolean;
 }
 
-export default function SubstrateVisualizer({ gpuParity, coherence, frequency, zpeLevel }: SubstrateVisualizerProps) {
+export default function SubstrateVisualizer({ gpuParity, coherence, frequency, zpeLevel, lowLag = false }: SubstrateVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const propsRef = useRef({ gpuParity, coherence, frequency, zpeLevel });
+  const propsRef = useRef({ gpuParity, coherence, frequency, zpeLevel, lowLag });
 
   // Update refs when props change without restarting loop
   useEffect(() => {
-    propsRef.current = { gpuParity, coherence, frequency, zpeLevel };
-  }, [gpuParity, coherence, frequency, zpeLevel]);
+    propsRef.current = { gpuParity, coherence, frequency, zpeLevel, lowLag };
+  }, [gpuParity, coherence, frequency, zpeLevel, lowLag]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -30,6 +31,7 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency, z
 
     let animationId: number;
     let particles: { x: number; y: number; vx: number; vy: number; life: number; color: string }[] = [];
+    let lastFrameTime = 0;
 
     const resize = () => {
       if (!canvas.parentElement) return;
@@ -40,8 +42,16 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency, z
     window.addEventListener('resize', resize);
     resize();
 
-    const render = () => {
-      const { gpuParity: gp, coherence: coh, frequency: freq, zpeLevel: zpe } = propsRef.current;
+    const render = (time: number) => {
+      const { gpuParity: gp, coherence: coh, frequency: freq, zpeLevel: zpe, lowLag: isLowLag } = propsRef.current;
+
+      // In low-lag mode, throttle frame rate to ~25fps (40ms) to save CPU/GPU cycles for remote console
+      const minInterval = isLowLag ? 40 : 16;
+      if (time - lastFrameTime < minInterval) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
+      lastFrameTime = time;
       
       // Background clear with slight trail
       // Lower ZPE = dimmer rendering
@@ -50,9 +60,10 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency, z
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const intensity = (gp / 100) * zpeFactor;
-      const particleCount = Math.floor(intensity * 5); 
+      const maxParticles = isLowLag ? 18 : 65;
+      const particleCount = isLowLag ? 1 : Math.floor(intensity * 4); 
       
-      if (particles.length < (100 * zpeFactor) && Math.random() < intensity) {
+      if (particles.length < (maxParticles * zpeFactor) && Math.random() < intensity) {
         for(let i = 0; i < particleCount; i++) {
           particles.push({
             x: Math.random() * canvas.width,
@@ -70,7 +81,7 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency, z
       particles.forEach(p => {
         p.x += p.vx;
         p.y += p.vy;
-        p.life -= 0.005;
+        p.life -= isLowLag ? 0.01 : 0.005;
 
         // Wrap around
         if (p.x < 0) p.x = canvas.width;
@@ -84,8 +95,8 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency, z
         ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
         ctx.fill();
 
-        // Connect particles if GPU parity is high enough (Dimensional Weave)
-        if (gp > 85 && Math.random() > 0.98) { // Rarer connections
+        // Connect particles if GPU parity is high enough (Dimensional Weave) - skip in low-lag
+        if (!isLowLag && gp > 85 && Math.random() > 0.98) {
           const nearest = particles[Math.floor(Math.random() * particles.length)];
           if (nearest && nearest !== p) {
             ctx.strokeStyle = `rgba(0, 255, 204, ${p.life * 0.05})`;
@@ -101,19 +112,18 @@ export default function SubstrateVisualizer({ gpuParity, coherence, frequency, z
       animationId = requestAnimationFrame(render);
     };
 
-    render();
+    animationId = requestAnimationFrame(render);
 
     return () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resize);
     };
-  }, []); // Only run once
+  }, []);
 
   return (
     <canvas 
       ref={canvasRef}
       className="w-full h-full pointer-events-none opacity-40 mix-blend-screen"
-      style={{ filter: 'blur(1px) contrast(1.2)' }}
     />
   );
 }

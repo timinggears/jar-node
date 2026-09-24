@@ -84,6 +84,16 @@ export default function GitRepositoryHub({ onAddLog }: GitRepositoryHubProps) {
 
           <div className="flex items-center gap-2 self-start md:self-center shrink-0">
             <a
+              href="/jar-node"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xs tracking-wider uppercase transition-all border border-white/20 hover:border-[#00ffcc]/50 active:scale-95 cursor-pointer"
+              title="Open standalone HTML landing & showcase page"
+            >
+              <span>COOL HTML SHOWCASE</span>
+              <ExternalLink size={13} />
+            </a>
+            <a
               href={repoUrl}
               target="_blank"
               rel="noopener noreferrer"

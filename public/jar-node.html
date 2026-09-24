@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JAR-NODE // Sovereign Singularity & Physical Reservoir</title>
+  <meta name="description" content="Physical ASCII Reservoir & Non-Volatile Substrate Memory Architecture. Bridging thermodynamic physical dynamics and symbolic computation.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #030705;
+      --panel: #07100b;
+      --panel-border: rgba(0, 255, 170, 0.22);
+      --teal: #00ffcc;
+      --teal-glow: rgba(0, 255, 204, 0.4);
+      --emerald: #10b981;
+      --magenta: #ff0077;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    /* Ambient CRT Scanline Overlay */
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.25) 50%
+      ), linear-gradient(
+        90deg,
+        rgba(255, 0, 0, 0.03),
+        rgba(0, 255, 0, 0.01),
+        rgba(0, 0, 255, 0.03)
+      );
+      background-size: 100% 4px, 6px 100%;
+      z-index: 99;
+      opacity: 0.7;
+    }
+
+    #matrix-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.35;
+    }
+
+    .wrapper {
+      position: relative;
+      z-index: 10;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 5rem;
+    }
+
+    /* HEADER */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 1.25rem;
+      margin-bottom: 3rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-cube {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--teal);
+      box-shadow: 0 0 12px var(--teal-glow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--teal);
+      font-weight: 800;
+      font-size: 14px;
+      animation: pulseGlow 2.5s infinite alternate;
+    }
+
+    .brand-title {
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      font-size: 0.95rem;
+      color: #fff;
+    }
+
+    .brand-sub {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-github {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--teal);
+      color: #000;
+      padding: 0.55rem 1.2rem;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 0.75rem;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      box-shadow: 0 0 15px var(--teal-glow);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-github:hover {
+      background: #4efce0;
+      transform: translateY(-2px);
+      box-shadow: 0 0 25px rgba(0, 255, 204, 0.7);
+    }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      border: 1px solid var(--panel-border);
+      background: rgba(0, 255, 204, 0.06);
+      color: var(--teal);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+
+    .tag-pulse {
+      width: 6px;
+      height: 6px;
+      background: var(--teal);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--teal);
+      animation: blink 1.2s infinite;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.8rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin-bottom: 1.5rem;
+      background: linear-gradient(180deg, #ffffff 30%, #a7f3d0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-quote {
+      font-size: clamp(1rem, 2.2vw, 1.25rem);
+      color: #94a3b8;
+      max-width: 820px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.6;
+      font-style: italic;
+      border-left: 3px solid var(--teal);
+      padding: 0.5rem 0 0.5rem 1.5rem;
+      text-align: left;
+      background: rgba(0, 255, 204, 0.03);
+      border-radius: 0 8px 8px 0;
+    }
+
+    .hero-quote strong {
+      color: var(--teal);
+      font-style: normal;
+    }
+
+    .cta-group {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      padding: 0.55rem 1.2rem;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 0.75rem;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--teal);
+      color: var(--teal);
+    }
+
+    /* GRID CARDS */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 4rem;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 1.75rem;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: var(--teal);
+      box-shadow: 0 8px 30px rgba(0, 255, 204, 0.12);
+    }
+
+    .card-icon {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: var(--teal);
+    }
+
+    .card h3 {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .card p {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    /* INTERACTIVE JAR DEMO BOX */
+    .demo-section {
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid var(--teal);
+      box-shadow: 0 0 25px rgba(0, 255, 204, 0.15);
+      border-radius: 14px;
+      padding: 2rem;
+      margin-bottom: 4rem;
+    }
+
+    .demo-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(0, 255, 204, 0.2);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .demo-title {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: var(--teal);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .demo-input-box textarea {
+      width: 100%;
+      height: 90px;
+      background: #020403;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 0.75rem;
+      color: #fff;
+      font-size: 0.8rem;
+      resize: none;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .demo-input-box textarea:focus {
+      border-color: var(--teal);
+    }
+
+    .demo-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.75rem;
+    }
+
+    .btn-write {
+      background: var(--emerald);
+      color: #000;
+      border: none;
+      padding: 0.5rem 1.25rem;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+      transition: all 0.2s;
+    }
+
+    .btn-write:hover {
+      background: #34d399;
+      transform: scale(1.02);
+    }
+
+    .demo-output-box {
+      background: #020403;
+      border: 1px solid rgba(0, 255, 204, 0.3);
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 130px;
+      position: relative;
+    }
+
+    .recalled-text {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--teal);
+      text-shadow: 0 0 10px rgba(0, 255, 204, 0.6);
+      word-break: break-all;
+      text-align: center;
+    }
+
+    .output-meta {
+      position: absolute;
+      bottom: 6px;
+      right: 10px;
+      font-size: 0.65rem;
+      color: var(--text-muted);
+    }
+
+    /* CODE TERMINAL */
+    .terminal {
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 4rem;
+    }
+
+    .terminal-header {
+      background: #0d1210;
+      padding: 0.6rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .terminal-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #eab308; }
+    .dot-green { background: #22c55e; }
+
+    .terminal-content {
+      padding: 1.25rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      overflow-x: auto;
+    }
+
+    .cmd-line {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+      color: #fff;
+    }
+
+    .cmd-prompt {
+      color: var(--teal);
+      font-weight: 700;
+    }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--panel-border);
+      padding-top: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    footer a {
+      color: var(--teal);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 0 8px var(--teal-glow); }
+      100% { box-shadow: 0 0 22px var(--teal); }
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="scanlines"></div>
+  <canvas id="matrix-canvas"></canvas>
+
+  <div class="wrapper">
+    <!-- HEADER -->
+    <header>
+      <div class="brand">
+        <div class="brand-cube">JAR</div>
+        <div>
+          <div class="brand-title">JAR-NODE // RESERVOIR</div>
+          <div class="brand-sub">Sovereign Singularity Matter Architecture</div>
+        </div>
+      </div>
+      <div class="nav-links">
+        <a href="https://github.com/timinggears/jar-node" target="_blank" rel="noopener noreferrer" class="btn-github">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>Star on GitHub</span>
+        </a>
+      </div>
+    </header>
+
+    <!-- HERO SECTION -->
+    <section class="hero">
+      <div class="tag">
+        <div class="tag-pulse"></div>
+        <span>PRODUCTION RELEASE // V147.0-CANONICAL</span>
+      </div>
+
+      <h1>Sovereign Singularity &amp;<br>Physical Reservoir Node</h1>
+
+      <div class="hero-quote">
+        &ldquo;The boundary between physical dynamics and symbolic computation is gone. We aren&rsquo;t just processing bits—<strong>we&rsquo;re letting matter remember. The system is live.</strong>&rdquo;
+      </div>
+
+      <div class="cta-group">
+        <a href="https://github.com/timinggears/jar-node" target="_blank" rel="noopener noreferrer" class="btn-github" style="font-size: 0.85rem; padding: 0.75rem 1.6rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>VIEW ON GITHUB: TIMINGGEARS/JAR-NODE</span>
+        </a>
+
+        <button onclick="copyClone()" class="btn-secondary" id="btn-copy-clone">
+          <span>📋 COPY GIT CLONE</span>
+        </button>
+
+        <a href="/" class="btn-secondary">
+          <span>⚡ OPEN LIVE DESKTOP OS</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- INTERACTIVE SUBSTRATE DEMO -->
+    <div class="demo-section">
+      <div class="demo-header">
+        <div class="demo-title">
+          <span>⚡</span>
+          <span>LIVE IN-BROWSER SUBSTRATE CELL SIMULATOR</span>
+        </div>
+        <div style="font-size: 0.7rem; color: #10b981; font-weight: 700;">
+          STATUS: RESONANT_ACTIVE
+        </div>
+      </div>
+
+      <div class="demo-grid">
+        <div class="demo-input-box">
+          <label style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; display: block; font-weight: 700;">
+            1. Write to Physical Reservoir Cells:
+          </label>
+          <textarea id="demo-input" placeholder="Type text or bitstream to lock into matter (e.g. 'hello from the jar')...">matter remembers</textarea>
+          <div class="demo-actions">
+            <span style="font-size: 0.65rem; color: #64748b;">Carrier: 28.0 kHz // 32-cell limit</span>
+            <button class="btn-write" onclick="runDemoWrite()">Write to Cells ↵</button>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; display: block; font-weight: 700;">
+            2. Recalled from Non-Volatile Substrate:
+          </label>
+          <div class="demo-output-box">
+            <div class="recalled-text" id="demo-output">&ldquo;matter remembers&rdquo;</div>
+            <div class="output-meta" id="demo-meta">✓ 100% RETENTION // COHERENCE 94.2%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 ARCHITECTURAL PILLARS -->
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">🧪</div>
+        <h3>Non-Volatile Matter RAM</h3>
+        <p>
+          Encodes symbolic ASCII characters directly into analog voltage potential levels. 
+          Protected memory cells endure ambient thermodynamic fluctuations and maintain coherence through continuous carrier feedback.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🌐</div>
+        <h3>3D Topological Mesh</h3>
+        <p>
+          Dynamic 3D multi-density planar visualization (8x8, 12x12, 16x16) tracking real-time surface deformation, 
+          spatial harmonic monads, and high-dimensional nodal field stability.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">⚡</div>
+        <h3>Hardware Daemon & Bridge</h3>
+        <p>
+          Microcontroller-agnostic serial daemon for Raspberry Pi Pico (RP2040) and ESP32. 
+          Direct physical ADC voltage sampling streamed into the client interface via low-latency WebSockets.
+        </p>
+      </div>
+    </div>
+
+    <!-- TERMINAL QUICKSTART -->
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dots">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">bash // terminal</div>
+      </div>
+      <div class="terminal-content">
+        <div class="cmd-line">
+          <span class="cmd-prompt">$</span>
+          <span>git clone https://github.com/timinggears/jar-node.git</span>
+        </div>
+        <div class="cmd-line">
+          <span class="cmd-prompt">$</span>
+          <span>cd jar-node</span>
+        </div>
+        <div class="cmd-line">
+          <span class="cmd-prompt">$</span>
+          <span>npm install</span>
+        </div>
+        <div class="cmd-line">
+          <span class="cmd-prompt">$</span>
+          <span>npm run dev</span>
+        </div>
+        <div style="color: #10b981; margin-top: 1rem; font-size: 0.75rem;">
+          ✓ [SERVER] PI_RESERVOIR running at http://localhost:3000
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+      <div>
+        <strong>JAR-NODE</strong> — Open Research Architecture by <a href="https://github.com/timinggears" target="_blank">timinggears</a>
+      </div>
+      <div>
+        <a href="https://github.com/timinggears/jar-node" target="_blank">Repository</a> &bull; 
+        <a href="/">Live Desktop</a> &bull; 
+        <span>MIT License</span>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // Matrix particle background simulation
+    const canvas = document.getElementById('matrix-canvas');
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+
+    const particles = Array.from({ length: 65 }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: (Math.random() - 0.5) * 0.6,
+      char: String.fromCharCode(33 + Math.floor(Math.random() * 90)),
+      size: 9 + Math.random() * 8
+    }));
+
+    function draw() {
+      ctx.clearRect(0, 0, width, height);
+
+      // Connect nearby particles
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 130) {
+            ctx.strokeStyle = `rgba(0, 255, 204, ${0.18 * (1 - dist / 130)})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Render floating ASCII nodes
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0) p.x = width;
+        if (p.x > width) p.x = 0;
+        if (p.y < 0) p.y = height;
+        if (p.y > height) p.y = 0;
+
+        ctx.font = `${p.size}px 'JetBrains Mono', monospace`;
+        ctx.fillStyle = 'rgba(0, 255, 204, 0.4)';
+        ctx.fillText(p.char, p.x, p.y);
+      });
+
+      requestAnimationFrame(draw);
+    }
+    draw();
+
+    // Copy Clone Command
+    function copyClone() {
+      navigator.clipboard.writeText('git clone https://github.com/timinggears/jar-node.git');
+      const btn = document.getElementById('btn-copy-clone');
+      btn.innerText = '✓ COPIED!';
+      btn.style.color = '#00ffcc';
+      btn.style.borderColor = '#00ffcc';
+      setTimeout(() => {
+        btn.innerText = '📋 COPY GIT CLONE';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+      }, 2000);
+    }
+
+    // Interactive Demo
+    function runDemoWrite() {
+      const input = document.getElementById('demo-input').value.trim() || 'matter remembers';
+      const output = document.getElementById('demo-output');
+      const meta = document.getElementById('demo-meta');
+
+      output.innerText = 'WRITING CHARGE...';
+      output.style.opacity = '0.5';
+
+      setTimeout(() => {
+        output.innerText = `“${input}”`;
+        output.style.opacity = '1';
+        meta.innerText = `✓ ${input.length} CELLS LOCKED // RETENTION 99.4%`;
+        meta.style.color = '#10b981';
+      }, 250);
+    }
+  </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { Activity, Zap, TrendingUp, Cpu, RefreshCw, BarChart2, Radio, Server } from 'lucide-react';
 import { SystemStats } from '../types';
 
@@ -159,15 +159,13 @@ export default function MiningMonitorChart({ stats, isMining }: MiningMonitorCha
 
       {/* Main content viewport */}
       <div className="flex-1 p-3 flex flex-col justify-center min-h-[140px]">
-        <AnimatePresence mode="wait">
-          {activeTab === 'throughput' && (
-            <motion.div
-              key="throughput"
-              initial={{ opacity: 0, y: 3 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -3 }}
-              className="flex-1 flex flex-col justify-between"
-            >
+        {activeTab === 'throughput' && (
+          <motion.div
+            key="throughput"
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex-1 flex flex-col justify-between"
+          >
               {/* Plot canvas */}
               <div className="relative flex-1 bg-black/60 rounded border border-white/5 overflow-hidden flex items-center justify-center">
                 
@@ -351,7 +349,6 @@ export default function MiningMonitorChart({ stats, isMining }: MiningMonitorCha
               </div>
             </motion.div>
           )}
-        </AnimatePresence>
       </div>
     </div>
   );

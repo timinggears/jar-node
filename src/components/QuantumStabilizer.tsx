@@ -34,6 +34,7 @@ export default function QuantumStabilizer({
   const [errorHistory, setErrorHistory] = useState<{id: string, val: number}[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('09:42:01');
+  const errCounterRef = useRef(0);
 
   // v147: Unified state representation - sampled safely via ref interval
   const coherenceRef = useRef(coherence);
@@ -45,8 +46,9 @@ export default function QuantumStabilizer({
     const interval = setInterval(() => {
       const errVal = 1 - coherenceRef.current;
       setErrorHistory(prev => {
+        const uniqueId = `qec_${Date.now()}_${++errCounterRef.current}_${Math.random().toString(36).slice(2, 7)}`;
         const next = [...prev, {
-          id: Date.now().toString(),
+          id: uniqueId,
           val: errVal
         }];
         if (next.length > 20) return next.slice(1);
@@ -134,9 +136,9 @@ export default function QuantumStabilizer({
             {isEntangled ? `${(quantumShift).toFixed(1)} GeV` : (isQecActive ? '42.8 THz' : '0.0 THz')}
           </span>
           <div className="flex gap-1 h-4 items-end">
-            {errorHistory.map((item) => (
+            {errorHistory.map((item, idx) => (
               <motion.div 
-                key={item.id}
+                key={`${item.id}_${idx}`}
                 initial={{ height: 0 }}
                 animate={{ height: `${item.val * 100}%` }}
                 className={`w-1 rounded-t-sm ${isQecActive ? 'bg-blue-400' : 'bg-red-500'}`}

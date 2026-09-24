@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio, HardDrive, Plus, Eye, BookOpen, Check } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio, HardDrive, Plus, Eye, BookOpen, Check, GitBranch } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface AsciiPacket {
@@ -27,6 +27,7 @@ interface ReservoirProps {
   onAddLog?: (msg: string, type: 'info' | 'success' | 'warning' | 'error') => void;
   bias: number;
   onTuneBias: (bias: number) => void;
+  onOpenMemTest?: () => void;
 }
 
 export default function PhysicalAsciiReservoir({
@@ -38,7 +39,8 @@ export default function PhysicalAsciiReservoir({
   hardwareState,
   onAddLog,
   bias,
-  onTuneBias
+  onTuneBias,
+  onOpenMemTest
 }: ReservoirProps) {
   const [memoryBank, setMemoryBank] = useState<Record<string, AsciiPacket>>({});
   const [logEntries, setLogEntries] = useState<{ id: string; text: string; type: 'physical' | 'combined' }[]>([]);
@@ -734,6 +736,18 @@ export default function PhysicalAsciiReservoir({
             <span>{isSampling ? "SAMPLING..." : "PULSE SAMPLE"}</span>
           </button>
 
+          {/* Standalone HTML Showcase & Git Specs Link */}
+          <a
+            href="/jar-node"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#00ffcc]/15 hover:bg-[#00ffcc]/30 border border-[#00ffcc]/50 text-[#00ffcc] text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_8px_rgba(0,255,204,0.25)]"
+            title="Open standalone Jar-Node repository specs & live showcase page"
+          >
+            <GitBranch size={11} />
+            <span>JAR_PAGE_&_REPO ↗</span>
+          </a>
+
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] uppercase">
             <span className={`w-2 h-2 rounded-full ${hardwareState === 'connected' ? 'bg-[#00ffcc] animate-ping' : hardwareState === 'bridged' ? 'bg-[#00ffcc]' : 'bg-emerald-500'}`} />
             <span className="text-zinc-300 font-bold">
@@ -927,6 +941,16 @@ export default function PhysicalAsciiReservoir({
                         <HardDrive size={10} />
                         <span>WRITE MEMORY</span>
                       </button>
+                      {onOpenMemTest && (
+                        <button 
+                          onClick={onOpenMemTest}
+                          className="flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/60 px-2 py-0.5 rounded text-[8px] tracking-wider uppercase font-black text-emerald-300 transition-all cursor-pointer shadow-[0_0_8px_rgba(16,185,129,0.2)]"
+                          title="Open Substrate MemTest86 & Physical Sector Block Mapper"
+                        >
+                          <Binary size={10} />
+                          <span>MEMTEST &amp; MAP</span>
+                        </button>
+                      )}
                       <button 
                         onClick={clearBank}
                         className="flex items-center gap-1 hover:bg-red-500/10 hover:text-red-400 border border-white/5 hover:border-red-500/30 px-2 py-0.5 rounded text-[8px] tracking-widest text-zinc-500 uppercase transition-all"
@@ -1086,44 +1110,41 @@ export default function PhysicalAsciiReservoir({
                       </div>
                     ) : (
                       <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                        <AnimatePresence>
-                          {Object.values(memoryBank).map((pkt: AsciiPacket) => (
-                            <motion.div
-                              key={pkt.id}
-                              initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              exit={{ scale: 0.8, opacity: 0 }}
-                              className={`flex flex-col p-2 bg-black/60 border rounded-md relative ${
-                                pkt.type === 'combined'
-                                  ? 'border-[#ff88ff]/40 bg-pink-950/20 shadow-[0_0_12px_rgba(255,136,255,0.2),_inset_0_0_8px_rgba(255,136,255,0.1)]'
-                                  : 'border-[#00ff66]/30 bg-emerald-950/10 hover:border-[#00ff66]/60 shadow-[0_0_12px_rgba(0,255,102,0.25),_inset_0_0_8px_rgba(0,255,102,0.1)] transition-all'
-                              }`}
-                            >
-                              <div className="text-[7px] text-zinc-600 tracking-tighter uppercase font-bold truncate">
-                                {pkt.id}
+                        {Object.values(memoryBank).map((pkt: AsciiPacket, idx: number) => (
+                          <motion.div
+                            key={`${pkt.id}_${idx}`}
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className={`flex flex-col p-2 bg-black/60 border rounded-md relative ${
+                              pkt.type === 'combined'
+                                ? 'border-[#ff88ff]/40 bg-pink-950/20 shadow-[0_0_12px_rgba(255,136,255,0.2),_inset_0_0_8px_rgba(255,136,255,0.1)]'
+                                : 'border-[#00ff66]/30 bg-emerald-950/10 hover:border-[#00ff66]/60 shadow-[0_0_12px_rgba(0,255,102,0.25),_inset_0_0_8px_rgba(0,255,102,0.1)] transition-all'
+                            }`}
+                          >
+                            <div className="text-[7px] text-zinc-600 tracking-tighter uppercase font-bold truncate">
+                              {pkt.id}
+                            </div>
+                            <div className={`my-1 text-center font-sans text-xl font-extrabold ${
+                              pkt.type === 'combined'
+                                ? 'text-[#ff88ff] drop-shadow-[0_0_8px_rgba(255,136,255,0.7)] animate-pulse'
+                                : 'text-[#00ff66] drop-shadow-[0_0_10px_rgba(0,255,102,0.9)] animate-pulse'
+                            }`}>
+                              {pkt.char}
+                            </div>
+                            <div className="flex flex-col gap-0.5 mt-auto">
+                              <div className="flex items-center justify-between text-[7px] text-zinc-500">
+                                <span>STAB</span>
+                                <span>{pkt.stability.toFixed(2)}</span>
                               </div>
-                              <div className={`my-1 text-center font-sans text-xl font-extrabold ${
-                                pkt.type === 'combined'
-                                  ? 'text-[#ff88ff] drop-shadow-[0_0_8px_rgba(255,136,255,0.7)] animate-pulse'
-                                  : 'text-[#00ff66] drop-shadow-[0_0_10px_rgba(0,255,102,0.9)] animate-pulse'
-                              }`}>
-                                {pkt.char}
+                              <div className="w-full bg-zinc-800 h-0.5 rounded overflow-hidden">
+                                <div 
+                                  className={`h-full ${pkt.type === 'combined' ? 'bg-[#ff88ff]' : 'bg-[#00ffcc]'}`} 
+                                  style={{ width: `${Math.min(100, (pkt.stability / 1.8) * 100)}%` }} 
+                                />
                               </div>
-                              <div className="flex flex-col gap-0.5 mt-auto">
-                                <div className="flex items-center justify-between text-[7px] text-zinc-500">
-                                  <span>STAB</span>
-                                  <span>{pkt.stability.toFixed(2)}</span>
-                                </div>
-                                <div className="w-full bg-zinc-800 h-0.5 rounded overflow-hidden">
-                                  <div 
-                                    className={`h-full ${pkt.type === 'combined' ? 'bg-[#ff88ff]' : 'bg-[#00ffcc]'}`} 
-                                    style={{ width: `${Math.min(100, (pkt.stability / 1.8) * 100)}%` }} 
-                                  />
-                                </div>
-                              </div>
-                            </motion.div>
-                          ))}
-                        </AnimatePresence>
+                            </div>
+                          </motion.div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -1143,8 +1164,8 @@ export default function PhysicalAsciiReservoir({
                   </div>
 
                   <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
-                    {trigramHistory.map((tri) => (
-                      <div key={tri.id} className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded px-2 py-1 text-[9px] hover:border-[#ffff00]/20 transition-all">
+                    {trigramHistory.map((tri, idx) => (
+                      <div key={`${tri.id}_${idx}`} className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded px-2 py-1 text-[9px] hover:border-[#ffff00]/20 transition-all">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[#ffff00] font-bold text-center w-12 font-sans tracking-wide">{tri.sequence}</span>
                           <span className="text-zinc-500 font-mono text-[8px]">{new Date(tri.timestamp).toLocaleTimeString('en-US', { hour12: false }).split(' ')[0]}</span>
@@ -1172,8 +1193,8 @@ export default function PhysicalAsciiReservoir({
                   </div>
 
                   <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
-                    {morphicPhrases.map((mph) => (
-                      <div key={mph.id} className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded px-2 py-1 text-[9px] hover:border-[#00ccff]/20 transition-all">
+                    {morphicPhrases.map((mph, idx) => (
+                      <div key={`${mph.id}_${idx}`} className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded px-2 py-1 text-[9px] hover:border-[#00ccff]/20 transition-all">
                         <span className="text-[#00ccff] font-extrabold tracking-widest">{mph.word}</span>
                         <div className="flex items-center gap-2">
                           <div className="flex flex-col items-end">
@@ -1205,9 +1226,9 @@ export default function PhysicalAsciiReservoir({
                 className="flex-1 p-2 overflow-y-auto space-y-1 font-mono text-[9px] leading-relaxed select-text" 
                 style={{ scrollBehavior: 'smooth' }}
               >
-                {logEntries.map((log) => (
+                {logEntries.map((log, idx) => (
                   <div 
-                    key={log.id} 
+                    key={`${log.id}_${idx}`} 
                     className={
                       log.type === 'combined' 
                         ? 'text-[#ff88ff] border-l-2 border-[#ff88ff] pl-1.5 py-0.5 bg-pink-950/10' 

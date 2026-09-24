@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive, GitBranch } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive, GitBranch, Binary, Network, Lock } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -108,6 +108,30 @@ export default function Taskbar({
         onClick={() => onToggleWindow('substrate_io')}
       />
       <AppIcon 
+        id="memtest"
+        icon={<Binary size={20} className="text-[#00ffcc]" />} 
+        label="Substrate MemTest86" 
+        isOpen={openWindows.includes('memtest')} 
+        isActive={activeWindow === 'memtest'}
+        onClick={() => onToggleWindow('memtest')}
+      />
+      <AppIcon 
+        id="reservoir_lab"
+        icon={<Network size={20} className="text-purple-400" />} 
+        label="PRC Quantum Lab (ESN, Hysteresis, Oracle)" 
+        isOpen={openWindows.includes('reservoir_lab')} 
+        isActive={activeWindow === 'reservoir_lab'}
+        onClick={() => onToggleWindow('reservoir_lab')}
+      />
+      <AppIcon 
+        id="quantum_cipher"
+        icon={<Lock size={20} className="text-[#a855f7]" />} 
+        label="Quantum &amp; Chaos Cipher Lab (PURLE • Hyperchaos • Q-OTP)" 
+        isOpen={openWindows.includes('quantum_cipher')} 
+        isActive={activeWindow === 'quantum_cipher'}
+        onClick={() => onToggleWindow('quantum_cipher')}
+      />
+      <AppIcon 
         id="visualizer"
         icon={<Box size={20} />} 
         label="The Cube" 
@@ -154,6 +178,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('git_repo')} 
         isActive={activeWindow === 'git_repo'}
         onClick={() => onToggleWindow('git_repo')}
+      />
+      <AppIcon 
+        id="empyrean_sandbox"
+        icon={<Box size={20} className="text-amber-400" />} 
+        label="Empyrean Sandbox Emulator" 
+        isOpen={openWindows.includes('empyrean_sandbox')} 
+        isActive={activeWindow === 'empyrean_sandbox'}
+        onClick={() => onToggleWindow('empyrean_sandbox')}
       />
       
       <div className="w-[1px] h-8 bg-white/10 mx-2" />

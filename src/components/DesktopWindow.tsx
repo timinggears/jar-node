@@ -45,13 +45,13 @@ export default function DesktopWindow({
         boxShadow: isActive ? '0 20px 50px rgba(0,0,0,0.6), 0 0 20px rgba(0,255,204,0.15)' : '0 10px 30px rgba(0,0,0,0.4)'
       }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
-      className={`absolute ${width} ${height} flex flex-col bg-[#050807]/95 backdrop-blur-xl border border-white/15 rounded-xl overflow-hidden pointer-events-auto ${isActive ? 'ring-1 ring-[#00ffcc]/40' : ''}`}
+      className={`absolute ${width} ${height} flex flex-col bg-[#070b09] border border-white/15 rounded-xl overflow-hidden pointer-events-auto shadow-2xl ${isActive ? 'ring-1 ring-[#00ffcc]/40' : ''}`}
       id={`window-${id}`}
     >
       {/* Title Bar */}
       <div 
         onPointerDown={(e) => dragControls.start(e)}
-        className="h-10 shrink-0 bg-white/5 border-b border-white/10 flex items-center justify-between px-4 cursor-grab active:cursor-grabbing select-none"
+        className="h-10 shrink-0 bg-[#0c120f] border-b border-white/10 flex items-center justify-between px-4 cursor-grab active:cursor-grabbing select-none"
       >
         <div className="flex items-center gap-3">
           <div className={`p-1 rounded ${isActive ? 'text-[#00ffcc]' : 'text-zinc-500'}`}>

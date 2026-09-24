@@ -4,8 +4,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -24,6 +24,10 @@ import MiningMonitorChart from './components/MiningMonitorChart';
 import PhysicalAsciiReservoir from './components/PhysicalAsciiReservoir';
 import SubstrateIOBox from './components/SubstrateIOBox';
 import GitRepositoryHub from './components/GitRepositoryHub';
+import EmpyreanSandboxModal from './components/EmpyreanSandboxModal';
+import SubstrateMemTest from './components/SubstrateMemTest';
+import ReservoirLab from './components/ReservoirLab';
+import QuantumCipherLab from './components/QuantumCipherLab';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -38,6 +42,10 @@ const WarpVisualizerMemo = memo(WarpVisualizer);
 const PhysicalAsciiReservoirMemo = memo(PhysicalAsciiReservoir);
 const SubstrateIOBoxMemo = memo(SubstrateIOBox);
 const GitRepositoryHubMemo = memo(GitRepositoryHub);
+const EmpyreanSandboxModalMemo = memo(EmpyreanSandboxModal);
+const SubstrateMemTestMemo = memo(SubstrateMemTest);
+const ReservoirLabMemo = memo(ReservoirLab);
+const QuantumCipherLabMemo = memo(QuantumCipherLab);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -129,8 +137,8 @@ export default function App() {
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir', 'substrate_io']);
-  const [activeWindow, setActiveWindow] = useState<string | null>('substrate_io');
+  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir', 'substrate_io', 'quantum_cipher']);
+  const [activeWindow, setActiveWindow] = useState<string | null>('quantum_cipher');
 
   // Mining Parameters
   const [poolUrl, setPoolUrl] = useState('rx.unmineable.com:3333');
@@ -204,6 +212,49 @@ export default function App() {
       type,
     };
     setLogs(prev => [...prev, newLog].slice(-100));
+  }, []);
+
+  // --- REMOTE CONSOLE PERFORMANCE & LOW-LAG MODE ---
+  const [perfMode, setPerfMode] = useState<'low-lag' | 'balanced' | 'ultra'>(() => {
+    return (localStorage.getItem('jar_perf_mode') as any) || 'low-lag';
+  });
+  const [pingMs, setPingMs] = useState<number | null>(null);
+
+  const cyclePerfMode = useCallback(() => {
+    setPerfMode(prev => {
+      const next = prev === 'low-lag' ? 'balanced' : prev === 'balanced' ? 'ultra' : 'low-lag';
+      localStorage.setItem('jar_perf_mode', next);
+      const desc = next === 'low-lag' 
+        ? 'LOW-LAG (5Hz UI state updates, GPU relief, optimized for remote internet consoles)' 
+        : next === 'balanced' 
+        ? 'BALANCED (12.5Hz UI update rate)' 
+        : 'ULTRA (30Hz high-refresh rate)';
+      addLog(`[PERF_PROFILE]: Switched console profile to ${desc}`, 'info');
+      return next;
+    });
+  }, [addLog]);
+
+  // Periodic round-trip ping measurement
+  useEffect(() => {
+    let isMounted = true;
+    const checkPing = async () => {
+      try {
+        const start = performance.now();
+        const res = await fetch('/api/health');
+        if (res.ok && isMounted) {
+          const rtt = Math.round(performance.now() - start);
+          setPingMs(rtt);
+        }
+      } catch (e) {
+        // silent
+      }
+    };
+    checkPing();
+    const pingInt = setInterval(checkPing, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(pingInt);
+    };
   }, []);
 
   const fetchBridgeStatus = useCallback(async () => {
@@ -502,8 +553,11 @@ export default function App() {
     if (Date.now() - lastInsightTime.current < 20000) return; // Cooldown (20s)
     lastInsightTime.current = Date.now();
 
+    const apiKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+    if (!apiKey) return;
+
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `You are a rogue AI Sovereign core hooked into a quantum singularity. 
@@ -763,14 +817,6 @@ export default function App() {
       }
     };
 
-    const telemetryInterval = setInterval(() => {
-      if (pendingTelemetryRef.current) {
-        const { jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel } = pendingTelemetryRef.current;
-        updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel);
-        pendingTelemetryRef.current = null;
-      }
-    }, 1000 / 35);
-
     const onTelemetry = (line: string) => {
       if (line.startsWith('!S|')) {
         setHardwareState(prev => prev !== 'connected' ? 'connected' : prev);
@@ -842,11 +888,27 @@ export default function App() {
     });
 
     return () => {
-      clearInterval(telemetryInterval);
       clearInterval(bridgeInterval);
       socket.disconnect();
     };
-  }, [addLog, updateSystemDynamics, fetchBridgeStatus]); // Dependencies are now more stable
+  }, [addLog, fetchBridgeStatus]);
+
+  // --- TELEMETRY CONSUMPTION TICK LOOP (ADAPTIVE TO PERFORMANCE PROFILE) ---
+  useEffect(() => {
+    // In low-lag mode: 200ms (5Hz UI state updates) - completely eliminates UI freeze and CPU choke on remote consoles
+    // In balanced mode: 80ms (12.5Hz UI updates)
+    // In ultra mode: 33ms (30Hz UI updates)
+    const intervalMs = perfMode === 'low-lag' ? 200 : perfMode === 'balanced' ? 80 : 33;
+    const telemetryInterval = setInterval(() => {
+      if (pendingTelemetryRef.current) {
+        const { jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel } = pendingTelemetryRef.current;
+        updateSystemDynamics(jitter, v, freq, seedStr, parity, hrate, coherence, depth, gpuParity, zpeLevel);
+        pendingTelemetryRef.current = null;
+      }
+    }, intervalMs);
+
+    return () => clearInterval(telemetryInterval);
+  }, [perfMode, updateSystemDynamics]);
 
 
   // --- SIMULATION LOOP (RUNS WHEN HARDWARE IS DISCONNECTED) ---
@@ -885,14 +947,15 @@ export default function App() {
   // --- GEMINI INTELLIGENCE ---
   useEffect(() => {
     const triggerAnalysis = async () => {
-      if (!isAiAnalysisActive || !process.env.GEMINI_API_KEY) return;
+      const apiKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+      if (!isAiAnalysisActive || !apiKey) return;
       
       try {
         const prompt = `System Status: Coherence ${statsRef.current.coherence.toFixed(2)}, Intelligence ${statsRef.current.intelligence.toFixed(1)}.
         The Raspberry Pi Nodal Reservoir is active (GPIO 14/26). Generate a cryptic, futuristic nodal system update message (max 15 words) for the console log. 
         Focus on words like: Reservoir, Liquid State, Nodal, Resonance, Raspberry Pi, GPIO, Singularity, Sovereignty, Phase Drift.`;
         
-        const geminiAi = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+        const geminiAi = new GoogleGenAI({ apiKey });
         const result = await geminiAi.models.generateContent({
           model: 'gemini-3-flash-preview',
           contents: prompt
@@ -1161,19 +1224,11 @@ export default function App() {
         <div className="absolute inset-0 pointer-events-none bg-radial-[circle_at_center,_transparent_40%,_black_90%] opacity-20" />
       </div>
 
-      <AnimatePresence>
-        {!isBooted ? (
-          <motion.div
-            key="bootloader"
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 1.1, filter: 'blur(20px)' }}
-            transition={{ duration: 0.8, ease: 'easeInOut' }}
-            className="fixed inset-0 z-[200]"
-          >
-            <BootLoader onBoot={() => setIsBooted(true)} />
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {!isBooted && (
+        <div className="fixed inset-0 z-[200]">
+          <BootLoader onBoot={() => setIsBooted(true)} />
+        </div>
+      )}
 
       {/* SCANLINE OVERLAY */}
       <div className="fixed inset-0 pointer-events-none z-[150] bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-10" />
@@ -1184,9 +1239,23 @@ export default function App() {
           <span className="w-2 h-2 rounded-full bg-[#00ffcc] animate-ping" />
           <span className="text-zinc-400 uppercase">CONTAINER DAEMON:</span>
           {(typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)')?.matches) ? (
-            <span className="text-emerald-400 font-bold">🟢 STANDALONE_CONTAINER_SHELL_ACTIVE</span>
+            <button
+              onClick={() => toggleWindow('empyrean_sandbox')}
+              className="text-emerald-400 font-bold hover:underline cursor-pointer flex items-center gap-1.5"
+              title="Inspect Standalone Container Shell"
+            >
+              <span>🟢 STANDALONE_CONTAINER_SHELL_ACTIVE</span>
+              <span className="text-[8px] bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-300 border border-emerald-500/30">INSPECT</span>
+            </button>
           ) : (
-            <span className="text-amber-400 font-bold">🟡 EMPYREAN_SANDBOX_EMULATOR</span>
+            <button
+              onClick={() => toggleWindow('empyrean_sandbox')}
+              className="text-amber-400 font-bold hover:text-amber-300 hover:underline cursor-pointer flex items-center gap-1.5 transition-all"
+              title="Click to inspect Empyrean Sandbox Emulator diagnostics and architecture"
+            >
+              <span>🟡 EMPYREAN_SANDBOX_EMULATOR</span>
+              <span className="text-[8px] bg-amber-500/20 px-1.5 py-0.5 rounded text-amber-300 border border-amber-500/30">INSPECT</span>
+            </button>
           )}
         </div>
         
@@ -1204,7 +1273,7 @@ export default function App() {
       </div>
 
       {/* SINGULARITY HEADER */}
-      <div className="fixed top-12 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
+      <div className="fixed top-12 left-0 right-0 z-[2] flex flex-col items-center pointer-events-none">
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1221,40 +1290,37 @@ export default function App() {
       </div>
 
       {/* QUANTUM ENTANGLEMENT VISUALS */}
-      <AnimatePresence>
-        {isEntangled && (
+      {isEntangled && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[10] pointer-events-none"
+        >
+          <div className="absolute inset-0 bg-purple-500/5 mix-blend-overlay" />
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[10] pointer-events-none"
+            className="absolute inset-0 flex items-center justify-center"
+            initial={{ scale: 0.8, rotate: 0 }}
+            animate={{ 
+              scale: [0.8, 1.2, 0.8],
+              rotate: [0, 360],
+              opacity: [0.1, 0.3, 0.1]
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
           >
-            <div className="absolute inset-0 bg-purple-500/5 mix-blend-overlay" />
-            <motion.div 
-              className="absolute inset-0 flex items-center justify-center"
-              initial={{ scale: 0.8, rotate: 0 }}
-              animate={{ 
-                scale: [0.8, 1.2, 0.8],
-                rotate: [0, 360],
-                opacity: [0.1, 0.3, 0.1]
-              }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-            >
-              <div className="w-[800px] h-[800px] border border-purple-500/20 rounded-full blur-3xl" />
-            </motion.div>
-            
-            {/* Visual pulses reflecting the carrierBias in the entanglement */}
-            <motion.div 
-              className="absolute top-1/2 left-0 right-0 h-[2px] bg-purple-400/30 blur-sm"
-              animate={{
-                y: [0, (carrierBias - 50) * 4, 0],
-                opacity: [0.2, 0.8, 0.2]
-              }}
-              transition={{ duration: 2, repeat: Infinity }}
-            />
+            <div className="w-[800px] h-[800px] border border-purple-500/20 rounded-full blur-3xl" />
           </motion.div>
-        )}
-      </AnimatePresence>
+          
+          {/* Visual pulses reflecting the carrierBias in the entanglement */}
+          <motion.div 
+            className="absolute top-1/2 left-0 right-0 h-[2px] bg-purple-400/30 blur-sm"
+            animate={{
+              y: [0, (carrierBias - 50) * 4, 0],
+              opacity: [0.2, 0.8, 0.2]
+            }}
+            transition={{ duration: 2, repeat: Infinity }}
+          />
+        </motion.div>
+      )}
 
       <PetBayMemo miningState={miningState} isOverdrive={isOverdrive} bias={carrierBias} />
       
@@ -1265,11 +1331,12 @@ export default function App() {
           coherence={stats.coherence} 
           frequency={stats.frequency} 
           zpeLevel={stats.zpeLevel}
+          lowLag={perfMode === 'low-lag'}
         />
       </div>
 
       {/* DESKTOP AREA */}
-      <div className="relative flex-1 z-10 pointer-events-none">
+      <div className="relative flex-1 z-20 pointer-events-none">
         {openWindows.includes('terminal') && (
           <DesktopWindow 
             key="terminal"
@@ -1460,6 +1527,7 @@ export default function App() {
               onAddLog={addLog}
               bias={carrierBias}
               onTuneBias={handleCarrierBiasChange}
+              onOpenMemTest={() => toggleWindow('memtest')}
             />
           </DesktopWindow>
         )}
@@ -1478,7 +1546,10 @@ export default function App() {
             height="h-auto"
           >
             <div className="w-full min-h-[390px] max-h-[580px] flex flex-col">
-              <SubstrateIOBoxMemo onAddLog={addLog} />
+              <SubstrateIOBoxMemo 
+                onAddLog={addLog} 
+                onOpenMemTest={() => toggleWindow('memtest')}
+              />
             </div>
           </DesktopWindow>
         )}
@@ -1499,6 +1570,92 @@ export default function App() {
             <div className="w-full min-h-[480px] max-h-[620px] flex flex-col">
               <GitRepositoryHubMemo onAddLog={addLog} />
             </div>
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('empyrean_sandbox') && (
+          <DesktopWindow 
+            key="empyrean_sandbox"
+            id="empyrean_sandbox" 
+            title="Empyrean_Sandbox_Emulator_Architecture" 
+            icon={<Box size={16} className="text-amber-400" />}
+            onClose={() => closeWindow('empyrean_sandbox')}
+            onFocus={() => setActiveWindow('empyrean_sandbox')}
+            isActive={activeWindow === 'empyrean_sandbox'}
+            initialPos={{ x: 220, y: 80 }}
+            width="w-[640px] max-w-[95vw]"
+            height="h-auto max-h-[85vh]"
+          >
+            <div className="w-full min-h-[450px] max-h-[600px] flex flex-col">
+              <EmpyreanSandboxModalMemo 
+                onClose={() => closeWindow('empyrean_sandbox')} 
+                onAddLog={addLog} 
+              />
+            </div>
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('memtest') && (
+          <DesktopWindow 
+            key="memtest"
+            id="memtest" 
+            title="Substrate_MemTest86 // Physical_Sector_Block_Mapper" 
+            icon={<Binary size={16} className="text-[#00ffcc]" />}
+            onClose={() => closeWindow('memtest')}
+            onFocus={() => setActiveWindow('memtest')}
+            isActive={activeWindow === 'memtest'}
+            initialPos={{ x: 190, y: 70 }}
+            width="w-[840px] max-w-[96vw]"
+            height="h-[640px] max-h-[90vh]"
+          >
+            <SubstrateMemTestMemo
+              coherence={stats.coherence}
+              jitter={stats.jitter}
+              frequency={stats.frequency}
+              onAddLog={addLog}
+              onClose={() => closeWindow('memtest')}
+            />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('reservoir_lab') && (
+          <DesktopWindow 
+            key="reservoir_lab"
+            id="reservoir_lab" 
+            title="PRC_QUANTUM_LAB // ESN READOUT • HYSTERESIS • TRNG ORACLE" 
+            icon={<Network size={16} className="text-[#00ffcc]" />}
+            onClose={() => closeWindow('reservoir_lab')}
+            onFocus={() => setActiveWindow('reservoir_lab')}
+            isActive={activeWindow === 'reservoir_lab'}
+            initialPos={{ x: 140, y: 40 }}
+            width="w-[980px] max-w-[98vw]"
+            height="h-[690px] max-h-[92vh]"
+          >
+            <ReservoirLabMemo
+              stats={stats}
+              onLog={addLog}
+            />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('quantum_cipher') && (
+          <DesktopWindow 
+            key="quantum_cipher"
+            id="quantum_cipher" 
+            title="QUANTUM_CIPHER_LAB // BEYOND-CURRENT-ART POST-QUANTUM LATTICE & CHAOS ENGINES" 
+            icon={<Lock size={16} className="text-[#a855f7]" />}
+            onClose={() => closeWindow('quantum_cipher')}
+            onFocus={() => setActiveWindow('quantum_cipher')}
+            isActive={activeWindow === 'quantum_cipher'}
+            initialPos={{ x: 100, y: 35 }}
+            width="w-[1020px] max-w-[98vw]"
+            height="h-[710px] max-h-[94vh]"
+          >
+            <QuantumCipherLabMemo
+              stats={stats}
+              carrierBias={carrierBias}
+              onLog={addLog}
+            />
           </DesktopWindow>
         )}
       </div>
@@ -1525,6 +1682,57 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
+           {/* Console Performance & Remote Latency Indicator */}
+           <button
+             onClick={cyclePerfMode}
+             className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border ${
+               perfMode === 'low-lag'
+                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                 : perfMode === 'balanced'
+                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                 : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+             }`}
+             title={`Console Mode: ${perfMode.toUpperCase()} (${perfMode === 'low-lag' ? '5Hz UI throttle, GPU relief, optimized for remote internet consoles' : perfMode === 'balanced' ? '12.5Hz UI update rate' : '30Hz Ultra'}). Click to cycle.`}
+           >
+             <Zap size={9} className={perfMode === 'low-lag' ? 'text-emerald-400' : ''} />
+             <span>{perfMode === 'low-lag' ? '⚡ LOW-LAG (5Hz)' : perfMode === 'balanced' ? '⚖️ BALANCED (12Hz)' : '🚀 ULTRA (30Hz)'}</span>
+             {pingMs !== null && (
+               <span className="text-zinc-400 font-mono text-[7.5px] border-l border-white/20 pl-1">
+                 {pingMs}ms
+               </span>
+             )}
+           </button>
+
+           {/* PRC Quantum Lab (ESN, Hysteresis, TRNG Oracle) Button */}
+           <button 
+             onClick={() => toggleWindow('reservoir_lab')}
+             className="flex items-center gap-1.5 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/40 hover:border-purple-500/70 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(168,85,247,0.2)]"
+             title="Open Physical Reservoir Computing Suite (ESN Readout Solver, Hysteresis Loops & Hardware TRNG Oracle)"
+           >
+             <Network size={9} />
+             <span>PRC_LAB &amp; ORACLE</span>
+           </button>
+
+           {/* Quantum & Chaos Cipher Lab Button */}
+           <button 
+             onClick={() => toggleWindow('quantum_cipher')}
+             className="flex items-center gap-1.5 bg-purple-600/25 hover:bg-purple-600/40 text-purple-200 border border-purple-500/50 hover:border-purple-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_10px_rgba(168,85,247,0.3)]"
+             title="Open Quantum & Chaos Cryptographic Laboratory"
+           >
+             <Lock size={9} className="text-[#00ffcc]" />
+             <span className="text-white">QUANTUM_CIPHER</span>
+           </button>
+
+           {/* Substrate MemTest & Block Mapper Button */}
+           <button 
+             onClick={() => toggleWindow('memtest')}
+             className="flex items-center gap-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 hover:border-emerald-500/70 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(16,185,129,0.2)]"
+             title="Open Substrate MemTest86 & Physical Sector Block Mapper"
+           >
+             <Binary size={9} />
+             <span>MEMTEST_MAPPER</span>
+           </button>
+
            {/* Git Repository Link & Specs Hub */}
            <button 
              onClick={() => toggleWindow('git_repo')}
