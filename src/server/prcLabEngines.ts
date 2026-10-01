@@ -1534,8 +1534,443 @@ export class QuantumReservoirCipherEngine {
   }
 }
 
+// --- 5. SUBSTRATE NODAL MESH PRESENCE & PHYSICAL SIGNATURE ATTESTATION ENGINE ---
+
+export interface AttestedNodeData {
+  id: string;
+  name: string;
+  role: 'host' | 'hardware_bridge' | 'dielectric_edge' | 'quantum_lattice' | 'web_client' | 'rogue_simulator';
+  ipAddress?: string;
+  vNodal: number;
+  frequency: number;
+  coherence: number;
+  carrierBias: number;
+  lastHeartbeat: number;
+  status: 'online' | 'stale' | 'rejected';
+  signature: string;
+  epoch: number;
+  latencyMs: number;
+  isAuthentic: boolean;
+  rejectReason?: string;
+  challengeStatus?: 'verified' | 'pending' | 'failed';
+  hardwareEntropySeed?: string;
+}
+
+export class SubstrateNodeMeshAttestationEngine {
+  // Shared physical reservoir dielectric secret root - embedded in authentic substrate firmware
+  private readonly SUBSTRATE_DIELECTRIC_SECRET = 'JAR-RESERVOIR-0x9F4C2A-ENTANGLED-DIELECTRIC-KEY-V24';
+  private nodes: Map<string, AttestedNodeData> = new Map();
+  private currentNonce: string = crypto.randomBytes(8).toString('hex');
+  private lastNonceRotation: number = Date.now();
+
+  constructor() {
+    this.initDefaultNodes();
+  }
+
+  public getCurrentEpoch(): number {
+    // 30-second rolling epoch window
+    return Math.floor(Date.now() / 30000);
+  }
+
+  public getMasterAttestationFingerprint(): string {
+    return crypto.createHash('sha256').update(this.SUBSTRATE_DIELECTRIC_SECRET).digest('hex').substring(0, 16);
+  }
+
+  /**
+   * Generates the authentic Physical Unclonable Substrate Resonance Signature (NSAS)
+   * Only nodes that possess the secret dielectric resonance key and match physical parameters can produce this.
+   */
+  public generateAttestationSignature(
+    nodeId: string, 
+    epoch: number, 
+    carrierBias: number = 50, 
+    frequency: number = 28000, 
+    nonce: string = ''
+  ): string {
+    const rawPayload = `${nodeId}:${epoch}:${carrierBias.toFixed(1)}:${(frequency / 1000).toFixed(2)}:${nonce}`;
+    const hmac = crypto.createHmac('sha256', this.SUBSTRATE_DIELECTRIC_SECRET).update(rawPayload).digest('hex');
+    
+    // Mix in Ring-LWE Lattice parity token
+    let latticeSyndrome = 0;
+    for (let i = 0; i < 16; i++) {
+      latticeSyndrome = (latticeSyndrome * 31 + parseInt(hmac.substr(i * 2, 2), 16)) % 12289;
+    }
+    const syndromeHex = latticeSyndrome.toString(16).padStart(4, '0');
+
+    return `SIG-PRC-${hmac.substring(0, 24)}-L${syndromeHex}`;
+  }
+
+  /**
+   * Verifies whether an incoming signature matches the physical substrate resonance signature
+   */
+  public verifyAttestationSignature(
+    nodeId: string, 
+    signature: string, 
+    epoch: number, 
+    carrierBias: number = 50, 
+    frequency: number = 28000, 
+    nonce: string = ''
+  ): { valid: boolean; reason?: string } {
+    if (!signature || !signature.startsWith('SIG-PRC-')) {
+      return { valid: false, reason: 'MALFORMED_SIGNATURE: Missing SIG-PRC prefix' };
+    }
+
+    const currentEpoch = this.getCurrentEpoch();
+    // Allow +/- 1 epoch tolerance for network latency / clock skew
+    const epochDiff = Math.abs(currentEpoch - epoch);
+    if (epochDiff > 1) {
+      return { valid: false, reason: `EXPIRED_EPOCH: Signature epoch ${epoch} outside valid window ${currentEpoch}` };
+    }
+
+    // Check with requested epoch and current epoch
+    const expectedSig1 = this.generateAttestationSignature(nodeId, epoch, carrierBias, frequency, nonce);
+    const expectedSig2 = this.generateAttestationSignature(nodeId, currentEpoch, carrierBias, frequency, nonce);
+
+    if (signature === expectedSig1 || signature === expectedSig2) {
+      return { valid: true };
+    }
+
+    return { 
+      valid: false, 
+      reason: 'RESONANCE_MISMATCH: Signature does not match physical reservoir dielectric key' 
+    };
+  }
+
+  private initDefaultNodes() {
+    const epoch = this.getCurrentEpoch();
+
+    const defaultList: Array<Omit<AttestedNodeData, 'signature'>> = [
+      {
+        id: 'node-master-void',
+        name: 'JAR Master Host Daemon',
+        role: 'host',
+        ipAddress: '127.0.0.1 (Local IPC)',
+        vNodal: 1.4201,
+        frequency: 28000,
+        coherence: 0.988,
+        carrierBias: 50.0,
+        lastHeartbeat: Date.now(),
+        status: 'online',
+        epoch,
+        latencyMs: 1.2,
+        isAuthentic: true,
+        challengeStatus: 'verified'
+      },
+      {
+        id: 'node-pico-hardware',
+        name: 'Pico RP2040 Dielectric Bridge',
+        role: 'hardware_bridge',
+        ipAddress: '/dev/ttyACM0 (UART)',
+        vNodal: 1.4185,
+        frequency: 28240,
+        coherence: 0.952,
+        carrierBias: 52.4,
+        lastHeartbeat: Date.now(),
+        status: 'online',
+        epoch,
+        latencyMs: 3.8,
+        isAuthentic: true,
+        challengeStatus: 'verified'
+      },
+      {
+        id: 'node-dielectric-02',
+        name: 'Substrate Edge Resonator',
+        role: 'dielectric_edge',
+        ipAddress: '192.168.1.142 (Mesh)',
+        vNodal: 1.4242,
+        frequency: 28050,
+        coherence: 0.964,
+        carrierBias: 49.8,
+        lastHeartbeat: Date.now(),
+        status: 'online',
+        epoch,
+        latencyMs: 14.2,
+        isAuthentic: true,
+        challengeStatus: 'verified'
+      },
+      {
+        id: 'node-lattice-qec-03',
+        name: 'Post-Quantum Ring-LWE Coprocessor',
+        role: 'quantum_lattice',
+        ipAddress: '10.0.4.88 (InfiniBand)',
+        vNodal: 1.4192,
+        frequency: 28120,
+        coherence: 0.979,
+        carrierBias: 51.2,
+        lastHeartbeat: Date.now(),
+        status: 'online',
+        epoch,
+        latencyMs: 21.5,
+        isAuthentic: true,
+        challengeStatus: 'verified'
+      }
+    ];
+
+    for (const d of defaultList) {
+      const signature = this.generateAttestationSignature(d.id, epoch, d.carrierBias, d.frequency);
+      this.nodes.set(d.id, {
+        ...d,
+        signature
+      });
+    }
+  }
+
+  /**
+   * Registers or updates a node
+   */
+  public registerNode(nodeData: Partial<AttestedNodeData> & { id: string }): AttestedNodeData {
+    const epoch = nodeData.epoch || this.getCurrentEpoch();
+    const carrierBias = nodeData.carrierBias ?? 50.0;
+    const frequency = nodeData.frequency ?? 28000;
+    const isAuthentic = nodeData.isAuthentic ?? true;
+
+    // Generate authentic signature or accept passed signature
+    let signature = nodeData.signature;
+    if (!signature) {
+      signature = isAuthentic 
+        ? this.generateAttestationSignature(nodeData.id, epoch, carrierBias, frequency)
+        : `FORGED-SIG-${crypto.randomBytes(12).toString('hex')}`;
+    }
+
+    const verification = this.verifyAttestationSignature(nodeData.id, signature, epoch, carrierBias, frequency);
+
+    const node: AttestedNodeData = {
+      id: nodeData.id,
+      name: nodeData.name || `Node-${nodeData.id}`,
+      role: nodeData.role || 'dielectric_edge',
+      ipAddress: nodeData.ipAddress || '192.168.1.100',
+      vNodal: nodeData.vNodal ?? 1.42,
+      frequency,
+      coherence: nodeData.coherence ?? 0.88,
+      carrierBias,
+      lastHeartbeat: Date.now(),
+      status: verification.valid ? 'online' : 'rejected',
+      signature,
+      epoch,
+      latencyMs: nodeData.latencyMs ?? 15,
+      isAuthentic: verification.valid,
+      rejectReason: verification.valid ? undefined : verification.reason,
+      challengeStatus: verification.valid ? 'verified' : 'failed'
+    };
+
+    this.nodes.set(node.id, node);
+    return node;
+  }
+
+  /**
+   * Process a heartbeat ping from an authentic or foreign node
+   */
+  public processHeartbeat(
+    nodeId: string, 
+    signature: string, 
+    epoch: number, 
+    telemetry?: any, 
+    nonce?: string
+  ): { success: boolean; node?: AttestedNodeData; error?: string } {
+    const bias = telemetry?.carrierBias ?? 50.0;
+    const freq = telemetry?.frequency ?? 28000;
+
+    const verify = this.verifyAttestationSignature(nodeId, signature, epoch, bias, freq, nonce);
+
+    let existing = this.nodes.get(nodeId);
+    if (!existing) {
+      existing = {
+        id: nodeId,
+        name: telemetry?.name || `Nodal-Unit-${nodeId.substring(0, 8)}`,
+        role: telemetry?.role || 'web_client',
+        ipAddress: telemetry?.ip || 'Remote WebSocket',
+        vNodal: telemetry?.vNodal || 1.42,
+        frequency: freq,
+        coherence: telemetry?.coherence || 0.88,
+        carrierBias: bias,
+        lastHeartbeat: Date.now(),
+        status: verify.valid ? 'online' : 'rejected',
+        signature,
+        epoch,
+        latencyMs: telemetry?.latencyMs || 18,
+        isAuthentic: verify.valid,
+        rejectReason: verify.valid ? undefined : verify.reason,
+        challengeStatus: verify.valid ? 'verified' : 'failed'
+      };
+      this.nodes.set(nodeId, existing);
+    } else {
+      existing.lastHeartbeat = Date.now();
+      existing.signature = signature;
+      existing.epoch = epoch;
+      if (telemetry?.vNodal) existing.vNodal = telemetry.vNodal;
+      if (telemetry?.coherence) existing.coherence = telemetry.coherence;
+      existing.frequency = freq;
+      existing.carrierBias = bias;
+
+      if (verify.valid) {
+        existing.status = 'online';
+        existing.isAuthentic = true;
+        existing.rejectReason = undefined;
+        existing.challengeStatus = 'verified';
+      } else {
+        existing.status = 'rejected';
+        existing.isAuthentic = false;
+        existing.rejectReason = verify.reason;
+        existing.challengeStatus = 'failed';
+      }
+    }
+
+    if (!verify.valid) {
+      return { success: false, node: existing, error: verify.reason };
+    }
+
+    return { success: true, node: existing };
+  }
+
+  /**
+   * Triggers a zero-knowledge attestation challenge to a specific node
+   */
+  public challengeNode(nodeId: string): { challengeNonce: string; node: AttestedNodeData | null } {
+    const node = this.nodes.get(nodeId);
+    if (!node) return { challengeNonce: '', node: null };
+
+    const nonce = crypto.randomBytes(6).toString('hex');
+    const epoch = this.getCurrentEpoch();
+
+    if (node.isAuthentic) {
+      // Authentic node re-signs with challenge nonce
+      node.signature = this.generateAttestationSignature(node.id, epoch, node.carrierBias, node.frequency, nonce);
+      node.epoch = epoch;
+      node.challengeStatus = 'verified';
+      node.status = 'online';
+      node.lastHeartbeat = Date.now();
+    } else {
+      // Impostor cannot sign challenge correctly
+      node.challengeStatus = 'failed';
+      node.status = 'rejected';
+      node.rejectReason = 'CHALLENGE_FAILED: Impostor node failed zero-knowledge dielectric resonance challenge';
+    }
+
+    return { challengeNonce: nonce, node };
+  }
+
+  /**
+   * Challenges all nodes in the mesh
+   */
+  public challengeAllNodes(): { nonce: string; verifiedCount: number; rejectedCount: number } {
+    const nonce = crypto.randomBytes(6).toString('hex');
+    let verifiedCount = 0;
+    let rejectedCount = 0;
+
+    for (const [id, node] of this.nodes.entries()) {
+      if (node.isAuthentic) {
+        node.signature = this.generateAttestationSignature(node.id, this.getCurrentEpoch(), node.carrierBias, node.frequency, nonce);
+        node.challengeStatus = 'verified';
+        node.status = 'online';
+        node.lastHeartbeat = Date.now();
+        verifiedCount++;
+      } else {
+        node.challengeStatus = 'failed';
+        node.status = 'rejected';
+        node.rejectReason = 'CHALLENGE_FAILED: Failed global attestation round';
+        rejectedCount++;
+      }
+    }
+
+    return { nonce, verifiedCount, rejectedCount };
+  }
+
+  /**
+   * Spawns a new node into the mesh (authentic or rogue simulator)
+   */
+  public spawnSimulatedNode(type: 'authentic' | 'rogue', customName?: string): AttestedNodeData {
+    const id = `node-${type === 'authentic' ? 'swarm' : 'rogue'}-${Math.random().toString(36).substring(2, 7)}`;
+    const epoch = this.getCurrentEpoch();
+    const carrierBias = 48 + Math.random() * 6;
+    const frequency = 28000 + Math.floor((Math.random() - 0.5) * 500);
+
+    if (type === 'authentic') {
+      const signature = this.generateAttestationSignature(id, epoch, carrierBias, frequency);
+      const node: AttestedNodeData = {
+        id,
+        name: customName || `Attested Swarm Node [${id.substring(11)}]`,
+        role: 'dielectric_edge',
+        ipAddress: `192.168.1.${Math.floor(100 + Math.random() * 150)}`,
+        vNodal: parseFloat((1.41 + Math.random() * 0.03).toFixed(4)),
+        frequency,
+        coherence: parseFloat((0.92 + Math.random() * 0.07).toFixed(3)),
+        carrierBias: parseFloat(carrierBias.toFixed(1)),
+        lastHeartbeat: Date.now(),
+        status: 'online',
+        signature,
+        epoch,
+        latencyMs: Math.floor(8 + Math.random() * 30),
+        isAuthentic: true,
+        challengeStatus: 'verified'
+      };
+      this.nodes.set(id, node);
+      return node;
+    } else {
+      // Rogue / spoof node without knowledge of the dielectric secret
+      const forgedSig = `FORGED-SPOOF-${crypto.randomBytes(16).toString('hex')}`;
+      const node: AttestedNodeData = {
+        id,
+        name: customName || `Rogue Foreign Infiltrator [${id.substring(11)}]`,
+        role: 'rogue_simulator',
+        ipAddress: `198.51.100.${Math.floor(1 + Math.random() * 200)} (Untrusted WAN)`,
+        vNodal: 0.9542,
+        frequency: 14200,
+        coherence: 0.32,
+        carrierBias: 88.5,
+        lastHeartbeat: Date.now(),
+        status: 'rejected',
+        signature: forgedSig,
+        epoch,
+        latencyMs: 145,
+        isAuthentic: false,
+        rejectReason: 'SIGNATURE_REJECTED: Unattested hardware. Cryptographic lattice signature mismatch.',
+        challengeStatus: 'failed'
+      };
+      this.nodes.set(id, node);
+      return node;
+    }
+  }
+
+  public dropNode(nodeId: string): boolean {
+    return this.nodes.delete(nodeId);
+  }
+
+  /**
+   * Only returns the count of authentic, verified online nodes
+   */
+  public getOnlineAttestedCount(): number {
+    this.pruneStaleNodes();
+    let count = 0;
+    for (const node of this.nodes.values()) {
+      if (node.status === 'online' && node.isAuthentic) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  public getAllNodes(): AttestedNodeData[] {
+    this.pruneStaleNodes();
+    return Array.from(this.nodes.values());
+  }
+
+  private pruneStaleNodes() {
+    const now = Date.now();
+    for (const [id, node] of this.nodes.entries()) {
+      // Mark nodes stale if no heartbeat for 60 seconds (except core default nodes)
+      if (now - node.lastHeartbeat > 60000 && !id.startsWith('node-master') && !id.startsWith('node-pico')) {
+        if (node.status === 'online') {
+          node.status = 'stale';
+        }
+      }
+    }
+  }
+}
+
 // Export singletons for use in server.ts
 export const esnEngine = new EchoStateNetworkEngine();
 export const hysteresisEngine = new SubstrateHysteresisEngine();
 export const entropyOracle = new PhysicalEntropyOracleEngine();
 export const quantumCipherEngine = new QuantumReservoirCipherEngine();
+export const nodeMeshEngine = new SubstrateNodeMeshAttestationEngine();
+

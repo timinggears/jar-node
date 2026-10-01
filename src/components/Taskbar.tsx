@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive, GitBranch, Binary, Network, Lock } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive, GitBranch, Binary, Network, Lock, Radio } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -130,6 +130,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('quantum_cipher')} 
         isActive={activeWindow === 'quantum_cipher'}
         onClick={() => onToggleWindow('quantum_cipher')}
+      />
+      <AppIcon 
+        id="node_mesh"
+        icon={<Radio size={20} className="text-cyan-400" />} 
+        label="Nodal Mesh Attestation Matrix" 
+        isOpen={openWindows.includes('node_mesh')} 
+        isActive={activeWindow === 'node_mesh'}
+        onClick={() => onToggleWindow('node_mesh')}
       />
       <AppIcon 
         id="visualizer"

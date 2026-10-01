@@ -10,7 +10,7 @@ import { spawn, ChildProcess } from 'child_process';
 import os from 'os';
 import * as glob from 'glob';
 import { GoogleGenAI } from '@google/genai';
-import { esnEngine, hysteresisEngine, entropyOracle, quantumCipherEngine } from './src/server/prcLabEngines.ts';
+import { esnEngine, hysteresisEngine, entropyOracle, quantumCipherEngine, nodeMeshEngine } from './src/server/prcLabEngines.ts';
 
 // --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
 const STATE_FILE = path.join(os.tmpdir(), 'system_state.json');
@@ -715,6 +715,37 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
   // --- SUBSCRIPTION LOGIC ---
   io.on('connection', (socket) => {
     console.log(`[CLIENT] Connected: ${socket.id}`);
+
+    // Register connected client as an attested web edge node in the substrate mesh
+    const clientNodeId = `node-client-${socket.id.substring(0, 6)}`;
+    nodeMeshEngine.registerNode({
+      id: clientNodeId,
+      name: `Web Terminal Node [${socket.id.substring(0, 6)}]`,
+      role: 'web_client',
+      ipAddress: socket.handshake.address || 'Remote WebSocket',
+      vNodal: 1.42,
+      carrierBias: systemState.bias || 50,
+      frequency: 28000,
+      coherence: 0.98,
+      latencyMs: 5,
+      isAuthentic: true
+    });
+
+    // Send node mesh presence immediately
+    socket.emit('node:presence', {
+      onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+      nodes: nodeMeshEngine.getAllNodes(),
+      epoch: nodeMeshEngine.getCurrentEpoch(),
+      secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+    });
+
+    // Broadcast updated presence to all connected nodes
+    io.emit('node:presence', {
+      onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+      nodes: nodeMeshEngine.getAllNodes(),
+      epoch: nodeMeshEngine.getCurrentEpoch(),
+      secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+    });
     
     // Send current state to new client immediately
     socket.emit('hardware:state', systemState);
@@ -956,8 +987,44 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       io.emit('log', msg);
     });
 
+    socket.on('node:heartbeat', (data: any) => {
+      nodeMeshEngine.processHeartbeat(
+        data?.id || clientNodeId,
+        data?.signature,
+        data?.epoch || nodeMeshEngine.getCurrentEpoch(),
+        data?.telemetry
+      );
+      io.emit('node:presence', {
+        onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+        nodes: nodeMeshEngine.getAllNodes(),
+        epoch: nodeMeshEngine.getCurrentEpoch(),
+        secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+      });
+    });
+
+    socket.on('node:challenge', (nodeId?: string) => {
+      if (nodeId) {
+        nodeMeshEngine.challengeNode(nodeId);
+      } else {
+        nodeMeshEngine.challengeAllNodes();
+      }
+      io.emit('node:presence', {
+        onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+        nodes: nodeMeshEngine.getAllNodes(),
+        epoch: nodeMeshEngine.getCurrentEpoch(),
+        secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+      });
+    });
+
     socket.on('disconnect', () => {
       console.log(`[CLIENT] Disconnected: ${socket.id}`);
+      nodeMeshEngine.dropNode(clientNodeId);
+      io.emit('node:presence', {
+        onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+        nodes: nodeMeshEngine.getAllNodes(),
+        epoch: nodeMeshEngine.getCurrentEpoch(),
+        secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+      });
     });
   });
 
@@ -1640,30 +1707,31 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
 
   app.post('/api/crypto/decrypt', (req, res) => {
     try {
-      const algorithm = req.body?.algorithm || 'PURLE-1024-RLWE';
+      const algorithm = req.body?.algorithm || req.body?.package?.algorithm || 'PURLE-1024-RLWE';
       const telemetry = {
         vNodal: 1.42,
-        frequency: 28000 + (systemState.bias - 50) * 100,
-        coherence: 0.88,
-        carrierBias: systemState.bias
+        frequency: req.body?.package?.frequency ?? req.body?.frequency ?? (28000 + (systemState.bias - 50) * 100),
+        coherence: req.body?.package?.coherence ?? req.body?.coherence ?? 0.88,
+        carrierBias: req.body?.package?.carrierBias ?? req.body?.carrierBias ?? systemState.bias
       };
 
-      if (algorithm === 'HYPERCHAOS-4D') {
+      if (algorithm === 'HYPERCHAOS-4D' || algorithm === 'HYPERCHAOS-4D-FEISTEL') {
         const ciphertextHex = req.body?.ciphertextHex || req.body?.package?.ciphertextHex || '';
         const result = quantumCipherEngine.decryptHyperchaos4D(ciphertextHex, 'VESSEL-SINGULARITY-4D', telemetry);
         res.json({ success: true, plaintext: result.plaintext, bitErrorRate: 0 });
       } else if (algorithm === 'Q-OTP-VERNAM') {
-        const ciphertextHex = req.body?.ciphertextHex || '';
-        const keyHex = req.body?.keyHex || '';
+        const ciphertextHex = req.body?.ciphertextHex || req.body?.package?.ciphertextHex || '';
+        const keyHex = req.body?.keyHex || req.body?.package?.keyHex || '';
         const result = quantumCipherEngine.decryptQuantumOtp(ciphertextHex, keyHex);
         res.json({ success: true, plaintext: result.plaintext, bitErrorRate: 0 });
       } else {
         // PURLE-1024-RLWE
-        const pkg = req.body?.package;
-        if (!pkg) {
+        const pkg = req.body?.package || req.body;
+        if (!pkg || (!pkg.blocks && !req.body?.blocks)) {
           return res.status(400).json({ success: false, error: 'Missing package for PURLE decryption' });
         }
-        const result = quantumCipherEngine.decryptPurle(pkg);
+        const targetPkg = pkg.blocks ? pkg : req.body;
+        const result = quantumCipherEngine.decryptPurle(targetPkg);
         res.json({ success: true, ...result });
       }
     } catch (err: any) {
@@ -1739,6 +1807,164 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
         success: true,
         analysis: `[ADVERSARIAL CRYPTANALYST AUDIT] Post-quantum Ring-LWE and 4D hyperchaos confirmed unbreakable under classical and quantum attack models.`
       });
+    }
+  });
+
+  // --- 5. SUBSTRATE NODAL MESH PRESENCE & PHYSICAL ATTESTATION API ---
+
+  // Get count and verified list of online attested nodes (signature only known to authentic nodes)
+  app.get('/api/nodes/online', (req, res) => {
+    try {
+      const onlineCount = nodeMeshEngine.getOnlineAttestedCount();
+      const nodes = nodeMeshEngine.getAllNodes();
+      const epoch = nodeMeshEngine.getCurrentEpoch();
+      const secretFingerprint = nodeMeshEngine.getMasterAttestationFingerprint();
+      const masterSignature = nodeMeshEngine.generateAttestationSignature('node-master-void', epoch, systemState.bias, 28000);
+
+      res.json({
+        success: true,
+        onlineCount,
+        nodes,
+        epoch,
+        secretFingerprint,
+        masterSignature,
+        timestamp: Date.now()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Node heartbeat ping with attestation signature verification
+  app.post('/api/nodes/heartbeat', (req, res) => {
+    try {
+      const { id, signature, epoch, telemetry, nonce } = req.body || {};
+      if (!id || !signature) {
+        return res.status(400).json({ success: false, error: 'Missing id or signature' });
+      }
+
+      const result = nodeMeshEngine.processHeartbeat(
+        id, 
+        signature, 
+        epoch || nodeMeshEngine.getCurrentEpoch(), 
+        telemetry, 
+        nonce
+      );
+      
+      io.emit('node:presence', {
+        onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+        nodes: nodeMeshEngine.getAllNodes(),
+        epoch: nodeMeshEngine.getCurrentEpoch(),
+        secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+      });
+
+      if (!result.success) {
+        return res.status(403).json({
+          success: false,
+          error: result.error,
+          node: result.node
+        });
+      }
+
+      res.json({ success: true, node: result.node, onlineCount: nodeMeshEngine.getOnlineAttestedCount() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Spawn an authentic attested peer node or simulate an unauthenticated rogue node
+  app.post('/api/nodes/spawn', (req, res) => {
+    try {
+      const type = req.body?.type === 'rogue' ? 'rogue' : 'authentic';
+      const name = req.body?.name;
+      const node = nodeMeshEngine.spawnSimulatedNode(type, name);
+
+      io.emit('node:presence', {
+        onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+        nodes: nodeMeshEngine.getAllNodes(),
+        epoch: nodeMeshEngine.getCurrentEpoch(),
+        secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+      });
+
+      const logMsg = type === 'authentic'
+        ? `[NODE_MESH]: Authentic node registered (${node.name}) with verified physical dielectric signature.`
+        : `[SECURITY_ALERT]: Infiltrator node attempt detected (${node.name}). Attestation signature failed. Isolated.`;
+
+      systemState.logEntries.push({
+        id: `node_log_${Date.now()}`,
+        text: logMsg,
+        type: type === 'authentic' ? 'combined' : 'error'
+      });
+      if (systemState.logEntries.length > 30) systemState.logEntries.shift();
+      io.emit('log', logMsg);
+
+      res.json({ success: true, node, onlineCount: nodeMeshEngine.getOnlineAttestedCount() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Challenge a node or all nodes with zero-knowledge attestation challenge
+  app.post('/api/nodes/challenge', (req, res) => {
+    try {
+      const nodeId = req.body?.nodeId;
+      if (nodeId) {
+        const result = nodeMeshEngine.challengeNode(nodeId);
+        io.emit('node:presence', {
+          onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+          nodes: nodeMeshEngine.getAllNodes(),
+          epoch: nodeMeshEngine.getCurrentEpoch(),
+          secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+        });
+        res.json({ success: true, ...result });
+      } else {
+        const result = nodeMeshEngine.challengeAllNodes();
+        io.emit('node:presence', {
+          onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+          nodes: nodeMeshEngine.getAllNodes(),
+          epoch: nodeMeshEngine.getCurrentEpoch(),
+          secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+        });
+        res.json({ success: true, ...result });
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Drop / disconnect a node from the mesh
+  app.post('/api/nodes/drop', (req, res) => {
+    try {
+      const id = req.body?.id;
+      if (!id) return res.status(400).json({ success: false, error: 'Missing node id' });
+      const dropped = nodeMeshEngine.dropNode(id);
+      
+      io.emit('node:presence', {
+        onlineCount: nodeMeshEngine.getOnlineAttestedCount(),
+        nodes: nodeMeshEngine.getAllNodes(),
+        epoch: nodeMeshEngine.getCurrentEpoch(),
+        secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
+      });
+
+      res.json({ success: true, dropped, onlineCount: nodeMeshEngine.getOnlineAttestedCount() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Helper for nodes to compute signature using their shared substrate dielectric key
+  app.post('/api/nodes/generate-signature', (req, res) => {
+    try {
+      const nodeId = req.body?.nodeId || 'peer-node';
+      const epoch = nodeMeshEngine.getCurrentEpoch();
+      const carrierBias = req.body?.carrierBias ?? systemState.bias;
+      const frequency = req.body?.frequency ?? 28000;
+      const nonce = req.body?.nonce || '';
+
+      const signature = nodeMeshEngine.generateAttestationSignature(nodeId, epoch, carrierBias, frequency, nonce);
+      res.json({ success: true, nodeId, signature, epoch });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

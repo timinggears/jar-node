@@ -26,6 +26,8 @@ export interface SystemStats {
   boost2b?: boolean;
   seedHex: string;
   parity: number;
+  nodesOnline?: number;
+  attestedSignature?: string;
   vault: Array<{
     id: string;
     bias: number;
@@ -33,6 +35,25 @@ export interface SystemStats {
     depth: number;
     timestamp: number;
   }>;
+}
+
+export interface AttestedNode {
+  id: string;
+  name: string;
+  role: 'host' | 'hardware_bridge' | 'dielectric_edge' | 'quantum_lattice' | 'web_client' | 'rogue_simulator';
+  ipAddress?: string;
+  vNodal: number;
+  frequency: number;
+  coherence: number;
+  carrierBias: number;
+  lastHeartbeat: number;
+  status: 'online' | 'stale' | 'rejected';
+  signature: string;
+  epoch: number;
+  latencyMs: number;
+  isAuthentic: boolean;
+  rejectReason?: string;
+  challengeStatus?: 'verified' | 'pending' | 'failed';
 }
 
 export interface LogEntry {

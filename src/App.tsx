@@ -28,6 +28,7 @@ import EmpyreanSandboxModal from './components/EmpyreanSandboxModal';
 import SubstrateMemTest from './components/SubstrateMemTest';
 import ReservoirLab from './components/ReservoirLab';
 import QuantumCipherLab from './components/QuantumCipherLab';
+import NodeMeshAttestation from './components/NodeMeshAttestation';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -46,6 +47,7 @@ const EmpyreanSandboxModalMemo = memo(EmpyreanSandboxModal);
 const SubstrateMemTestMemo = memo(SubstrateMemTest);
 const ReservoirLabMemo = memo(ReservoirLab);
 const QuantumCipherLabMemo = memo(QuantumCipherLab);
+const NodeMeshAttestationMemo = memo(NodeMeshAttestation);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -137,8 +139,9 @@ export default function App() {
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir', 'substrate_io', 'quantum_cipher']);
-  const [activeWindow, setActiveWindow] = useState<string | null>('quantum_cipher');
+  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir', 'substrate_io', 'quantum_cipher', 'node_mesh']);
+  const [activeWindow, setActiveWindow] = useState<string | null>('node_mesh');
+  const [onlineNodeCount, setOnlineNodeCount] = useState<number>(4);
 
   // Mining Parameters
   const [poolUrl, setPoolUrl] = useState('rx.unmineable.com:3333');
@@ -872,11 +875,27 @@ export default function App() {
       }
     };
 
+    const onNodePresence = (data: any) => {
+      if (data && typeof data.onlineCount === 'number') {
+        setOnlineNodeCount(data.onlineCount);
+        setStats(prev => ({ ...prev, nodesOnline: data.onlineCount }));
+      }
+    };
+
     socket.on('connect', onConnect);
     socket.on('telemetry', onTelemetry);
     socket.on('mining_status', onMiningStatus);
     socket.on('hardware:state', onHardwareState);
+    socket.on('node:presence', onNodePresence);
     socket.on('log', (msg: string) => addLog(msg, 'info'));
+
+    // Initial fetch of online nodes
+    fetch('/api/nodes/online').then(r => r.json()).then(d => {
+      if (d.success && typeof d.onlineCount === 'number') {
+        setOnlineNodeCount(d.onlineCount);
+        setStats(prev => ({ ...prev, nodesOnline: d.onlineCount }));
+      }
+    }).catch(() => {});
     socket.on('disconnect', () => {
       const now = Date.now();
       if (now - lastDisconnectLogTimeRef.current > 5000) {
@@ -1536,19 +1555,25 @@ export default function App() {
           <DesktopWindow 
             key="substrate_io"
             id="substrate_io" 
-            title="Substrate_Input_Output_Box" 
+            title="Substrate_Input_Output_Box // SECURE PHYSICAL RESERVOIR I/O" 
             icon={<HardDrive size={16} className="text-[#00ffcc]" />}
             onClose={() => closeWindow('substrate_io')}
             onFocus={() => setActiveWindow('substrate_io')}
             isActive={activeWindow === 'substrate_io'}
-            initialPos={{ x: 100, y: 120 }}
-            width="w-[580px] max-w-[95vw]"
+            initialPos={{ x: 80, y: 100 }}
+            width="w-[740px] max-w-[96vw]"
             height="h-auto"
           >
-            <div className="w-full min-h-[390px] max-h-[580px] flex flex-col">
+            <div className="w-full min-h-[440px] max-h-[640px] flex flex-col">
               <SubstrateIOBoxMemo 
                 onAddLog={addLog} 
                 onOpenMemTest={() => toggleWindow('memtest')}
+                onOpenQuantumCipher={() => {
+                  if (!openWindows.includes('quantum_cipher')) {
+                    setOpenWindows(prev => [...prev, 'quantum_cipher']);
+                  }
+                  setActiveWindow('quantum_cipher');
+                }}
               />
             </div>
           </DesktopWindow>
@@ -1658,6 +1683,31 @@ export default function App() {
             />
           </DesktopWindow>
         )}
+
+        {openWindows.includes('node_mesh') && (
+          <DesktopWindow 
+            key="node_mesh"
+            id="node_mesh" 
+            title="NODAL_MESH_PRESENCE // UNCLONABLE SUBSTRATE ATTESTATION MATRIX" 
+            icon={<Radio size={16} className="text-cyan-400" />}
+            onClose={() => closeWindow('node_mesh')}
+            onFocus={() => setActiveWindow('node_mesh')}
+            isActive={activeWindow === 'node_mesh'}
+            initialPos={{ x: 130, y: 45 }}
+            width="w-[980px] max-w-[98vw]"
+            height="h-[700px] max-h-[93vh]"
+          >
+            <NodeMeshAttestationMemo
+              onLog={addLog}
+              onOpenCipherLab={() => {
+                if (!openWindows.includes('quantum_cipher')) {
+                  setOpenWindows(prev => [...prev, 'quantum_cipher']);
+                }
+                setActiveWindow('quantum_cipher');
+              }}
+            />
+          </DesktopWindow>
+        )}
       </div>
 
       {/* TOP STATUS BAR */}
@@ -1701,6 +1751,22 @@ export default function App() {
                  {pingMs}ms
                </span>
              )}
+           </button>
+
+           {/* Nodal Mesh Presence & Attestation Indicator */}
+           <button 
+             onClick={() => toggleWindow('node_mesh')}
+             className="flex items-center gap-1.5 bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-200 border border-cyan-500/50 hover:border-cyan-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(6,182,212,0.3)]"
+             title="Substrate Nodal Mesh: Cryptographically attested online nodes using unclonable dielectric signature"
+           >
+             <span className="relative flex h-2 w-2">
+               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+             </span>
+             <span className="text-white font-mono">{onlineNodeCount} NODES ONLINE</span>
+             <span className="bg-cyan-500/20 text-[#00ffcc] text-[7.5px] px-1 py-0.2 rounded border border-cyan-400/40 font-mono">
+               SIG: ATTESTED
+             </span>
            </button>
 
            {/* PRC Quantum Lab (ESN, Hysteresis, TRNG Oracle) Button */}

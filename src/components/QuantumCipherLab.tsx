@@ -73,7 +73,7 @@ export default function QuantumCipherLab({ stats, carrierBias, onLog }: QuantumC
 
   // Bit Tamper Fault Injection
   const [isTampered, setIsTampered] = useState<boolean>(false);
-  const [originalHex, setOriginalHex] = useState<string>('');
+  const originalPackageRef = useRef<any>(null);
 
   // Cryptanalysis & Takens Attractor
   const [cryptanalysisReport, setCryptanalysisReport] = useState<any>(null);
@@ -214,6 +214,9 @@ export default function QuantumCipherLab({ stats, carrierBias, onLog }: QuantumC
   const handleToggleTamper = () => {
     if (!cipherPackage) return;
     if (!isTampered) {
+      // Save pristine copy
+      originalPackageRef.current = JSON.parse(JSON.stringify(cipherPackage));
+
       // Flip the first nibble of the ciphertext hex
       const hex = cipherPackage.ciphertextHex;
       const firstChar = hex.charAt(0);
@@ -237,11 +240,9 @@ export default function QuantumCipherLab({ stats, carrierBias, onLog }: QuantumC
       onLog?.(`[FAULT_INJECTION]: Injected 1-bit adversary corruption into ciphertext stream`, 'warn');
     } else {
       // Restore original
-      const restoredPackage = {
-        ...cipherPackage,
-        ciphertextHex: originalHex
-      };
-      setCipherPackage(restoredPackage);
+      if (originalPackageRef.current) {
+        setCipherPackage(JSON.parse(JSON.stringify(originalPackageRef.current)));
+      }
       setIsTampered(false);
       onLog?.(`[FAULT_INJECTION]: Restored pristine ciphertext stream`, 'info');
     }

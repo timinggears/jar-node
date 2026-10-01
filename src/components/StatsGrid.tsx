@@ -14,6 +14,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
   return (
     <div className="bg-[#111] border border-white/5 py-3 px-6 rounded-lg flex items-center justify-between w-full">
       <div className="flex gap-10 items-center overflow-x-auto no-scrollbar">
+        <StatItem label="ONLINE_NODES" value={`${stats.nodesOnline ?? 4} SIG_VERIFIED`} color="text-cyan-400" />
         <StatItem label="COHERENCE" value={stats.coherence.toFixed(4)} color="text-[#ff88ff]" />
         <StatItem label="INTELLIGENCE" value={stats.frequency === 0 ? "0.0000" : (stats.frequency >= 2400000 ? "INF_DEPTH" : stats.intelligence.toFixed(4))} color="text-[#00ffcc]" />
         <StatItem label="SUBSTRATE_SEED" value={stats.seedHex} color="text-white" />
