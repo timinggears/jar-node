@@ -502,10 +502,10 @@ export default function NodeMeshAttestation({ onLog, onOpenCipherLab }: NodeMesh
                   <span>Authentic Node Ingestion Flow</span>
                 </div>
                 <ol className="text-[10px] text-zinc-300 space-y-1.5 list-decimal pl-4">
-                  <li>Node samples physical dielectric resonance ($V_{nodal}, f \approx 28\text{ GHz}$).</li>
+                  <li>Node samples physical dielectric resonance (V_nodal, f ≈ 28 GHz).</li>
                   <li>Derives rolling epoch HMAC token using embedded physical secret key.</li>
-                  <li>Generates Ring-LWE lattice syndrome check: $H_L = \sum c_i \cdot 31^i \pmod{12289}$.</li>
-                  <li>Server verifies mathematical identity $\to$ <strong className="text-emerald-400">STATUS: ONLINE</strong>.</li>
+                  <li>Generates Ring-LWE lattice syndrome check: H_L = ∑ c_i · 31^i mod 12289.</li>
+                  <li>Server verifies mathematical identity → <strong className="text-emerald-400">STATUS: ONLINE</strong>.</li>
                 </ol>
               </div>
 
@@ -516,9 +516,9 @@ export default function NodeMeshAttestation({ onLog, onOpenCipherLab }: NodeMesh
                 </div>
                 <ol className="text-[10px] text-zinc-300 space-y-1.5 list-decimal pl-4">
                   <li>Adversary attempts to broadcast heartbeat with forged or random signature.</li>
-                  <li>Server computes expected signature for epoch $\#epoch$ with substrate key.</li>
+                  <li>Server computes expected signature for epoch #epoch with substrate key.</li>
                   <li>Cryptographic mismatch detected: Hamming distance &gt; 0.</li>
-                  <li>Node immediately isolated $\to$ <strong className="text-red-400">STATUS: QUARANTINED (BLOCKED)</strong>.</li>
+                  <li>Node immediately isolated → <strong className="text-red-400">STATUS: QUARANTINED (BLOCKED)</strong>.</li>
                 </ol>
               </div>
             </div>

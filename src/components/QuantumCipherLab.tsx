@@ -160,7 +160,7 @@ export default function QuantumCipherLab({ stats, carrierBias, onLog }: QuantumC
         const data = await res.json();
         if (data.package) {
           setCipherPackage(data.package);
-          setOriginalHex(data.package.ciphertextHex);
+          originalPackageRef.current = JSON.parse(JSON.stringify(data.package));
           onLog?.(`[ENCRYPT]: Sealed ${plaintext.length} bytes under ${algorithm} (Entropy: ${data.package.shannonEntropy.toFixed(3)} b/B)`, 'success');
           // Automatically run initial cryptanalysis report
           runCryptanalysis(data.package.ciphertextHex);

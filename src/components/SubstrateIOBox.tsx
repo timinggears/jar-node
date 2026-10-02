@@ -280,7 +280,7 @@ export default function SubstrateIOBox({ onAddLog, onOpenMemTest, onOpenQuantumC
       setIsTampered(true);
 
       if (onAddLog) {
-        onAddLog(`[SUBSTRATE_FAULT]: Injected 1-bit adversary corruption into reservoir cells. Tripping avalanche barrier.`, 'warn');
+        onAddLog(`[SUBSTRATE_FAULT]: Injected 1-bit adversary corruption into reservoir cells. Tripping avalanche barrier.`, 'warning');
       }
 
       // Automatically attempt decryption to reveal the tamper detection

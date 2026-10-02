@@ -608,11 +608,10 @@ export default function App() {
         addLog(`[PUBLIC_SHARE]: Copied public URL to clipboard (${shareUrl})! Anyone can view this without security auth.`, 'success');
         setTimeout(() => setCopiedShareLink(false), 3500);
       }).catch(() => {
-        setShowShareModal(true);
+        // Fallback handled by showing modal
       });
-    } else {
-      setShowShareModal(true);
     }
+    setShowShareModal(true);
   };
 
   // --- CORE DYNAMICS ---
@@ -1362,45 +1361,6 @@ export default function App() {
 
       {/* SCANLINE OVERLAY */}
       <div className="fixed inset-0 pointer-events-none z-[150] bg-[length:100%_4px,3px_100%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] opacity-10" />
-      
-      {/* PWA & DETACH BANNER */}
-      <div className="fixed top-0 left-0 right-0 z-[180] flex items-center justify-between px-4 py-1.5 bg-zinc-950 border-b border-[#00ffcc]/20 text-[#00ffcc] font-mono text-[9px] tracking-wider select-none">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#00ffcc] animate-ping" />
-          <span className="text-zinc-400 uppercase">CONTAINER DAEMON:</span>
-          {(typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)')?.matches) ? (
-            <button
-              onClick={() => toggleWindow('empyrean_sandbox')}
-              className="text-emerald-400 font-bold hover:underline cursor-pointer flex items-center gap-1.5"
-              title="Inspect Standalone Container Shell"
-            >
-              <span>🟢 STANDALONE_CONTAINER_SHELL_ACTIVE</span>
-              <span className="text-[8px] bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-300 border border-emerald-500/30">INSPECT</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => toggleWindow('empyrean_sandbox')}
-              className="text-amber-400 font-bold hover:text-amber-300 hover:underline cursor-pointer flex items-center gap-1.5 transition-all"
-              title="Click to inspect Empyrean Sandbox Emulator diagnostics and architecture"
-            >
-              <span>🟡 EMPYREAN_SANDBOX_EMULATOR</span>
-              <span className="text-[8px] bg-amber-500/20 px-1.5 py-0.5 rounded text-amber-300 border border-amber-500/30">INSPECT</span>
-            </button>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <span className="text-zinc-500 hidden md:inline">| FLASK DWARF INSTALLED [PORT {typeof window !== 'undefined' ? (window.location.port || '80') : '3000'} CONSOLE] |</span>
-          <button 
-            onClick={() => {
-              window.open(window.location.origin, '_blank');
-            }}
-            className="bg-[#00ffcc] hover:bg-teal-300 text-black px-3 py-0.5 rounded text-[8px] font-black uppercase tracking-widest cursor-pointer transition-all border border-emerald-400 shadow-[0_0_10px_rgba(0,255,204,0.4)]"
-          >
-            LAUNCH INDEPENDENT WINDOW
-          </button>
-        </div>
-      </div>
 
       {/* SINGULARITY HEADER */}
       <div className="fixed top-12 left-0 right-0 z-[2] flex flex-col items-center pointer-events-none">
@@ -1476,7 +1436,7 @@ export default function App() {
             onClose={() => closeWindow('terminal')}
             onFocus={() => setActiveWindow('terminal')}
             isActive={activeWindow === 'terminal'}
-            initialPos={{ x: 60, y: 40 }}
+            initialPos={{ x: 60, y: 50 }}
           >
             <ConsoleLog logs={logs} onCommand={handleCommand} />
           </DesktopWindow>
@@ -1764,7 +1724,7 @@ export default function App() {
             onClose={() => closeWindow('reservoir_lab')}
             onFocus={() => setActiveWindow('reservoir_lab')}
             isActive={activeWindow === 'reservoir_lab'}
-            initialPos={{ x: 140, y: 40 }}
+            initialPos={{ x: 140, y: 50 }}
             width="w-[980px] max-w-[98vw]"
             height="h-[690px] max-h-[92vh]"
           >
@@ -1784,7 +1744,7 @@ export default function App() {
             onClose={() => closeWindow('quantum_cipher')}
             onFocus={() => setActiveWindow('quantum_cipher')}
             isActive={activeWindow === 'quantum_cipher'}
-            initialPos={{ x: 100, y: 35 }}
+            initialPos={{ x: 100, y: 50 }}
             width="w-[1020px] max-w-[98vw]"
             height="h-[710px] max-h-[94vh]"
           >
@@ -1805,7 +1765,7 @@ export default function App() {
             onClose={() => closeWindow('node_mesh')}
             onFocus={() => setActiveWindow('node_mesh')}
             isActive={activeWindow === 'node_mesh'}
-            initialPos={{ x: 130, y: 45 }}
+            initialPos={{ x: 130, y: 52 }}
             width="w-[980px] max-w-[98vw]"
             height="h-[700px] max-h-[93vh]"
           >
@@ -1830,7 +1790,7 @@ export default function App() {
             onClose={() => closeWindow('phase_lab')}
             onFocus={() => setActiveWindow('phase_lab')}
             isActive={activeWindow === 'phase_lab'}
-            initialPos={{ x: 120, y: 40 }}
+            initialPos={{ x: 120, y: 50 }}
             width="w-[1020px] max-w-[98vw]"
             height="h-[710px] max-h-[94vh]"
           >
@@ -1850,155 +1810,176 @@ export default function App() {
         )}
       </div>
 
-      {/* TOP STATUS BAR */}
-      <div className="fixed top-0 left-0 right-0 h-6 bg-black/60 backdrop-blur-md border-b border-white/10 z-[120] flex items-center justify-between px-3 text-[9px] uppercase tracking-widest font-black">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 text-[#00ffcc] drop-shadow-[0_0_5px_rgba(0,255,204,0.5)]">
-            <Zap size={10} className={isMining ? 'animate-pulse' : ''} />
-            <span>CyberOS Sovereignty v{systemVersion.toFixed(2)}</span>
+      {/* MASTER TOP NAVIGATION BAR */}
+      <header className="fixed top-0 left-0 right-0 h-9 bg-[#040806]/95 backdrop-blur-md border-b border-[#00ffcc]/30 z-[150] flex items-center justify-between px-3 text-[9px] uppercase tracking-wider font-mono shadow-[0_2px_15px_rgba(0,0,0,0.7)] select-none">
+        {/* Left: Branding & Core Attestation */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-1.5 text-[#00ffcc] font-black drop-shadow-[0_0_8px_rgba(0,255,204,0.5)]">
+            <Zap size={12} className={isMining ? 'animate-pulse text-amber-400' : 'text-[#00ffcc]'} />
+            <span className="font-bold tracking-widest hidden sm:inline">CyberOS Sovereignty</span>
+            <span className="text-zinc-500 font-normal">v{systemVersion.toFixed(2)}</span>
           </div>
-          <div className="text-zinc-600">/</div>
-          <div className="text-zinc-400">Host: void.nodal_sys.local</div>
-          {isEntangled && (
-            <motion.div 
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-1 text-purple-400 font-bold border-l border-purple-500/50 pl-4 ml-4"
+
+          <div className="text-zinc-700 hidden sm:inline">/</div>
+
+          {/* Container Daemon / Empyrean Sandbox Pill */}
+          {(typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)')?.matches) ? (
+            <button
+              onClick={() => toggleWindow('empyrean_sandbox')}
+              className="bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded text-[8px] flex items-center gap-1 transition-all cursor-pointer font-bold"
+              title="Inspect Standalone Container Shell"
             >
-              <RefreshCw size={10} className="animate-spin-slow" />
-              <span>ENTANGLED</span>
-            </motion.div>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>STANDALONE</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => toggleWindow('empyrean_sandbox')}
+              className="bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 px-2 py-0.5 rounded text-[8px] flex items-center gap-1 transition-all cursor-pointer font-bold"
+              title="Click to inspect Empyrean Sandbox Emulator diagnostics and architecture"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <span>EMPYREAN_SANDBOX</span>
+            </button>
           )}
+
+          {/* Nodal Mesh Presence & Attestation Indicator */}
+          <button 
+            onClick={() => toggleWindow('node_mesh')}
+            className="flex items-center gap-1.5 bg-cyan-950/50 hover:bg-cyan-900/70 text-cyan-200 border border-cyan-500/50 hover:border-cyan-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_10px_rgba(6,182,212,0.25)]"
+            title="Substrate Nodal Mesh: Cryptographically attested online nodes using unclonable dielectric signature"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+            </span>
+            <span className="text-white font-mono">{onlineNodeCount} NODES</span>
+            <span className="bg-cyan-500/25 text-[#00ffcc] text-[7.5px] px-1 py-0.2 rounded border border-cyan-400/40 font-mono hidden md:inline">
+              SIG: ATTESTED
+            </span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-3">
-           {/* Console Performance & Remote Latency Indicator */}
-           <button
-             onClick={cyclePerfMode}
-             className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border ${
-               perfMode === 'low-lag'
-                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-                 : perfMode === 'balanced'
-                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                 : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-             }`}
-             title={`Console Mode: ${perfMode.toUpperCase()} (${perfMode === 'low-lag' ? '5Hz UI throttle, GPU relief, optimized for remote internet consoles' : perfMode === 'balanced' ? '12.5Hz UI update rate' : '30Hz Ultra'}). Click to cycle.`}
-           >
-             <Zap size={9} className={perfMode === 'low-lag' ? 'text-emerald-400' : ''} />
-             <span>{perfMode === 'low-lag' ? '⚡ LOW-LAG (5Hz)' : perfMode === 'balanced' ? '⚖️ BALANCED (12Hz)' : '🚀 ULTRA (30Hz)'}</span>
-             {pingMs !== null && (
-               <span className="text-zinc-400 font-mono text-[7.5px] border-l border-white/20 pl-1">
-                 {pingMs}ms
-               </span>
-             )}
-           </button>
+        {/* Center: Lab Quick Launchers (Scrollable if constrained) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar mx-2 px-1">
+          {/* Console Performance & Remote Latency Indicator */}
+          <button
+            onClick={cyclePerfMode}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border shrink-0 ${
+              perfMode === 'low-lag'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                : perfMode === 'balanced'
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+            }`}
+            title={`Console Mode: ${perfMode.toUpperCase()} (${perfMode === 'low-lag' ? '5Hz UI throttle, GPU relief, optimized for remote internet consoles' : perfMode === 'balanced' ? '12.5Hz UI update rate' : '30Hz Ultra'}). Click to cycle.`}
+          >
+            <Zap size={9} className={perfMode === 'low-lag' ? 'text-emerald-400' : ''} />
+            <span>{perfMode === 'low-lag' ? '⚡ 5Hz' : perfMode === 'balanced' ? '⚖️ 12Hz' : '🚀 30Hz'}</span>
+            {pingMs !== null && (
+              <span className="text-zinc-400 font-mono text-[7.5px] border-l border-white/20 pl-1">
+                {pingMs}ms
+              </span>
+            )}
+          </button>
 
-           {/* Nodal Mesh Presence & Attestation Indicator */}
-           <button 
-             onClick={() => toggleWindow('node_mesh')}
-             className="flex items-center gap-1.5 bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-200 border border-cyan-500/50 hover:border-cyan-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(6,182,212,0.3)]"
-             title="Substrate Nodal Mesh: Cryptographically attested online nodes using unclonable dielectric signature"
-           >
-             <span className="relative flex h-2 w-2">
-               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-             </span>
-             <span className="text-white font-mono">{onlineNodeCount} NODES ONLINE</span>
-             <span className="bg-cyan-500/20 text-[#00ffcc] text-[7.5px] px-1 py-0.2 rounded border border-cyan-400/40 font-mono">
-               SIG: ATTESTED
-             </span>
-           </button>
+          {/* Phase-Out & Memory Stick Dynamics Lab Button */}
+          <button 
+            onClick={() => toggleWindow('phase_lab')}
+            className="flex items-center gap-1.5 bg-emerald-950/50 hover:bg-emerald-900/70 text-emerald-200 border border-emerald-500/50 hover:border-emerald-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(16,185,129,0.2)] shrink-0"
+            title="Open Phase-Out Dynamics & Substrate Memory Stick Laboratory (Original vs Modified B+(t) Physics)"
+          >
+            <Waves size={9} className="text-emerald-400" />
+            <span>PHASE_STICK</span>
+          </button>
 
-           {/* PRC Quantum Lab (ESN, Hysteresis, TRNG Oracle) Button */}
-           <button 
-             onClick={() => toggleWindow('reservoir_lab')}
-             className="flex items-center gap-1.5 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/40 hover:border-purple-500/70 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(168,85,247,0.2)]"
-             title="Open Physical Reservoir Computing Suite (ESN Readout Solver, Hysteresis Loops & Hardware TRNG Oracle)"
-           >
-             <Network size={9} />
-             <span>PRC_LAB &amp; ORACLE</span>
-           </button>
+          {/* PRC Quantum Lab Button */}
+          <button 
+            onClick={() => toggleWindow('reservoir_lab')}
+            className="flex items-center gap-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/40 hover:border-purple-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(168,85,247,0.2)] shrink-0"
+            title="Open Physical Reservoir Computing Suite (ESN Readout Solver, Hysteresis Loops & Hardware TRNG Oracle)"
+          >
+            <Network size={9} />
+            <span>PRC_LAB</span>
+          </button>
 
-           {/* Quantum & Chaos Cipher Lab Button */}
-           <button 
-             onClick={() => toggleWindow('quantum_cipher')}
-             className="flex items-center gap-1.5 bg-purple-600/25 hover:bg-purple-600/40 text-purple-200 border border-purple-500/50 hover:border-purple-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_10px_rgba(168,85,247,0.3)]"
-             title="Open Quantum & Chaos Cryptographic Laboratory"
-           >
-             <Lock size={9} className="text-[#00ffcc]" />
-             <span className="text-white">QUANTUM_CIPHER</span>
-           </button>
+          {/* Quantum & Chaos Cipher Lab Button */}
+          <button 
+            onClick={() => toggleWindow('quantum_cipher')}
+            className="flex items-center gap-1.5 bg-purple-600/30 hover:bg-purple-600/45 text-purple-200 border border-purple-400/50 hover:border-purple-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(168,85,247,0.25)] shrink-0"
+            title="Open Quantum & Chaos Cryptographic Laboratory"
+          >
+            <Lock size={9} className="text-[#00ffcc]" />
+            <span>QUANTUM_CIPHER</span>
+          </button>
 
-           {/* Phase-Out & Memory Stick Dynamics Lab Button */}
-           <button 
-             onClick={() => toggleWindow('phase_lab')}
-             className="flex items-center gap-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-500/50 hover:border-emerald-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_10px_rgba(16,185,129,0.25)]"
-             title="Open Phase-Out Dynamics & Substrate Memory Stick Laboratory (Original vs Modified B+(t) Physics)"
-           >
-             <Waves size={9} className="text-emerald-400" />
-             <span>PHASE_STICK_LAB</span>
-             <span className="text-[7px] text-[#00ffcc] font-mono bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-500/30">
-               {stats.phaseModel === 'original' ? 'ORIGINAL (NO STICK)' : 'MODIFIED (+0.08 STICK)'}
-             </span>
-           </button>
+          {/* Substrate MemTest & Block Mapper Button */}
+          <button 
+            onClick={() => toggleWindow('memtest')}
+            className="flex items-center gap-1.5 bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 border border-teal-500/40 hover:border-teal-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shrink-0"
+            title="Open Substrate MemTest86 & Physical Sector Block Mapper"
+          >
+            <Binary size={9} />
+            <span>MEMTEST</span>
+          </button>
 
-           {/* Substrate MemTest & Block Mapper Button */}
-           <button 
-             onClick={() => toggleWindow('memtest')}
-             className="flex items-center gap-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 hover:border-emerald-500/70 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(16,185,129,0.2)]"
-             title="Open Substrate MemTest86 & Physical Sector Block Mapper"
-           >
-             <Binary size={9} />
-             <span>MEMTEST_MAPPER</span>
-           </button>
-
-           {/* Git Repository Link & Specs Hub */}
-           <button 
-             onClick={() => toggleWindow('git_repo')}
-             className="flex items-center gap-1.5 bg-[#00ffcc]/10 hover:bg-[#00ffcc]/25 text-[#00ffcc] border border-[#00ffcc]/30 hover:border-[#00ffcc]/60 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(0,255,204,0.2)]"
-             title="Open Git Repository Hub & Field Specifications"
-           >
-             <GitBranch size={9} />
-             <span>GIT_REPO &amp; SPECS</span>
-           </button>
-
-           {/* Open Independent Window Option */}
-           <a 
-             href={window.location.origin} 
-             target="_blank" 
-             rel="noopener noreferrer"
-             className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/10 hover:border-white/30 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold"
-             title="Open application in its own browser window outside of the AI Studio frame"
-           >
-             <ExternalLink size={9} />
-             <span>OPEN_IN_NEW_WINDOW</span>
-           </a>
-
-           {/* Public Share Link (Bypasses Google IAM Security Auth) */}
-           <button 
-             onClick={handleCopyPublicShareLink}
-             className={`flex items-center gap-1 border px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold ${
-               copiedShareLink 
-                 ? 'bg-emerald-500/30 text-emerald-300 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.4)]' 
-                 : 'bg-cyan-500/20 hover:bg-cyan-500/35 text-[#00ffcc] border-cyan-500/50 hover:border-cyan-400 shadow-[0_0_8px_rgba(0,255,204,0.25)]'
-             }`}
-             title="Copy the public share URL (ais-pre) so anyone can view without Google IAM security auth lock!"
-           >
-             {copiedShareLink ? <Check size={9} className="text-emerald-300" /> : <Share2 size={9} />}
-             <span>{copiedShareLink ? 'PUBLIC_URL_COPIED!' : 'SHARE_APP (PUBLIC)'}</span>
-           </button>
-
-           <div className="flex items-center gap-2">
-             <span className="text-zinc-500">RES_FREQ:</span>
-             <span className="text-[#00ffcc] font-mono">{(stats.frequency / 1000).toFixed(4)} GHz</span>
-           </div>
-           <div className="flex items-center gap-2">
-             <span className="text-zinc-500">COH:</span>
-             <span className={stats.coherence < 0.4 ? 'text-red-500' : 'text-white'}>{(stats.coherence * 100).toFixed(0)}%</span>
-           </div>
-           <div className="text-zinc-400">{new Date().toLocaleTimeString('en-US', { hour12: false })}</div>
+          {/* Git Repository Link & Specs Hub */}
+          <button 
+            onClick={() => toggleWindow('git_repo')}
+            className="flex items-center gap-1.5 bg-[#00ffcc]/10 hover:bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30 hover:border-[#00ffcc]/60 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shrink-0"
+            title="Open Git Repository Hub & Field Specifications"
+          >
+            <GitBranch size={9} />
+            <span>GIT_SPECS</span>
+          </button>
         </div>
-      </div>
+
+        {/* Right: Public Sharing (Bypasses IAM Auth Lock) & Telemetry */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Public Share Button - Highly Prominent */}
+          <button 
+            onClick={() => {
+              handleCopyPublicShareLink();
+              setShowShareModal(true);
+            }}
+            className={`flex items-center gap-1.5 border px-2.5 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold ${
+              copiedShareLink 
+                ? 'bg-emerald-500/30 text-emerald-300 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.5)]' 
+                : 'bg-cyan-500/25 hover:bg-cyan-500/40 text-[#00ffcc] border-cyan-400/80 hover:border-cyan-300 shadow-[0_0_12px_rgba(0,255,204,0.35)]'
+            }`}
+            title="Get the Public Share Link so friends and visitors don't see 'Locked by security auth'!"
+          >
+            {copiedShareLink ? <Check size={10} className="text-emerald-300" /> : <Share2 size={10} />}
+            <span>{copiedShareLink ? 'LINK COPIED!' : 'SHARE (PUBLIC LINK)'}</span>
+          </button>
+
+          {/* Open Independent Window Option */}
+          <button 
+            onClick={() => {
+              window.open(window.location.origin, '_blank');
+            }}
+            className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/15 hover:border-white/30 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold hidden sm:flex"
+            title="Open application in its own browser window outside of the AI Studio frame"
+          >
+            <ExternalLink size={9} />
+            <span>POP-OUT</span>
+          </button>
+
+          {/* Frequency & Coherence stats */}
+          <div className="hidden lg:flex items-center gap-2 border-l border-white/10 pl-2 text-[8px]">
+            <span className="text-zinc-500">FREQ:</span>
+            <span className="text-[#00ffcc] font-mono font-bold">{(stats.frequency / 1000).toFixed(2)}G</span>
+            <span className="text-zinc-500 ml-1">COH:</span>
+            <span className={`font-mono font-bold ${stats.coherence < 0.4 ? 'text-red-400' : 'text-emerald-300'}`}>
+              {(stats.coherence * 100).toFixed(0)}%
+            </span>
+          </div>
+
+          <div className="text-zinc-400 font-mono text-[8px] hidden md:inline">
+            {new Date().toLocaleTimeString('en-US', { hour12: false })}
+          </div>
+        </div>
+      </header>
 
       {/* DOCK / TASKBAR */}
       <Taskbar 
@@ -2039,39 +2020,45 @@ export default function App() {
 
       {/* PUBLIC SHARE MODAL */}
       {showShareModal && (
-        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#080d0a] border border-cyan-500/40 rounded-xl max-w-lg w-full p-5 shadow-[0_0_40px_rgba(6,182,212,0.25)] font-mono text-zinc-300 space-y-4">
+        <div className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#080d0a] border border-[#00ffcc]/40 rounded-xl max-w-lg w-full p-5 shadow-[0_0_50px_rgba(0,255,204,0.3)] font-mono text-zinc-300 space-y-4 animate-fadeIn">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
-                <Share2 className="w-5 h-5 text-cyan-400" />
-                <span className="text-sm font-black text-white uppercase tracking-wider">Public Share URL</span>
+                <Share2 className="w-5 h-5 text-[#00ffcc]" />
+                <span className="text-sm font-black text-white uppercase tracking-wider">Public Share &amp; Access Unlocking</span>
               </div>
               <button 
                 onClick={() => setShowShareModal(false)}
-                className="text-zinc-500 hover:text-white p-1 rounded"
+                className="text-zinc-500 hover:text-white p-1 rounded hover:bg-white/10 transition-all cursor-pointer font-bold"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-3 bg-cyan-950/20 border border-cyan-500/30 rounded-lg text-[10px] space-y-2">
-              <p className="text-white font-bold">Why do people see "Locked by security auth"?</p>
-              <p className="text-zinc-400 leading-relaxed">
-                The development URL (<code className="text-amber-400">ais-dev-...</code>) is private to your Google account. Anyone else opening it will be blocked by Google Cloud IAM security.
+            <div className="p-3.5 bg-cyan-950/30 border border-cyan-500/40 rounded-lg text-[10px] space-y-2">
+              <div className="flex items-center gap-2 text-amber-400 font-bold">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>Why friends see "Locked by security auth"</span>
+              </div>
+              <p className="text-zinc-300 leading-relaxed">
+                The URL in your address bar (<code className="text-amber-300 bg-black/50 px-1 py-0.5 rounded">ais-dev-...</code>) is a private development environment locked by <strong className="text-white">Google Cloud IAM security</strong>. Only YOUR signed-in Google account is allowed to view it.
               </p>
-              <p className="text-[#00ffcc] font-bold">
-                To let anyone view your app without login, share the public preview URL below:
-              </p>
+              <div className="border-t border-cyan-500/20 pt-2 text-[#00ffcc]">
+                <strong>How to let anyone view without login:</strong> Share the <span className="underline">Public Preview Link</span> below (<code className="text-emerald-300 bg-black/50 px-1 py-0.5 rounded">ais-pre-...</code>). It is completely public and requires no Google account or login!
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider">Public Link (No login required)</label>
+            <div className="space-y-2">
+              <label className="text-[9px] text-[#00ffcc] font-bold uppercase tracking-wider flex items-center justify-between">
+                <span>Public Share Link (Unlocked / Anyone Can View)</span>
+                {copiedShareLink && <span className="text-emerald-400 font-bold animate-pulse">✓ COPIED TO CLIPBOARD</span>}
+              </label>
               <div className="flex items-center gap-2">
                 <input 
                   type="text" 
                   readOnly 
                   value={getPublicShareUrl()} 
-                  className="flex-1 bg-black border border-cyan-500/40 rounded px-3 py-2 text-[10px] text-[#00ffcc] font-mono select-all focus:outline-none"
+                  className="flex-1 bg-black border border-cyan-500/50 rounded px-3 py-2 text-[10px] text-[#00ffcc] font-mono select-all focus:outline-none ring-1 ring-cyan-500/20"
                 />
                 <button
                   onClick={() => {
@@ -2079,24 +2066,43 @@ export default function App() {
                     setCopiedShareLink(true);
                     setTimeout(() => setCopiedShareLink(false), 3000);
                   }}
-                  className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400 text-cyan-200 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all"
+                  className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400 text-emerald-200 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(16,185,129,0.3)] cursor-pointer"
                 >
-                  {copiedShareLink ? <Check size={12} className="text-[#00ffcc]" /> : <Copy size={12} />}
-                  <span>{copiedShareLink ? 'Copied!' : 'Copy'}</span>
+                  {copiedShareLink ? <Check size={12} className="text-emerald-300" /> : <Copy size={12} />}
+                  <span>{copiedShareLink ? 'Copied!' : 'Copy Link'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="text-[9px] text-zinc-500 space-y-1">
-              <p>• You can also click the <strong>Share</strong> button in the top right of Google AI Studio to manage public view permissions.</p>
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                onClick={() => {
+                  window.open(getPublicShareUrl(), '_blank');
+                }}
+                className="flex-1 bg-white/5 hover:bg-white/10 border border-white/20 hover:border-white/40 text-white text-[9px] font-bold uppercase px-3 py-2 rounded flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <ExternalLink size={11} className="text-[#00ffcc]" />
+                <span>Test in New Tab / Incognito</span>
+              </button>
+            </div>
+
+            <div className="text-[9px] text-zinc-400 space-y-1 bg-black/30 p-2.5 rounded border border-white/5">
+              <p className="flex items-center gap-1.5">
+                <span className="text-[#00ffcc]">•</span>
+                <span>In Google AI Studio, you can also click the <strong>Share</strong> button in the top-right header to manage project permissions.</span>
+              </p>
+              <p className="flex items-center gap-1.5">
+                <span className="text-[#00ffcc]">•</span>
+                <span>Send the copied link to friends, testers, or colleagues so they can access the full interactive console.</span>
+              </p>
             </div>
 
             <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setShowShareModal(false)}
-                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] uppercase font-bold"
+                className="px-5 py-1.5 bg-[#00ffcc] hover:bg-teal-300 text-black rounded text-[10px] uppercase font-black transition-all cursor-pointer shadow-[0_0_10px_rgba(0,255,204,0.3)]"
               >
-                Close
+                Done
               </button>
             </div>
           </div>
