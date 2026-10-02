@@ -91,25 +91,63 @@ jar_memory_bank = {}
 coherence = 0.65
 intelligence = 45.0
 phase_out = 0.0
+memory_state = 0.0  # Slow integrating memory state (allows stick to persist after external drive stops)
+b_plus_val = 0.0
 
-def update_phase_out(voltage, jitter):
-    global coherence, phase_out, intelligence
+def compute_b_plus(t, b0=1.0):
+    """
+    Multi-Harmonic Field Drive Equation:
+    B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]
+    """
+    pi_sq = math.pi ** 2
+    h1 = math.sin(2.0 * math.pi * 28.0 * t)
+    h2 = math.sin(2.0 * math.pi * 56.0 * t)
+    h3 = math.sin(2.0 * math.pi * 84.0 * t)
+    h4 = math.sin(2.0 * math.pi * 112.0 * t)
+    return pi_sq * b0 * (h1 + h2 + h3 + h4)
+
+def update_phase_out(voltage, jitter, bias=50.0):
+    global coherence, phase_out, intelligence, memory_state, b_plus_val
     
-    # Physical inputs for the user's specific high-fidelity telemetry mapping
-    v = voltage
-    shimmer = 45.0 + (jitter * 85.0)
-    f = 35.0  # physical carrier sweep frequency in Hz
     t = time.time()
     
-    # High-fidelity phase-out equation specified by user
-    phase_out = (v * 142.0) - (0.41 * shimmer) + (28.0 * math.sin(2.0 * math.pi * f * t))
+    # 1. Multi-harmonic drive calculation
+    b0 = max(0.1, bias / 50.0)
+    b_plus_val = compute_b_plus(t, b0)
     
-    # Baseline phase_out at nominal 1.65V with minimal jitter is around 215.2°
-    # Coherence scales with phase stability around this physical alignment point
-    phase_deviation = abs(phase_out - 215.2)
-    coherence_base = 1.0 - (phase_deviation / 400.0)
-    jitter_penalty = jitter * 3.5
+    # 2. Shimmer: Less destructive weight
+    shimmer = 22.0 + (jitter * 38.0)
     
+    # 3. Instantaneous response: × 42 and centered on 0.68V (prevents immediate saturation)
+    instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
+    
+    # 4. Memory term: Slow integration state (keeps state alive after external drive is removed!)
+    memory_state += 0.08 * (instant - memory_state)
+    memory_state = max(-40.0, min(40.0, memory_state))
+    
+    # 5. Oscillation: 28 Hz, amplitude 6 (matches the 28 Hz fundamental multi-harmonic drive)
+    osc = 6.0 * math.sin(2.0 * math.pi * 28.0 * t)
+    
+    # 6. Modified Phase-Out equation combining instant, memory stick, and 28Hz oscillation
+    phase_out = 0.65 * instant + 0.90 * memory_state + 0.25 * osc
+    phase_out = max(-55.0, min(55.0, phase_out))
+    
+    # 7. Coherence: Peaks in a moderate band of |phase_out| (roughly 8–28), not only at zero
+    abs_p = abs(phase_out)
+    if abs_p < 8.0:
+        band_distance = 8.0 - abs_p
+        coherence_base = 0.96 - (band_distance / 8.0) * 0.18
+    elif abs_p <= 28.0:
+        # In the stable high-coherence plateau (8–28 sweet spot)
+        dist_center = abs(abs_p - 18.0)
+        coherence_base = 0.98 - (dist_center / 10.0) * 0.04
+    else:
+        # Roll-off above 28° towards -55° / +55°
+        band_distance = abs_p - 28.0
+        falloff = ((band_distance / 27.0) ** 1.35) * 0.65
+        coherence_base = 0.96 - falloff
+        
+    jitter_penalty = jitter * 2.0
     coherence = max(0.15, min(0.9999, coherence_base - jitter_penalty))
     
     # Organic intelligence accumulation from continuous system-wide coherence
@@ -164,7 +202,7 @@ def combine_packets(voltage, jitter):
 
 def process_telemetry_packet(voltage, jitter):
     """Processes physical voltage metrics and computes ASCII memory states"""
-    update_phase_out(voltage, jitter)
+    update_phase_out(voltage, jitter, virtual_bias)
     ascii_val = write_ascii_packet(voltage, jitter)
     char = chr(ascii_val)
     

@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive, GitBranch, Binary, Network, Lock, Radio } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive, GitBranch, Binary, Network, Lock, Radio, Waves } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -138,6 +138,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('node_mesh')} 
         isActive={activeWindow === 'node_mesh'}
         onClick={() => onToggleWindow('node_mesh')}
+      />
+      <AppIcon 
+        id="phase_lab"
+        icon={<Waves size={20} className="text-emerald-400" />} 
+        label="Phase-Out Dynamics & Memory Stick Lab" 
+        isOpen={openWindows.includes('phase_lab')} 
+        isActive={activeWindow === 'phase_lab'}
+        onClick={() => onToggleWindow('phase_lab')}
       />
       <AppIcon 
         id="visualizer"

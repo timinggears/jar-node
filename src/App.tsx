@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -29,6 +29,7 @@ import SubstrateMemTest from './components/SubstrateMemTest';
 import ReservoirLab from './components/ReservoirLab';
 import QuantumCipherLab from './components/QuantumCipherLab';
 import NodeMeshAttestation from './components/NodeMeshAttestation';
+import PhaseDynamicsLab from './components/PhaseDynamicsLab';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -48,6 +49,7 @@ const SubstrateMemTestMemo = memo(SubstrateMemTest);
 const ReservoirLabMemo = memo(ReservoirLab);
 const QuantumCipherLabMemo = memo(QuantumCipherLab);
 const NodeMeshAttestationMemo = memo(NodeMeshAttestation);
+const PhaseDynamicsLabMemo = memo(PhaseDynamicsLab);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -139,9 +141,13 @@ export default function App() {
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir', 'substrate_io', 'quantum_cipher', 'node_mesh']);
+  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir', 'substrate_io', 'quantum_cipher', 'node_mesh', 'phase_lab']);
   const [activeWindow, setActiveWindow] = useState<string | null>('node_mesh');
   const [onlineNodeCount, setOnlineNodeCount] = useState<number>(4);
+  const [phaseModel, setPhaseModel] = useState<'modified' | 'original'>('modified');
+  const phaseModelRef = useRef<'modified' | 'original'>('modified');
+  const [copiedShareLink, setCopiedShareLink] = useState<boolean>(false);
+  const [showShareModal, setShowShareModal] = useState<boolean>(false);
 
   // Mining Parameters
   const [poolUrl, setPoolUrl] = useState('rx.unmineable.com:3333');
@@ -201,6 +207,7 @@ export default function App() {
   isQecActiveRef.current = isQecActive;
   const isCognitiveBridgeActiveRef = useRef(isCognitiveBridgeActive);
   isCognitiveBridgeActiveRef.current = isCognitiveBridgeActive;
+  const phaseMemoryRef = useRef<number>(0.0);
   const lastUpdateRef = useRef(Date.now());
   const pendingTelemetryRef = useRef<any>(null);
 
@@ -582,26 +589,110 @@ export default function App() {
     }
   }, [addLog]);
 
+  const getPublicShareUrl = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    if (origin.includes('ais-dev-')) {
+      return origin.replace('ais-dev-', 'ais-pre-');
+    }
+    if (origin.includes('ais-pre-')) {
+      return origin;
+    }
+    return 'https://ais-pre-hltv4y4usao3e5terlhjvj-107549292245.us-west2.run.app';
+  };
+
+  const handleCopyPublicShareLink = () => {
+    const shareUrl = getPublicShareUrl();
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        setCopiedShareLink(true);
+        addLog(`[PUBLIC_SHARE]: Copied public URL to clipboard (${shareUrl})! Anyone can view this without security auth.`, 'success');
+        setTimeout(() => setCopiedShareLink(false), 3500);
+      }).catch(() => {
+        setShowShareModal(true);
+      });
+    } else {
+      setShowShareModal(true);
+    }
+  };
+
   // --- CORE DYNAMICS ---
   const updateSystemDynamics = useCallback((jitterValue: number, vValue: number, rawFreq: number = 50000, seedStr: string = '00000000', parity: number = 0, hrateFromServer: number = 0, coherenceFromServer: number = 0, depthFromServer: number = 0, gpuParityFromServer: number = 0, zpeLevelFromServer: number = 0) => {
     const prev = statsRef.current;
     
     // v147 + v150: Direct representation of the frequency and JAR-native metrics
     const modulatedFreq = rawFreq;
-    
-    const shimmer = 45.0 + (jitterValue * 85.0);
-    const f = 35.0;
     const t = Date.now() / 1000;
-    const phaseOut = (vValue * 142.0) - (0.41 * shimmer) + (28.0 * Math.sin(2.0 * Math.PI * f * t));
     
-    const overdriveDrain = isOverdriveRef.current ? 0.15 : 0;
-    const qecBonus = isQecActiveRef.current ? 0.05 : -0.05; 
-    const biasStress = (Math.abs(carrierBiasRef.current - 125) / 400) * 0.1;
-    
-    const phaseDeviation = Math.abs(phaseOut - 215.2);
-    const coherenceBase = 1.0 - (phaseDeviation / 400.0) - overdriveDrain - biasStress + qecBonus;
-    const jitterPenalty = jitterValue * 3.5;
-    let nextCoherence = Math.min(0.9999, Math.max(0.15, coherenceBase - jitterPenalty));
+    // Multi-Harmonic Field Drive: B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]
+    const b0 = Math.max(0.1, carrierBiasRef.current / 50.0);
+    const piSq = Math.PI * Math.PI;
+    const h1 = Math.sin(2.0 * Math.PI * 28.0 * t);
+    const h2 = Math.sin(2.0 * Math.PI * 56.0 * t);
+    const h3 = Math.sin(2.0 * Math.PI * 84.0 * t);
+    const h4 = Math.sin(2.0 * Math.PI * 112.0 * t);
+    const bPlus = piSq * b0 * (h1 + h2 + h3 + h4);
+
+    // Phase-Out Equation Engine (Modified Current with Memory Stick vs Original Legacy)
+    let phaseOut: number;
+    let coherenceBase: number;
+    let memory: number = 0;
+
+    if (phaseModelRef.current === 'original') {
+      // Original Phase-Out equation (Legacy specification):
+      // textshimmer = 30 + (jitter * 45)
+      // phase_out = (voltage * 98) - (0.27 * shimmer) + (15 * sin(2π * 35 * t))
+      // phase_out = clamp(phase_out, -58, 58)
+      // Coherence was simply: coherence = 0.95 - |phase_out| / 95 (high only when Phase-Out was near zero)
+      // This version collapsed immediately after the drive stopped. No stick.
+      const shimmer = 30.0 + (jitterValue * 45.0);
+      const osc = 15.0 * Math.sin(2.0 * Math.PI * 35.0 * t);
+      phaseOut = (vValue * 98.0) - (0.27 * shimmer) + osc;
+      phaseOut = Math.max(-58.0, Math.min(58.0, phaseOut));
+      
+      coherenceBase = Math.max(0.01, 0.95 - (Math.abs(phaseOut) / 95.0));
+      phaseMemoryRef.current = 0.0; // No stick in legacy equation!
+      memory = 0.0;
+    } else {
+      // Modified Phase-Out equation (Current specification):
+      // 1. Shimmer: Less destructive weight
+      const shimmer = 22.0 + (jitterValue * 38.0);
+
+      // 2. Instantaneous response: centered on 0.68V with weight 42, shimmer weight -0.15
+      const instant = (vValue - 0.68) * 42.0 - (0.15 * shimmer);
+
+      // 3. Memory term: Slow integration state (keeps state alive after external drive is removed!)
+      phaseMemoryRef.current += 0.08 * (instant - phaseMemoryRef.current);
+      phaseMemoryRef.current = Math.max(-40.0, Math.min(40.0, phaseMemoryRef.current));
+      memory = phaseMemoryRef.current;
+
+      // 4. Oscillation: 28 Hz, amplitude 6 (matches multi-harmonic drive fundamental)
+      const osc = 6.0 * Math.sin(2.0 * Math.PI * 28.0 * t);
+
+      // 5. Phase-out calculation combining instant, memory stick, and 28Hz osc
+      phaseOut = 0.65 * instant + 0.90 * memory + 0.25 * osc;
+      phaseOut = Math.max(-55.0, Math.min(55.0, phaseOut));
+      
+      // 6. Coherence: Peaks in a moderate band of |phase_out| (roughly 8–28), not only at zero
+      const absP = Math.abs(phaseOut);
+      if (absP < 8.0) {
+        const bandDist = 8.0 - absP;
+        coherenceBase = 0.96 - (bandDist / 8.0) * 0.18;
+      } else if (absP <= 28.0) {
+        // High-coherence sweet spot (8-28) -> stable high-coherence region!
+        const distCenter = Math.abs(absP - 18.0);
+        coherenceBase = 0.98 - (distCenter / 10.0) * 0.04;
+      } else {
+        // Roll-off above 28° towards -55° / +55°
+        const bandDist = absP - 28.0;
+        const falloff = Math.pow(bandDist / 27.0, 1.35) * 0.65;
+        coherenceBase = 0.96 - falloff;
+      }
+    }
+
+    const overdriveDrain = isOverdriveRef.current ? 0.05 : 0;
+    const qecBonus = isQecActiveRef.current ? 0.04 : 0;
+    const jitterPenalty = jitterValue * 2.0;
+    let nextCoherence = Math.min(0.9999, Math.max(0.15, coherenceBase - jitterPenalty - overdriveDrain + qecBonus));
     
     // JAR-native metric absorption (v150)
     if (coherenceFromServer > 0) {
@@ -705,6 +796,10 @@ export default function App() {
       gpuParity: nextGpuParity,
       zpeLevel: nextZpe,
       phaseOut: phaseOut,
+      phaseModel: phaseModelRef.current,
+      memoryStick: memory,
+      bPlus: bPlus,
+      nodesOnline: onlineNodeCount,
       isOverdrive: isOverdriveRef.current,
       isQec: isQecActiveRef.current,
       seedHex: seedStr,
@@ -894,6 +989,22 @@ export default function App() {
       if (d.success && typeof d.onlineCount === 'number') {
         setOnlineNodeCount(d.onlineCount);
         setStats(prev => ({ ...prev, nodesOnline: d.onlineCount }));
+      }
+    }).catch(() => {});
+
+    socket.on('physics:phase_model', (data: any) => {
+      if (data?.phaseModel) {
+        setPhaseModel(data.phaseModel);
+        phaseModelRef.current = data.phaseModel;
+        setStats(prev => ({ ...prev, phaseModel: data.phaseModel }));
+      }
+    });
+
+    fetch('/api/physics/phase-model').then(r => r.json()).then(d => {
+      if (d.success && d.phaseModel) {
+        setPhaseModel(d.phaseModel);
+        phaseModelRef.current = d.phaseModel;
+        setStats(prev => ({ ...prev, phaseModel: d.phaseModel }));
       }
     }).catch(() => {});
     socket.on('disconnect', () => {
@@ -1547,6 +1658,7 @@ export default function App() {
               bias={carrierBias}
               onTuneBias={handleCarrierBiasChange}
               onOpenMemTest={() => toggleWindow('memtest')}
+              onOpenPhaseLab={() => toggleWindow('phase_lab')}
             />
           </DesktopWindow>
         )}
@@ -1708,6 +1820,34 @@ export default function App() {
             />
           </DesktopWindow>
         )}
+
+        {openWindows.includes('phase_lab') && (
+          <DesktopWindow 
+            key="phase_lab"
+            id="phase_lab" 
+            title="PHASE_OUT_DYNAMICS // SUBSTRATE MEMORY STICK & B+(t) HARMONICS LAB" 
+            icon={<Waves size={16} className="text-emerald-400" />}
+            onClose={() => closeWindow('phase_lab')}
+            onFocus={() => setActiveWindow('phase_lab')}
+            isActive={activeWindow === 'phase_lab'}
+            initialPos={{ x: 120, y: 40 }}
+            width="w-[1020px] max-w-[98vw]"
+            height="h-[710px] max-h-[94vh]"
+          >
+            <PhaseDynamicsLabMemo
+              stats={stats}
+              carrierBias={carrierBias}
+              onLog={addLog}
+              onTuneBias={handleCarrierBiasChange}
+              onOpenAttestation={() => {
+                if (!openWindows.includes('node_mesh')) {
+                  setOpenWindows(prev => [...prev, 'node_mesh']);
+                }
+                setActiveWindow('node_mesh');
+              }}
+            />
+          </DesktopWindow>
+        )}
       </div>
 
       {/* TOP STATUS BAR */}
@@ -1789,6 +1929,19 @@ export default function App() {
              <span className="text-white">QUANTUM_CIPHER</span>
            </button>
 
+           {/* Phase-Out & Memory Stick Dynamics Lab Button */}
+           <button 
+             onClick={() => toggleWindow('phase_lab')}
+             className="flex items-center gap-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-500/50 hover:border-emerald-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_10px_rgba(16,185,129,0.25)]"
+             title="Open Phase-Out Dynamics & Substrate Memory Stick Laboratory (Original vs Modified B+(t) Physics)"
+           >
+             <Waves size={9} className="text-emerald-400" />
+             <span>PHASE_STICK_LAB</span>
+             <span className="text-[7px] text-[#00ffcc] font-mono bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-500/30">
+               {stats.phaseModel === 'original' ? 'ORIGINAL (NO STICK)' : 'MODIFIED (+0.08 STICK)'}
+             </span>
+           </button>
+
            {/* Substrate MemTest & Block Mapper Button */}
            <button 
              onClick={() => toggleWindow('memtest')}
@@ -1820,6 +1973,20 @@ export default function App() {
              <ExternalLink size={9} />
              <span>OPEN_IN_NEW_WINDOW</span>
            </a>
+
+           {/* Public Share Link (Bypasses Google IAM Security Auth) */}
+           <button 
+             onClick={handleCopyPublicShareLink}
+             className={`flex items-center gap-1 border px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold ${
+               copiedShareLink 
+                 ? 'bg-emerald-500/30 text-emerald-300 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.4)]' 
+                 : 'bg-cyan-500/20 hover:bg-cyan-500/35 text-[#00ffcc] border-cyan-500/50 hover:border-cyan-400 shadow-[0_0_8px_rgba(0,255,204,0.25)]'
+             }`}
+             title="Copy the public share URL (ais-pre) so anyone can view without Google IAM security auth lock!"
+           >
+             {copiedShareLink ? <Check size={9} className="text-emerald-300" /> : <Share2 size={9} />}
+             <span>{copiedShareLink ? 'PUBLIC_URL_COPIED!' : 'SHARE_APP (PUBLIC)'}</span>
+           </button>
 
            <div className="flex items-center gap-2">
              <span className="text-zinc-500">RES_FREQ:</span>
@@ -1868,6 +2035,72 @@ export default function App() {
           <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
           <p className="text-[8px] font-bold text-yellow-400 uppercase tracking-widest">Hardware Link Offline - Simulation Active</p>
         </motion.div>
+      )}
+
+      {/* PUBLIC SHARE MODAL */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#080d0a] border border-cyan-500/40 rounded-xl max-w-lg w-full p-5 shadow-[0_0_40px_rgba(6,182,212,0.25)] font-mono text-zinc-300 space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-cyan-400" />
+                <span className="text-sm font-black text-white uppercase tracking-wider">Public Share URL</span>
+              </div>
+              <button 
+                onClick={() => setShowShareModal(false)}
+                className="text-zinc-500 hover:text-white p-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-cyan-950/20 border border-cyan-500/30 rounded-lg text-[10px] space-y-2">
+              <p className="text-white font-bold">Why do people see "Locked by security auth"?</p>
+              <p className="text-zinc-400 leading-relaxed">
+                The development URL (<code className="text-amber-400">ais-dev-...</code>) is private to your Google account. Anyone else opening it will be blocked by Google Cloud IAM security.
+              </p>
+              <p className="text-[#00ffcc] font-bold">
+                To let anyone view your app without login, share the public preview URL below:
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider">Public Link (No login required)</label>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={getPublicShareUrl()} 
+                  className="flex-1 bg-black border border-cyan-500/40 rounded px-3 py-2 text-[10px] text-[#00ffcc] font-mono select-all focus:outline-none"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(getPublicShareUrl());
+                    setCopiedShareLink(true);
+                    setTimeout(() => setCopiedShareLink(false), 3000);
+                  }}
+                  className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400 text-cyan-200 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all"
+                >
+                  {copiedShareLink ? <Check size={12} className="text-[#00ffcc]" /> : <Copy size={12} />}
+                  <span>{copiedShareLink ? 'Copied!' : 'Copy'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="text-[9px] text-zinc-500 space-y-1">
+              <p>• You can also click the <strong>Share</strong> button in the top right of Google AI Studio to manage public view permissions.</p>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[10px] uppercase font-bold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

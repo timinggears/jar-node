@@ -21,6 +21,9 @@ export interface SystemStats {
   gpuParity: number;
   zpeLevel: number;
   phaseOut: number;
+  phaseModel?: 'modified' | 'original';
+  memoryStick?: number;
+  bPlus?: number;
   isOverdrive: boolean;
   isQec: boolean;
   boost2b?: boolean;

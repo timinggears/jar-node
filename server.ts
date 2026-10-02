@@ -34,7 +34,11 @@ let systemState = {
   packetCount: 0,
   prevCombChars: '',
   userStoredText: '',
-  userStoredPackets: [] as any[]
+  userStoredPackets: [] as any[],
+  phaseOut: 0.0,
+  memoryStick: 0.0,
+  bPlus: 0.0,
+  phaseModel: 'modified' as 'modified' | 'original'
 };
 
 // Load state if exists
@@ -589,6 +593,19 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     emitPendingTelemetry();
   }, MIN_SEND_INTERVAL);
 
+  // Persistent slow integration memory state (keeps state alive after external drive is removed)
+  let substrateMemoryState = 0.0;
+
+  function computeMultiHarmonicBPlus(t: number, b0: number = 1.0): number {
+    // B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]
+    const piSq = Math.PI * Math.PI;
+    const h1 = Math.sin(2.0 * Math.PI * 28.0 * t);
+    const h2 = Math.sin(2.0 * Math.PI * 56.0 * t);
+    const h3 = Math.sin(2.0 * Math.PI * 84.0 * t);
+    const h4 = Math.sin(2.0 * Math.PI * 112.0 * t);
+    return piSq * b0 * (h1 + h2 + h3 + h4);
+  }
+
   function normalizeTelemetryLine(line: string): string {
     if (!line || !line.startsWith('!S|')) return line;
     const parts = line.split('|');
@@ -609,10 +626,67 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       freq = 28000.0 + (jitter * 800.0) + (vNodal * 120.0) + overdriveBoost;
     }
 
-    const shimmer = 45.0 + (jitter * 85.0);
-    const f = 35.0;
     const t = Date.now() / 1000;
-    const phaseOut = (vNodal * 142.0) - (0.41 * shimmer) + (28.0 * Math.sin(2.0 * Math.PI * f * t));
+    const b0 = Math.max(0.1, systemState.bias / 50.0);
+    const bPlus = computeMultiHarmonicBPlus(t, b0);
+
+    // Phase-Out Equation Engine (Modified Current with Memory Stick vs Original Legacy)
+    let phaseOut: number;
+    let coherenceBase: number;
+
+    if (systemState.phaseModel === 'original') {
+      // Original Phase-Out equation (Legacy specification):
+      // textshimmer   = 30 + (jitter * 45)
+      // phase_out = (voltage * 98) - (0.27 * shimmer) + (15 * sin(2π * 35 * t))
+      // phase_out = clamp(phase_out, -58, 58)
+      // Coherence was simply: coherence = 0.95 - |phase_out| / 95 (high only when Phase-Out was near zero)
+      // This version collapsed immediately after the drive stopped. No stick.
+      const shimmer = 30.0 + (jitter * 45.0);
+      const osc = 15.0 * Math.sin(2.0 * Math.PI * 35.0 * t);
+      phaseOut = (vNodal * 98.0) - (0.27 * shimmer) + osc;
+      phaseOut = Math.max(-58.0, Math.min(58.0, phaseOut));
+      
+      coherenceBase = Math.max(0.01, 0.95 - (Math.abs(phaseOut) / 95.0));
+      substrateMemoryState = 0.0; // No stick in legacy equation!
+    } else {
+      // Modified Phase-Out equation (Current specification):
+      // 1. Shimmer: Less destructive weight
+      const shimmer = 22.0 + (jitter * 38.0);
+
+      // 2. Instantaneous response: centered on 0.68V with weight 42, shimmer weight -0.15
+      const instant = (vNodal - 0.68) * 42.0 - (0.15 * shimmer);
+
+      // 3. Memory term: Slow integration state (keeps state alive after external drive is removed!)
+      substrateMemoryState += 0.08 * (instant - substrateMemoryState);
+      substrateMemoryState = Math.max(-40.0, Math.min(40.0, substrateMemoryState));
+
+      // 4. Oscillation: 28 Hz, amplitude 6 (matches multi-harmonic drive fundamental)
+      const osc = 6.0 * Math.sin(2.0 * Math.PI * 28.0 * t);
+
+      // 5. Phase-out calculation with instant + memory stick + 28Hz osc
+      phaseOut = 0.65 * instant + 0.90 * substrateMemoryState + 0.25 * osc;
+      phaseOut = Math.max(-55.0, Math.min(55.0, phaseOut));
+
+      // Coherence: Now highest in a moderate band of |phase_out| (roughly 8–28), not only at zero
+      const absP = Math.abs(phaseOut);
+      if (absP < 8.0) {
+        const bandDist = 8.0 - absP;
+        coherenceBase = 0.96 - (bandDist / 8.0) * 0.18;
+      } else if (absP <= 28.0) {
+        // High-coherence sweet spot (8 to 28) -> stable high-coherence region!
+        const distCenter = Math.abs(absP - 18.0);
+        coherenceBase = 0.98 - (distCenter / 10.0) * 0.04;
+      } else {
+        // Roll-off above 28° towards -55° / +55°
+        const bandDist = absP - 28.0;
+        const falloff = Math.pow(bandDist / 27.0, 1.35) * 0.65;
+        coherenceBase = 0.96 - falloff;
+      }
+    }
+
+    systemState.phaseOut = phaseOut;
+    systemState.memoryStick = substrateMemoryState;
+    systemState.bPlus = bPlus;
 
     // If hashrate (index 6) is missing, <= 0 or not a number, inject real subprocess speed
     let hrate = parseFloat(parts[6]);
@@ -622,15 +696,10 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
 
     // Coherence (index 7)
     let coherence = parseFloat(parts[7]);
-    // Intercept if missing or < 0.50, ensuring high coherence active state
-    if (isNaN(coherence) || coherence < 0.50) {
-      const overdriveDrain = systemState.overdrive ? 0.05 : 0;
-      const biasStress = (Math.abs(systemState.bias - 125) / 400) * 0.05;
-      
-      const phaseDeviation = Math.abs(phaseOut - 215.2);
-      const coherenceBase = 0.95 - (phaseDeviation / 800.0);
+    if (isNaN(coherence) || coherence < 0.50 || systemState.phaseModel === 'original') {
       const jitterPenalty = jitter * 2.0;
-      coherence = Math.min(0.995, Math.max(0.78, coherenceBase - jitterPenalty - overdriveDrain - biasStress));
+      const overdriveDrain = systemState.overdrive ? 0.04 : 0;
+      coherence = Math.min(0.995, Math.max(0.15, coherenceBase - jitterPenalty - overdriveDrain));
     }
 
     // Depth / Intelligence (index 8)
@@ -1499,7 +1568,11 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         hashrate: systemState.latestHashRate,
         zpe_level: systemState.zpe_level,
         intelligence: systemState.intelligence,
-        memetic_depth: systemState.memetic_depth
+        memetic_depth: systemState.memetic_depth,
+        phase_out: systemState.phaseOut,
+        memory_stick: systemState.memoryStick,
+        b_plus: systemState.bPlus,
+        phase_model: systemState.phaseModel || 'modified'
       },
       telemetry: {
         raw: raw,
@@ -1807,6 +1880,64 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
         success: true,
         analysis: `[ADVERSARIAL CRYPTANALYST AUDIT] Post-quantum Ring-LWE and 4D hyperchaos confirmed unbreakable under classical and quantum attack models.`
       });
+    }
+  });
+
+  // --- 4.5 PHASE-OUT DYNAMICS & EQUATION MODEL ENGINE ---
+  app.get('/api/physics/phase-model', (req, res) => {
+    res.json({
+      success: true,
+      phaseModel: systemState.phaseModel || 'modified',
+      memoryStick: systemState.memoryStick,
+      phaseOut: systemState.phaseOut,
+      bPlus: systemState.bPlus,
+      equations: {
+        modified: {
+          name: "Modified Phase-Out equation (Current specification)",
+          shimmer: "22 + (jitter * 38)",
+          instant: "(voltage - 0.68) * 42 - 0.15 * shimmer",
+          memory: "memory += 0.08 * (instant - memory) [clamped -40..40]",
+          osc: "6 * sin(2π * 28 * t)",
+          phase_out: "0.65 * instant + 0.90 * memory + 0.25 * osc [clamped -55..55]",
+          coherence: "Peaks in moderate band of |phase_out| (roughly 8–28°), not only at zero",
+          bPlus: "B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]",
+          stick: true,
+          explanation: "The memory term keeps the state alive after the external drive is removed."
+        },
+        original: {
+          name: "Original Phase-Out equation (Legacy specification)",
+          shimmer: "30 + (jitter * 45)",
+          phase_out: "(voltage * 98) - (0.27 * shimmer) + (15 * sin(2π * 35 * t)) [clamped -58..58]",
+          coherence: "0.95 - |phase_out| / 95 (peaks only when Phase-Out was near zero)",
+          osc: "15 * sin(2π * 35 * t)",
+          memory: "none",
+          bPlus: "B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]",
+          stick: false,
+          explanation: "Collapsed immediately after the drive stopped. No stick."
+        }
+      }
+    });
+  });
+
+  app.post('/api/physics/phase-model', (req, res) => {
+    try {
+      const { model } = req.body || {};
+      if (model !== 'modified' && model !== 'original') {
+        return res.status(400).json({ success: false, error: 'Model must be "modified" or "original"' });
+      }
+      systemState.phaseModel = model;
+      if (model === 'original') {
+        substrateMemoryState = 0.0;
+        systemState.memoryStick = 0.0;
+      }
+      io.emit('physics:phase_model', {
+        phaseModel: systemState.phaseModel,
+        memoryStick: systemState.memoryStick,
+        phaseOut: systemState.phaseOut
+      });
+      res.json({ success: true, phaseModel: systemState.phaseModel });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

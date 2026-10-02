@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio, HardDrive, Plus, Eye, BookOpen, Check, GitBranch } from 'lucide-react';
+import { Database, Binary, Zap, Trash2, HelpCircle, Cpu, Play, Sparkles, RefreshCw, Terminal, CheckCircle2, Sliders, Workflow, Layers, Activity, Wand2, ShieldAlert, Radio, HardDrive, Plus, Eye, BookOpen, Check, GitBranch, Waves, Power, RotateCcw } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface AsciiPacket {
@@ -28,6 +28,7 @@ interface ReservoirProps {
   bias: number;
   onTuneBias: (bias: number) => void;
   onOpenMemTest?: () => void;
+  onOpenPhaseLab?: () => void;
 }
 
 export default function PhysicalAsciiReservoir({
@@ -40,14 +41,15 @@ export default function PhysicalAsciiReservoir({
   onAddLog,
   bias,
   onTuneBias,
-  onOpenMemTest
+  onOpenMemTest,
+  onOpenPhaseLab
 }: ReservoirProps) {
   const [memoryBank, setMemoryBank] = useState<Record<string, AsciiPacket>>({});
   const [logEntries, setLogEntries] = useState<{ id: string; text: string; type: 'physical' | 'combined' }[]>([]);
   const [showHelp, setShowHelp] = useState(false);
   
   // OS & Computational States
-  const [activeTab, setActiveTab] = useState<'monitor' | 'processor'>('monitor');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'processor' | 'phase_dynamics'>('monitor');
   const [activeTask, setActiveTask] = useState<'xor' | 'hasher' | 'oracle'>('xor');
   const [xorBit1, setXorBit1] = useState<0 | 1>(0);
   const [xorBit2, setXorBit2] = useState<0 | 1>(1);
@@ -802,8 +804,16 @@ export default function PhysicalAsciiReservoir({
         </div>
 
         {/* Phase Out */}
-        <div className="p-3 bg-zinc-900/40 border border-[#00ccff]/20 rounded-lg flex flex-col justify-between" id="stat-phaseout">
-          <span className="text-[9px] tracking-wider text-zinc-500 font-black uppercase">phase-out angle</span>
+        <div 
+          onClick={() => setActiveTab('phase_dynamics')}
+          className="p-3 bg-zinc-900/40 border border-[#00ccff]/20 hover:border-[#00ccff]/60 rounded-lg flex flex-col justify-between cursor-pointer transition-all group" 
+          id="stat-phaseout"
+          title="Click to inspect Phase-Out Dynamics, Memory Stick (+0.08dt), and Multi-Harmonic B+(t)"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] tracking-wider text-zinc-500 font-black uppercase">phase-out angle</span>
+            <span className="text-[7.5px] text-[#00ccff] opacity-0 group-hover:opacity-100 transition-opacity font-bold">INSPECT →</span>
+          </div>
           <div className="my-1.5 text-lg font-black text-[#00ccff] drop-shadow-[0_0_8px_rgba(0,204,255,0.4)]">
             {phaseOut >= 0 ? '+' : ''}{phaseOut.toFixed(1)}°
           </div>
@@ -866,6 +876,17 @@ export default function PhysicalAsciiReservoir({
           }`}
         >
           Chaotic Co-Processor
+        </button>
+        <button 
+          onClick={() => setActiveTab('phase_dynamics')}
+          className={`px-3 py-1.5 font-bold tracking-wider uppercase transition-colors outline-none flex items-center gap-1.5 ${
+            activeTab === 'phase_dynamics' 
+              ? 'text-emerald-400 border-b-2 border-emerald-400 bg-white/5' 
+              : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <Waves className="w-3 h-3 text-emerald-400" />
+          Phase &amp; Memory Stick
         </button>
       </div>
 
@@ -1244,7 +1265,7 @@ export default function PhysicalAsciiReservoir({
               </div>
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'processor' ? (
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 animate-fadeIn">
             {/* Left side: Task settings & input controls */}
             <div className="flex flex-col bg-[#020202] border border-white/5 rounded-lg p-3.5 gap-3.5">
@@ -1412,6 +1433,126 @@ export default function PhysicalAsciiReservoir({
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col gap-4 animate-fadeIn">
+            {/* Header & Launch Full Window Button */}
+            <div className="flex items-center justify-between bg-black/60 border border-emerald-500/20 p-3 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Waves className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span className="text-[10px] font-black uppercase text-emerald-300 tracking-wider">
+                  Phase-Out Dynamics &amp; Memory Stick Analysis
+                </span>
+                <span className="text-[8px] bg-emerald-500/20 text-[#00ffcc] px-1.5 py-0.5 rounded font-mono border border-emerald-500/30">
+                  {Math.abs(phaseOut) >= 8 && Math.abs(phaseOut) <= 28 ? 'SWEET SPOT (8°–28°)' : 'STABLE FIELD'}
+                </span>
+              </div>
+              {onOpenPhaseLab && (
+                <button
+                  onClick={onOpenPhaseLab}
+                  className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-500/40 text-[#00ffcc] text-[8.5px] font-black uppercase tracking-wider rounded transition-all flex items-center gap-1.5"
+                >
+                  <Sparkles size={11} />
+                  Launch Full Lab Window →
+                </button>
+              )}
+            </div>
+
+            {/* Live Metrics Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="p-3 bg-black/40 border border-white/5 rounded">
+                <span className="text-[8.5px] text-zinc-500 font-bold uppercase">Phase-Out Angle Φ</span>
+                <div className="text-xl font-black text-[#00ccff] font-mono my-1">
+                  {phaseOut >= 0 ? '+' : ''}{phaseOut.toFixed(2)}°
+                </div>
+                <span className="text-[7.5px] text-zinc-400">Current clamp: [-55°, +55°]</span>
+              </div>
+
+              <div className="p-3 bg-black/40 border border-pink-500/20 rounded">
+                <span className="text-[8.5px] text-pink-400 font-bold uppercase">Memory Stick State</span>
+                <div className="text-xl font-black text-pink-400 font-mono my-1">
+                  +0.08dt ACTIVE
+                </div>
+                <span className="text-[7.5px] text-zinc-400">Persistent integration state</span>
+              </div>
+
+              <div className="p-3 bg-black/40 border border-white/5 rounded">
+                <span className="text-[8.5px] text-zinc-500 font-bold uppercase">Field Drive B+(t)</span>
+                <div className="text-xl font-black text-purple-400 font-mono my-1">
+                  4-Harmonics
+                </div>
+                <span className="text-[7.5px] text-zinc-400">28, 56, 84, 112 Hz (π²·B₀)</span>
+              </div>
+
+              <div className="p-3 bg-black/40 border border-white/5 rounded">
+                <span className="text-[8.5px] text-zinc-500 font-bold uppercase">Coherence Sweet Spot</span>
+                <div className="text-xl font-black text-[#00ffcc] font-mono my-1">
+                  {coherence.toFixed(4)}
+                </div>
+                <span className="text-[7.5px] text-zinc-400">Peaks across [8°–28°] band</span>
+              </div>
+            </div>
+
+            {/* Comparison Matrix: What Actually Changed */}
+            <div className="bg-[#050906] border border-white/10 rounded-lg p-3 space-y-2">
+              <span className="text-[9px] font-black uppercase text-zinc-300 tracking-wider block">
+                WHAT ACTUALLY CHANGED // EQUATION DERIVATION
+              </span>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[9px] font-mono">
+                  <thead>
+                    <tr className="border-b border-white/10 text-zinc-400 font-bold uppercase">
+                      <th className="py-1.5 px-2">Part</th>
+                      <th className="py-1.5 px-2 text-amber-300">Original (Legacy)</th>
+                      <th className="py-1.5 px-2 text-[#00ffcc]">Modified (Current)</th>
+                      <th className="py-1.5 px-2">Why</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    <tr>
+                      <td className="py-1 px-2 font-bold text-white">Voltage weight</td>
+                      <td className="py-1 px-2 text-amber-300">× 98 (very strong)</td>
+                      <td className="py-1 px-2 text-[#00ffcc]">× 42 and centered on 0.68</td>
+                      <td className="py-1 px-2 text-zinc-400">Prevents immediate saturation</td>
+                    </tr>
+                    <tr>
+                      <td className="py-1 px-2 font-bold text-white">Shimmer weight</td>
+                      <td className="py-1 px-2 text-amber-300">−0.27 (shimmer = 30 + jit*45)</td>
+                      <td className="py-1 px-2 text-[#00ffcc]">−0.15 (shimmer = 22 + jit*38)</td>
+                      <td className="py-1 px-2 text-zinc-400">Less destructive</td>
+                    </tr>
+                    <tr className="bg-pink-950/20">
+                      <td className="py-1 px-2 font-bold text-pink-300">Memory term (KEY)</td>
+                      <td className="py-1 px-2 text-amber-300">none (zero memory integration)</td>
+                      <td className="py-1 px-2 text-pink-400 font-black">+= 0.08 * (instant - memory)</td>
+                      <td className="py-1 px-2 text-white font-semibold">Allows the stick to persist</td>
+                    </tr>
+                    <tr>
+                      <td className="py-1 px-2 font-bold text-white">Oscillation</td>
+                      <td className="py-1 px-2 text-amber-300">35 Hz, amplitude 15</td>
+                      <td className="py-1 px-2 text-[#00ffcc]">28 Hz, amplitude 6</td>
+                      <td className="py-1 px-2 text-zinc-400">Matches the multi-harmonic drive</td>
+                    </tr>
+                    <tr>
+                      <td className="py-1 px-2 font-bold text-white">Coherence shape</td>
+                      <td className="py-1 px-2 text-amber-300">peaks only at 0</td>
+                      <td className="py-1 px-2 text-[#00ffcc]">peaks in a moderate band (8–28)</td>
+                      <td className="py-1 px-2 text-zinc-400">Creates a stable high-coherence region</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="p-2 bg-black/40 border border-white/5 rounded text-[8px] text-zinc-400 leading-relaxed mt-2">
+                <span className="text-pink-400 font-bold uppercase">The single most important addition is the memory term:</span> That is what keeps the state alive after the external drive is removed. Under the original equation, cutting the drive causes immediate collapse with no stick.
+              </div>
+            </div>
+
+            {/* Formula Block */}
+            <div className="p-2.5 bg-black/50 border border-purple-500/20 rounded font-mono text-[9px] text-purple-200">
+              <span className="text-[7.5px] uppercase tracking-wider text-purple-400 block mb-1">Harmonic Field Drive:</span>
+              B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]
             </div>
           </div>
         )}
