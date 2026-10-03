@@ -11,7 +11,14 @@ import os from 'os';
 import * as glob from 'glob';
 import { GoogleGenAI } from '@google/genai';
 import { esnEngine, hysteresisEngine, entropyOracle, quantumCipherEngine, nodeMeshEngine } from './src/server/prcLabEngines.ts';
-import { executeQuantumJarStep, generateQuantumWaveformBatch, runHybridStep, PhaseOutState } from './src/quantum/qiskitEngine.ts';
+import { 
+  executeQuantumJarStep, 
+  generateQuantumWaveformBatch, 
+  runHybridStep, 
+  PhaseOutState,
+  ClosedLoopJarQuantumSystem,
+  runClosedFeedbackStep
+} from './src/quantum/qiskitEngine.ts';
 
 // --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
 const STATE_FILE = path.join(os.tmpdir(), 'system_state.json');
@@ -42,7 +49,13 @@ let systemState = {
   quantumPhaseOut: 0.0,
   quantumP1: 0.5,
   quantumMemoryAngleDeg: 90.0,
-  phaseModel: 'modified' as 'modified' | 'original'
+  phaseModel: 'modified' as 'modified' | 'original',
+  closedQuantumFeedback: false,
+  quantumFeedbackGain: 0.25,
+  quantumFeedbackMode: 'dual' as 'dual' | 'memory' | 'voltage',
+  quantumFeedbackDeltaV: 0.0,
+  quantumFeedbackDeltaM: 0.0,
+  closedLoopLocked: false
 };
 
 // Load state if exists
@@ -698,6 +711,34 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       systemState.quantumPhaseOut = hybridQuantum.quantumPhaseOut;
       systemState.quantumP1 = hybridQuantum.prob1Sampled;
       systemState.quantumMemoryAngleDeg = hybridQuantum.memoryAngleDeg;
+
+      // CLOSED PHYSICAL-QUANTUM FEEDBACK:
+      // Quantum measurement collapse writes directly back into the Jar substrate!
+      if (systemState.closedQuantumFeedback) {
+        const gain = systemState.quantumFeedbackGain || 0.25;
+        // 1. Quantum voltage perturbation back-action (modulates physical jar electric potential)
+        const dV = (hybridQuantum.quantumPhaseOut / 55.0) * 0.12 * gain;
+        // 2. Quantum memory back-action (quantum state collapse pulls substrate stick)
+        const dM = (hybridQuantum.quantumPhaseOut - substrateMemoryState) * 0.18 * gain;
+
+        if (systemState.quantumFeedbackMode === 'dual' || systemState.quantumFeedbackMode === 'memory') {
+          substrateMemoryState = Math.max(-40.0, Math.min(40.0, substrateMemoryState + dM));
+          systemState.memoryStick = substrateMemoryState;
+        }
+
+        systemState.quantumFeedbackDeltaV = (systemState.quantumFeedbackMode === 'dual' || systemState.quantumFeedbackMode === 'voltage') ? dV : 0.0;
+        systemState.quantumFeedbackDeltaM = dM;
+        systemState.closedLoopLocked = Math.abs(hybridQuantum.quantumPhaseOut - phaseOut) < 6.0;
+
+        // When closed feedback locks, boost coherence
+        if (systemState.closedLoopLocked) {
+          coherenceBase = Math.min(0.998, coherenceBase + 0.03);
+        }
+      } else {
+        systemState.quantumFeedbackDeltaV = 0.0;
+        systemState.quantumFeedbackDeltaM = 0.0;
+        systemState.closedLoopLocked = false;
+      }
     } catch (e) {
       // Fallback
     }
@@ -1070,6 +1111,21 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       io.emit('log', msg);
     });
 
+    socket.on('quantum:toggle_feedback', (data: { enabled?: boolean, gain?: number, mode?: string }) => {
+      if (typeof data?.enabled === 'boolean') {
+        systemState.closedQuantumFeedback = data.enabled;
+      }
+      if (typeof data?.gain === 'number') {
+        systemState.quantumFeedbackGain = Math.max(0.0, Math.min(1.0, data.gain));
+      }
+      if (data?.mode && ['dual', 'memory', 'voltage'].includes(data.mode)) {
+        systemState.quantumFeedbackMode = data.mode as any;
+      }
+      saveState();
+      io.emit('hardware:state', systemState);
+      io.emit('log', `QUANTUM_FEEDBACK: Closed physical-quantum loop ${systemState.closedQuantumFeedback ? 'ENGAGED' : 'DISENGAGED'} (Gain: ${systemState.quantumFeedbackGain.toFixed(2)}, Mode: ${systemState.quantumFeedbackMode.toUpperCase()})`);
+    });
+
     socket.on('node:heartbeat', (data: any) => {
       nodeMeshEngine.processHeartbeat(
         data?.id || clientNodeId,
@@ -1182,7 +1238,8 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       // Replicates the chaotic nodal fluctuations of the liquid substrate
       const t = Date.now() / 1000;
       const jitterVal = 0.015 + (Math.random() * 0.01);
-      const v_nodal = 1.65 + (Math.sin(t * 1.55) * 0.28) + ((Math.random() - 0.5) * jitterVal * 8);
+      const feedbackV = systemState.closedQuantumFeedback ? systemState.quantumFeedbackDeltaV : 0.0;
+      const v_nodal = Math.max(0.35, Math.min(1.95, 1.65 + (Math.sin(t * 1.55) * 0.28) + ((Math.random() - 0.5) * jitterVal * 8) + feedbackV));
       
       // Resonance Calculations matching code.py v148
       const overdrive_factor = systemState.overdrive ? 7.5 : 1.0;
@@ -2050,6 +2107,94 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
+  });
+
+  // Evaluate Closed Physical-Quantum Feedback Step:
+  // Quantum result writing directly back into the Jar's voltage & memory stick
+  app.post('/api/quantum/circuit/closed-step', (req, res) => {
+    try {
+      const { 
+        ambient_voltage = 1.42, 
+        memory = 0.0, 
+        jitter = 0.01, 
+        t = 0.0, 
+        gain = 0.25, 
+        mode = 'dual', 
+        shots = 1024, 
+        dt = 0.001,
+        enabled = true
+      } = req.body || {};
+
+      const system = new ClosedLoopJarQuantumSystem(Number(memory), {
+        enabled: Boolean(enabled),
+        gain: Number(gain),
+        mode: mode as any
+      });
+
+      const result = runClosedFeedbackStep(
+        Number(ambient_voltage),
+        Number(jitter),
+        Number(t),
+        system,
+        Number(dt),
+        Number(shots)
+      );
+
+      res.json({
+        success: true,
+        ...result
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Toggle or reconfigure closed physical-quantum feedback across the live server
+  app.post('/api/quantum/feedback/toggle', (req, res) => {
+    try {
+      const { enabled, gain, mode } = req.body || {};
+      if (typeof enabled === 'boolean') {
+        systemState.closedQuantumFeedback = enabled;
+      }
+      if (typeof gain === 'number' && !isNaN(gain)) {
+        systemState.quantumFeedbackGain = Math.max(0.0, Math.min(1.0, gain));
+      }
+      if (mode && ['dual', 'memory', 'voltage'].includes(mode)) {
+        systemState.quantumFeedbackMode = mode;
+      }
+
+      saveState();
+      io.emit('hardware:state', systemState);
+      io.emit('log', `QUANTUM_FEEDBACK: Closed physical-quantum loop ${systemState.closedQuantumFeedback ? 'ENGAGED' : 'DISENGAGED'} (Gain: ${systemState.quantumFeedbackGain.toFixed(2)}, Mode: ${systemState.quantumFeedbackMode.toUpperCase()})`);
+
+      res.json({
+        success: true,
+        closedQuantumFeedback: systemState.closedQuantumFeedback,
+        quantumFeedbackGain: systemState.quantumFeedbackGain,
+        quantumFeedbackMode: systemState.quantumFeedbackMode,
+        quantumFeedbackDeltaV: systemState.quantumFeedbackDeltaV,
+        quantumFeedbackDeltaM: systemState.quantumFeedbackDeltaM,
+        closedLoopLocked: systemState.closedLoopLocked
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Get current closed feedback status
+  app.get('/api/quantum/feedback/status', (req, res) => {
+    res.json({
+      success: true,
+      closedQuantumFeedback: systemState.closedQuantumFeedback,
+      quantumFeedbackGain: systemState.quantumFeedbackGain,
+      quantumFeedbackMode: systemState.quantumFeedbackMode,
+      quantumFeedbackDeltaV: systemState.quantumFeedbackDeltaV,
+      quantumFeedbackDeltaM: systemState.quantumFeedbackDeltaM,
+      closedLoopLocked: systemState.closedLoopLocked,
+      quantumPhaseOut: systemState.quantumPhaseOut,
+      phaseOut: systemState.phaseOut,
+      memoryStick: systemState.memoryStick
+    });
   });
 
   // Evaluate batch waveform comparison

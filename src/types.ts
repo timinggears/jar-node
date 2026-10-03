@@ -27,6 +27,12 @@ export interface SystemStats {
   quantumPhaseOut?: number;
   quantumP1?: number;
   quantumMemoryAngleDeg?: number;
+  closedQuantumFeedback?: boolean;
+  quantumFeedbackGain?: number;
+  quantumFeedbackMode?: 'dual' | 'memory' | 'voltage';
+  quantumFeedbackDeltaV?: number;
+  quantumFeedbackDeltaM?: number;
+  closedLoopLocked?: boolean;
   isOverdrive: boolean;
   isQec: boolean;
   boost2b?: boolean;

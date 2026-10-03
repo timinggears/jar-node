@@ -37,7 +37,9 @@ import {
   TrendingUp,
   ShieldCheck,
   Binary,
-  Waves
+  Waves,
+  CornerDownLeft,
+  RefreshCcw
 } from 'lucide-react';
 import { 
   executeQuantumJarStep, 
@@ -45,23 +47,43 @@ import {
   runHybridStep, 
   HybridStepResult, 
   PhaseOutState, 
-  cedarCircuitAngles 
+  cedarCircuitAngles,
+  ClosedLoopJarQuantumSystem,
+  runClosedFeedbackStep,
+  ClosedFeedbackStepResult
 } from '../quantum/qiskitEngine';
 
 interface QiskitQuantumLabProps {
   initialVoltage?: number;
   initialMemory?: number;
   carrierBias?: number;
+  closedQuantumFeedback?: boolean;
+  quantumFeedbackGain?: number;
+  quantumFeedbackMode?: 'dual' | 'memory' | 'voltage';
   onLog?: (msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   onOpenPhaseLab?: () => void;
+  onWritebackToJar?: (feedback: {
+    deltaV: number;
+    deltaM: number;
+    quantumPo: number;
+    locked: boolean;
+    effectiveV: number;
+    memory: number;
+  }) => void;
+  onToggleClosedFeedback?: (enabled: boolean, gain?: number, mode?: 'dual' | 'memory' | 'voltage') => void;
 }
 
 export default function QiskitQuantumLab({
   initialVoltage = 1.42,
   initialMemory = 12.0,
   carrierBias = 50,
+  closedQuantumFeedback = true,
+  quantumFeedbackGain = 0.25,
+  quantumFeedbackMode = 'dual',
   onLog,
-  onOpenPhaseLab
+  onOpenPhaseLab,
+  onWritebackToJar,
+  onToggleClosedFeedback
 }: QiskitQuantumLabProps) {
   // Navigation tabs: simulator, hybrid_runner, circuit_diagram, bloch_states, qiskit_code, ibm_hardware
   const [activeTab, setActiveTab] = useState<'simulator' | 'hybrid_runner' | 'circuit_diagram' | 'bloch_states' | 'qiskit_code' | 'ibm_hardware'>('hybrid_runner');
@@ -89,11 +111,27 @@ export default function QiskitQuantumLab({
   const [hybridJitter, setHybridJitter] = useState<number>(0.01);
   const [hybridShots, setHybridShots] = useState<number>(1024);
   const [hybridTime, setHybridTime] = useState<number>(0.0);
-  const [lastHybridResult, setLastHybridResult] = useState<HybridStepResult>(() => {
-    const dummyState = new PhaseOutState(initialMemory);
-    return runHybridStep(initialVoltage, 0.01, 0.0, dummyState, 1024);
+
+  // Closed Physical-Quantum Feedback (Quantum result writing back into the Jar)
+  const [closedFeedbackEnabled, setClosedFeedbackEnabled] = useState<boolean>(true);
+  const [feedbackGain, setFeedbackGain] = useState<number>(0.25);
+  const [feedbackMode, setFeedbackMode] = useState<'dual' | 'memory' | 'voltage'>('dual');
+  const [lastFeedbackDeltas, setLastFeedbackDeltas] = useState<{ dV: number; dM: number; effectiveV: number; locked: boolean }>({
+    dV: 0,
+    dM: 0,
+    effectiveV: initialVoltage,
+    locked: false
   });
-  const [hybridHistory, setHybridHistory] = useState<Array<HybridStepResult & { stepIndex: number; t: number; voltage: number }>>([]);
+  const closedSystemRef = useRef<ClosedLoopJarQuantumSystem>(
+    new ClosedLoopJarQuantumSystem(initialMemory, { enabled: true, gain: 0.25, mode: 'dual' })
+  );
+  const writebackVRef = useRef<number>(0.0);
+
+  const [lastHybridResult, setLastHybridResult] = useState<ClosedFeedbackStepResult>(() => {
+    const dummySys = new ClosedLoopJarQuantumSystem(initialMemory, { enabled: true, gain: 0.25, mode: 'dual' });
+    return runClosedFeedbackStep(initialVoltage, 0.01, 0.0, dummySys, 0.001, 1024);
+  });
+  const [hybridHistory, setHybridHistory] = useState<Array<ClosedFeedbackStepResult & { stepIndex: number; t: number; voltage: number }>>([]);
 
   // Oscilloscope Canvas & History buffer
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -106,6 +144,9 @@ export default function QiskitQuantumLab({
     instant: number;
     oscAngle: number;
     driveOn: boolean;
+    writebackV?: number;
+    writebackM?: number;
+    isClosed?: boolean;
   }>>([]);
 
   const animRef = useRef<number | null>(null);
@@ -117,27 +158,109 @@ export default function QiskitQuantumLab({
     memRef.current = memoryStick;
   }, [memoryStick]);
 
-  // Handlers for One-Shot Hybrid Loop
+  // Synchronize closed feedback config
+  useEffect(() => {
+    closedSystemRef.current.config = {
+      enabled: closedFeedbackEnabled,
+      gain: feedbackGain,
+      mode: feedbackMode,
+      voltageScale: 0.12,
+      memoryGain: 0.18
+    };
+  }, [closedFeedbackEnabled, feedbackGain, feedbackMode]);
+
+  // Handlers for One-Shot Hybrid Loop with Closed Feedback (Write-Back)
+  const handleCommitWritebackToJar = () => {
+    onWritebackToJar?.({
+      deltaV: lastFeedbackDeltas.dV,
+      deltaM: lastFeedbackDeltas.dM,
+      quantumPo: lastHybridResult.quantum_po,
+      locked: lastFeedbackDeltas.locked,
+      effectiveV: lastFeedbackDeltas.effectiveV,
+      memory: lastHybridResult.memory
+    });
+    fetch('/api/quantum/feedback/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: closedFeedbackEnabled,
+        gain: feedbackGain,
+        mode: feedbackMode
+      })
+    }).catch(() => {});
+    onLog?.(`[CLOSED_FEEDBACK_COMMITTED]: Quantum write-back injected into Jar! ΔV=${(lastFeedbackDeltas.dV * 1000).toFixed(1)} mV, ΔM=${lastFeedbackDeltas.dM.toFixed(2)}, Lock=${lastFeedbackDeltas.locked ? 'LOCKED' : 'TRACKING'}`, 'success');
+  };
+
   const handleRunHybridStep = () => {
     const nextT = hybridTime + 0.001;
-    const res = runHybridStep(hybridVoltage, hybridJitter, nextT, hybridStateRef.current, hybridShots);
+    closedSystemRef.current.config = {
+      enabled: closedFeedbackEnabled,
+      gain: feedbackGain,
+      mode: feedbackMode,
+      voltageScale: 0.12,
+      memoryGain: 0.18
+    };
+
+    const res = runClosedFeedbackStep(
+      hybridVoltage,
+      hybridJitter,
+      nextT,
+      closedSystemRef.current,
+      0.001,
+      hybridShots
+    );
+
     setHybridTime(nextT);
     setLastHybridResult(res);
+    setLastFeedbackDeltas({
+      dV: res.delta_v_writeback,
+      dM: res.delta_m_writeback,
+      effectiveV: res.effective_voltage,
+      locked: res.locked
+    });
     setHybridHistory(prev => [
       { ...res, stepIndex: prev.length + 1, t: nextT, voltage: hybridVoltage },
       ...prev.slice(0, 19)
     ]);
-    onLog?.(`[HYBRID_STEP]: V=${hybridVoltage.toFixed(3)}V | MemoryStick=${res.memory.toFixed(2)} | θ₁=${res.memory_angle_deg.toFixed(1)}° | QuantumPO=${res.quantum_po.toFixed(2)}° (P1=${(res.p1 * 100).toFixed(1)}%)`, 'info');
+
+    if (closedFeedbackEnabled) {
+      onWritebackToJar?.({
+        deltaV: res.delta_v_writeback,
+        deltaM: res.delta_m_writeback,
+        quantumPo: res.quantum_po,
+        locked: res.locked,
+        effectiveV: res.effective_voltage,
+        memory: res.memory
+      });
+      onLog?.(`[CLOSED_QUANTUM_FB]: Quantum PO = ${res.quantum_po.toFixed(2)}° -> Write-Back: ΔV = ${res.delta_v_writeback >= 0 ? '+' : ''}${(res.delta_v_writeback * 1000).toFixed(1)} mV, ΔM = ${res.delta_m_writeback.toFixed(2)} -> Jar locked: ${res.locked ? 'YES (Limit Cycle)' : 'TRACKING'}`, 'success');
+    } else {
+      onLog?.(`[OPEN_HYBRID_STEP]: V=${hybridVoltage.toFixed(3)}V | Memory=${res.memory.toFixed(2)} | QuantumPO=${res.quantum_po.toFixed(2)}° (One-Way)`, 'info');
+    }
   };
 
   const handleRun10HybridSteps = () => {
     let currentT = hybridTime;
-    let latestRes: HybridStepResult = lastHybridResult;
-    const newItems: Array<HybridStepResult & { stepIndex: number; t: number; voltage: number }> = [];
+    let latestRes: ClosedFeedbackStepResult = lastHybridResult;
+    const newItems: Array<ClosedFeedbackStepResult & { stepIndex: number; t: number; voltage: number }> = [];
+
+    closedSystemRef.current.config = {
+      enabled: closedFeedbackEnabled,
+      gain: feedbackGain,
+      mode: feedbackMode,
+      voltageScale: 0.12,
+      memoryGain: 0.18
+    };
 
     for (let i = 0; i < 10; i++) {
       currentT += 0.001;
-      latestRes = runHybridStep(hybridVoltage, hybridJitter, currentT, hybridStateRef.current, hybridShots);
+      latestRes = runClosedFeedbackStep(
+        hybridVoltage,
+        hybridJitter,
+        currentT,
+        closedSystemRef.current,
+        0.001,
+        hybridShots
+      );
       newItems.push({
         ...latestRes,
         stepIndex: hybridHistory.length + i + 1,
@@ -148,17 +271,46 @@ export default function QiskitQuantumLab({
 
     setHybridTime(currentT);
     setLastHybridResult(latestRes);
+    setLastFeedbackDeltas({
+      dV: latestRes.delta_v_writeback,
+      dM: latestRes.delta_m_writeback,
+      effectiveV: latestRes.effective_voltage,
+      locked: latestRes.locked
+    });
     setHybridHistory(prev => [...newItems.reverse(), ...prev].slice(0, 25));
-    onLog?.(`[HYBRID_BATCH_10]: Executed 10 hybrid steps. Latest memory stick: ${latestRes.memory.toFixed(2)}, QuantumPO: ${latestRes.quantum_po.toFixed(2)}°`, 'success');
+
+    if (closedFeedbackEnabled) {
+      onWritebackToJar?.({
+        deltaV: latestRes.delta_v_writeback,
+        deltaM: latestRes.delta_m_writeback,
+        quantumPo: latestRes.quantum_po,
+        locked: latestRes.locked,
+        effectiveV: latestRes.effective_voltage,
+        memory: latestRes.memory
+      });
+      onLog?.(`[CLOSED_FB_BATCH_10]: Executed 10 closed-loop feedback steps. Latest write-back ΔV: ${(latestRes.delta_v_writeback * 1000).toFixed(1)} mV, locked: ${latestRes.locked ? 'YES' : 'NO'}`, 'success');
+    } else {
+      onLog?.(`[OPEN_HYBRID_BATCH_10]: Executed 10 open hybrid steps. Memory: ${latestRes.memory.toFixed(2)}, QuantumPO: ${latestRes.quantum_po.toFixed(2)}°`, 'info');
+    }
   };
 
   const handleResetHybridState = () => {
-    hybridStateRef.current = new PhaseOutState(0.0);
+    closedSystemRef.current = new ClosedLoopJarQuantumSystem(0.0, {
+      enabled: closedFeedbackEnabled,
+      gain: feedbackGain,
+      mode: feedbackMode
+    });
     setHybridTime(0.0);
-    const initialRes = runHybridStep(hybridVoltage, hybridJitter, 0.0, hybridStateRef.current, hybridShots);
+    const initialRes = runClosedFeedbackStep(hybridVoltage, hybridJitter, 0.0, closedSystemRef.current, 0.001, hybridShots);
     setLastHybridResult(initialRes);
+    setLastFeedbackDeltas({
+      dV: initialRes.delta_v_writeback,
+      dM: initialRes.delta_m_writeback,
+      effectiveV: initialRes.effective_voltage,
+      locked: initialRes.locked
+    });
     setHybridHistory([]);
-    onLog?.('[HYBRID_RESET]: Substrate memory stick and hybrid timer zeroed.', 'info');
+    onLog?.('[CLOSED_FB_RESET]: Substrate memory stick, feedback vectors, and hybrid timer zeroed.', 'info');
   };
 
   const handleSyncVoltageFromJar = () => {
@@ -166,7 +318,7 @@ export default function QiskitQuantumLab({
     onLog?.(`[HYBRID_SYNC]: Synced hybrid input voltage to Jar V_nodal (${voltage.toFixed(3)} V).`, 'info');
   };
 
-  // Main animation / simulation loop
+  // Main animation / simulation loop with Closed Physical-Quantum Feedback
   useEffect(() => {
     let lastStamp = performance.now();
 
@@ -177,7 +329,11 @@ export default function QiskitQuantumLab({
       if (isPlaying) {
         timeRef.current += dt * clockSpeed;
 
-        const curV = driveActive ? voltage : 0.05;
+        // CLOSED PHYSICAL-QUANTUM FEEDBACK:
+        // Previous quantum measurement collapse writes back into the Jar's voltage & memory stick
+        const writebackV = closedFeedbackEnabled ? writebackVRef.current : 0.0;
+        const baseV = driveActive ? voltage : 0.05;
+        const curV = Math.max(0.30, Math.min(1.85, baseV + writebackV));
         const curJit = driveActive ? jitter : 0.002;
 
         const stepResult = executeQuantumJarStep(
@@ -188,21 +344,45 @@ export default function QiskitQuantumLab({
           shots
         );
 
-        memRef.current = stepResult.updatedMemory;
-        setMemoryStick(stepResult.updatedMemory);
+        let dV = 0;
+        let dM = 0;
+        let isLocked = false;
+
+        if (closedFeedbackEnabled) {
+          const g = feedbackGain;
+          dV = (stepResult.quantumPhaseOut / 55.0) * 0.12 * g;
+          dM = (stepResult.quantumPhaseOut - stepResult.updatedMemory) * 0.18 * g;
+          writebackVRef.current = (feedbackMode === 'dual' || feedbackMode === 'voltage') ? dV : 0.0;
+
+          if (feedbackMode === 'dual' || feedbackMode === 'memory') {
+            memRef.current = Math.max(-40.0, Math.min(40.0, stepResult.updatedMemory + dM));
+          } else {
+            memRef.current = stepResult.updatedMemory;
+          }
+          isLocked = Math.abs(stepResult.quantumPhaseOut - stepResult.classicalPhaseOut) < 6.0;
+        } else {
+          writebackVRef.current = 0.0;
+          memRef.current = stepResult.updatedMemory;
+        }
+
+        setLastFeedbackDeltas({ dV, dM, effectiveV: curV, locked: isLocked });
+        setMemoryStick(memRef.current);
         setCurrentState(stepResult);
 
-        // Append to history buffer
+        // Append to history buffer including writeback trace
         const buf = historyRef.current;
         buf.push({
           t: timeRef.current,
           classicalPhaseOut: stepResult.classicalPhaseOut,
           quantumPhaseOut: stepResult.quantumPhaseOut,
           prob1: stepResult.prob1Sampled,
-          memory: stepResult.updatedMemory,
+          memory: memRef.current,
           instant: stepResult.instant,
           oscAngle: stepResult.oscAngle,
-          driveOn: driveActive
+          driveOn: driveActive,
+          writebackV: dV,
+          writebackM: dM,
+          isClosed: closedFeedbackEnabled
         });
 
         // Limit buffer to 220 samples
@@ -221,7 +401,7 @@ export default function QiskitQuantumLab({
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [isPlaying, driveActive, voltage, jitter, shots, clockSpeed]);
+  }, [isPlaying, driveActive, voltage, jitter, shots, clockSpeed, closedFeedbackEnabled, feedbackGain, feedbackMode]);
 
   // Draw dual-trace oscilloscope comparing Classical vs Quantum wave collapse
   const drawOscilloscope = () => {
@@ -307,6 +487,11 @@ export default function QiskitQuantumLab({
     // 3. Substrate Memory Stick (Magenta Trace)
     drawTrace(pt => pt.memory, '#ec4899', 1.6, (midY / 45));
 
+    // 4. Closed Physical-Quantum Feedback Write-Back Trace (Amber Glow)
+    if (closedFeedbackEnabled) {
+      drawTrace(pt => (pt.writebackV || 0) * 120.0, '#f59e0b', 2.0, (midY / 65), true);
+    }
+
     // Legend on canvas
     ctx.font = '8px monospace';
     ctx.fillStyle = '#00ff66';
@@ -317,6 +502,15 @@ export default function QiskitQuantumLab({
 
     ctx.fillStyle = '#ec4899';
     ctx.fillText('■ SUBSTRATE MEMORY Ry(θ1)', w - 165, 38);
+
+    if (closedFeedbackEnabled) {
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillText('■ WRITE-BACK ΔV (CLOSED LOOP)', w - 165, 50);
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '8px monospace';
+      ctx.fillText(`● CLOSED FEEDBACK ENGAGED: ΔV = ${(lastFeedbackDeltas.dV * 1000).toFixed(1)} mV | ΔM = ${lastFeedbackDeltas.dM.toFixed(2)} | LOCKED: ${lastFeedbackDeltas.locked ? 'YES (LIMIT CYCLE)' : 'RESONANCE'}`, 10, h - 8);
+    }
   };
 
   const handleCopy = (text: string, id: string) => {
@@ -1551,6 +1745,115 @@ def cedar_circuit(voltage, memory, osc=0.0):
         'quantum_po': quantum_po,
         'p1': p1
     }`}
+            </pre>
+          </div>
+
+          {/* PART 4: Closed Physical-Quantum Feedback Loop (Writing Back into the Jar) */}
+          <div className="bg-zinc-950 border border-purple-500/40 rounded-xl p-4 flex flex-col gap-2 shadow-[0_0_20px_rgba(168,85,247,0.15)]">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-300 flex items-center justify-center text-[10px] font-bold">4</span>
+                <span className="text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <CornerDownLeft size={14} className="text-purple-400" />
+                  <span>Closed Physical-Quantum Feedback (Quantum Result Writing Back into Jar)</span>
+                </span>
+              </div>
+              <button
+                onClick={() => handleCopy(`class ClosedLoopJarQuantum:
+    """
+    Closed Physical-Quantum Feedback Loop:
+    The quantum measurement collapse writes back directly into the Jar's voltage and memory substrate.
+    """
+    def __init__(self, feedback_gain=0.25, feedback_mode='dual'):
+        self.state = PhaseOutState()
+        self.gain = feedback_gain
+        self.mode = feedback_mode
+        self.delta_v = 0.0
+        self.delta_m = 0.0
+
+    def step(self, ambient_voltage, jitter, t, dt=0.001, shots=1024):
+        # 1. Effective Jar voltage modulated by previous quantum write-back
+        effective_voltage = np.clip(ambient_voltage + self.delta_v, 0.3, 1.85)
+        
+        # 2. Forward classical update inside the Jar
+        po, memory = self.state.update(effective_voltage, jitter, t, dt)
+        
+        # 3. Parameterized 3-qubit circuit carrying memory stick
+        qc, mem_angle = cedar_circuit(effective_voltage, memory)
+        sim = AerSimulator()
+        job = sim.run(transpile(qc, sim), shots=shots)
+        p1 = job.result().get_counts().get('1', 0) / shots
+        quantum_po = (p1 * 110.0) - 55.0
+        
+        # 4. CLOSED FEEDBACK: Quantum collapse writes back into the Jar
+        self.delta_v = (quantum_po / 55.0) * 0.12 * self.gain
+        self.delta_m = (quantum_po - memory) * 0.18 * self.gain
+        
+        # Write back directly into physical memory stick inside the Jar
+        self.state.memory = np.clip(self.state.memory + self.delta_m, -40.0, 40.0)
+        
+        return {
+            'effective_voltage': effective_voltage,
+            'classical_po': po,
+            'memory': self.state.memory,
+            'memory_angle_deg': np.degrees(mem_angle),
+            'quantum_po': quantum_po,
+            'p1': p1,
+            'delta_v_writeback': self.delta_v,
+            'delta_m_writeback': self.delta_m,
+            'locked': abs(quantum_po - po) < 6.0
+        }`, 'part4_code')}
+                className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400 text-purple-200 text-[8px] font-bold uppercase rounded flex items-center gap-1 transition-all cursor-pointer"
+              >
+                {copiedCode === 'part4_code' ? <Check size={10} className="text-emerald-300" /> : <Copy size={10} />}
+                <span>{copiedCode === 'part4_code' ? 'COPIED' : 'COPY PART 4 (CLOSED LOOP)'}</span>
+              </button>
+            </div>
+            <pre className="p-3 bg-black/90 rounded-lg border border-purple-500/20 text-purple-200 text-[9px] font-mono overflow-x-auto leading-relaxed max-h-[300px]">
+{`class ClosedLoopJarQuantum:
+    """
+    Closed Physical-Quantum Feedback Loop:
+    The quantum measurement collapse writes back directly into the Jar's voltage and memory substrate.
+    """
+    def __init__(self, feedback_gain=0.25, feedback_mode='dual'):
+        self.state = PhaseOutState()
+        self.gain = feedback_gain
+        self.mode = feedback_mode
+        self.delta_v = 0.0
+        self.delta_m = 0.0
+
+    def step(self, ambient_voltage, jitter, t, dt=0.001, shots=1024):
+        # 1. Effective Jar voltage modulated by previous quantum write-back
+        effective_voltage = np.clip(ambient_voltage + self.delta_v, 0.3, 1.85)
+        
+        # 2. Forward classical update inside the Jar
+        po, memory = self.state.update(effective_voltage, jitter, t, dt)
+        
+        # 3. Parameterized 3-qubit circuit carrying memory stick
+        qc, mem_angle = cedar_circuit(effective_voltage, memory)
+        sim = AerSimulator()
+        job = sim.run(transpile(qc, sim), shots=shots)
+        p1 = job.result().get_counts().get('1', 0) / shots
+        quantum_po = (p1 * 110.0) - 55.0
+        
+        # 4. CLOSED FEEDBACK: Quantum collapse writes back into the Jar
+        self.delta_v = (quantum_po / 55.0) * 0.12 * self.gain
+        self.delta_m = (quantum_po - memory) * 0.18 * self.gain
+        
+        # Write back directly into physical memory stick inside the Jar
+        self.state.memory = np.clip(self.state.memory + self.delta_m, -40.0, 40.0)
+        
+        return {
+            'effective_voltage': effective_voltage,
+            'classical_po': po,
+            'memory': self.state.memory,
+            'memory_angle_deg': np.degrees(mem_angle),
+            'quantum_po': quantum_po,
+            'p1': p1,
+            'delta_v_writeback': self.delta_v,
+            'delta_m_writeback': self.delta_m,
+            'locked': abs(quantum_po - po) < 6.0
+        }`}
             </pre>
           </div>
 

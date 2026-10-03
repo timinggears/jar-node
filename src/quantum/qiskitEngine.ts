@@ -72,6 +72,24 @@ export interface HybridStepResult {
   theta2: number;
 }
 
+export interface ClosedLoopFeedbackConfig {
+  enabled: boolean;
+  gain: number; // e.g. 0.0 - 1.0 (default 0.20)
+  mode: 'dual' | 'memory' | 'voltage';
+  voltageScale: number; // Volts per normalized quantum unit (default 0.12)
+  memoryGain: number; // Memory injection rate (default 0.18)
+}
+
+export interface ClosedFeedbackStepResult extends HybridStepResult {
+  ambient_voltage: number;
+  effective_voltage: number;
+  delta_v_writeback: number;
+  delta_m_writeback: number;
+  closed_loop_active: boolean;
+  locked: boolean;
+  feedback_gain: number;
+}
+
 export class PhaseOutState {
   po: number = 0.0;
   memory: number = 0.0;
@@ -170,6 +188,143 @@ export function runHybridStep(
     theta1,
     theta2
   };
+}
+
+/**
+ * Closed Physical-Quantum Feedback Loop:
+ * Quantum measurement collapse writes back into the Jar's physical potential and memory substrate.
+ */
+export class ClosedLoopJarQuantumSystem {
+  state: PhaseOutState;
+  config: ClosedLoopFeedbackConfig;
+  lastDeltaV: number = 0.0;
+  lastDeltaM: number = 0.0;
+  effectiveVoltage: number = 1.42;
+
+  constructor(initialMemory: number = 0.0, config?: Partial<ClosedLoopFeedbackConfig>) {
+    this.state = new PhaseOutState(initialMemory);
+    this.config = {
+      enabled: true,
+      gain: 0.25,
+      mode: 'dual',
+      voltageScale: 0.12,
+      memoryGain: 0.18,
+      ...config
+    };
+  }
+
+  step(
+    ambientVoltage: number,
+    jitter: number,
+    t: number,
+    dt: number = 0.001,
+    shots: number = 1024
+  ): ClosedFeedbackStepResult {
+    // 1. Physical Jar input modulated by previous quantum write-back (if closed feedback is active)
+    const effV = this.config.enabled
+      ? Math.max(0.3, Math.min(1.85, ambientVoltage + this.lastDeltaV))
+      : ambientVoltage;
+    this.effectiveVoltage = effV;
+
+    // 2. Classical side update inside the Jar
+    const { po, memory, instant, osc } = this.state.update(effV, jitter, t, dt);
+
+    // 3. 3-qubit circuit parameterized by Jar state (carrying memory stick)
+    const { theta0, theta1, theta2 } = cedarCircuitAngles(effV, memory, osc);
+
+    // Statevector amplitude and expectation collapse
+    const c0 = Math.cos(theta0 / 2.0);
+    const s0 = Math.sin(theta0 / 2.0);
+    const c1 = Math.cos(theta1 / 2.0);
+    const s1 = Math.sin(theta1 / 2.0);
+
+    const p011 = (c0 * c0) * (s1 * s1);
+    const p111 = (s0 * s0) * (c1 * c1);
+    const prob1Exact = p011 + p111;
+
+    let p1 = prob1Exact;
+    if (shots > 0 && Number.isFinite(shots)) {
+      if (shots >= 64) {
+        const variance = (prob1Exact * (1.0 - prob1Exact)) / shots;
+        const stdDev = Math.sqrt(Math.max(0, variance));
+        const u1 = Math.max(1e-7, Math.random());
+        const u2 = Math.random();
+        const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        p1 = Math.max(0.0, Math.min(1.0, prob1Exact + z * stdDev));
+      } else {
+        let c1Count = 0;
+        for (let s = 0; s < shots; s++) {
+          if (Math.random() < prob1Exact) c1Count++;
+        }
+        p1 = c1Count / shots;
+      }
+    }
+
+    const quantum_po = (p1 * 110.0) - 55.0;
+    const memory_angle_deg = (theta1 * 180.0) / Math.PI;
+
+    // 4. CLOSED FEEDBACK: Quantum collapse writes back into the Jar
+    if (this.config.enabled) {
+      const g = this.config.gain;
+      // Voltage displacement write-back into the Jar
+      const dV = (quantum_po / 55.0) * this.config.voltageScale * g;
+      // Memory substrate back-action injection into the stick
+      const dM = (quantum_po - memory) * this.config.memoryGain * g;
+
+      if (this.config.mode === 'dual' || this.config.mode === 'voltage') {
+        this.lastDeltaV = dV;
+      } else {
+        this.lastDeltaV = 0.0;
+      }
+
+      if (this.config.mode === 'dual' || this.config.mode === 'memory') {
+        this.lastDeltaM = dM;
+        // Write back directly into physical memory stick inside the Jar
+        this.state.memory = Math.max(-40.0, Math.min(40.0, this.state.memory + dM));
+      } else {
+        this.lastDeltaM = 0.0;
+      }
+    } else {
+      this.lastDeltaV = 0.0;
+      this.lastDeltaM = 0.0;
+    }
+
+    const locked = Math.abs(quantum_po - po) < 6.0;
+
+    return {
+      ambient_voltage: ambientVoltage,
+      effective_voltage: effV,
+      classical_po: po,
+      memory: this.state.memory,
+      memory_angle_deg,
+      quantum_po,
+      p1,
+      instant,
+      osc,
+      theta0,
+      theta1,
+      theta2,
+      delta_v_writeback: this.lastDeltaV,
+      delta_m_writeback: this.lastDeltaM,
+      closed_loop_active: this.config.enabled,
+      locked,
+      feedback_gain: this.config.gain
+    };
+  }
+}
+
+/**
+ * Functional runner for a single closed-feedback loop step
+ */
+export function runClosedFeedbackStep(
+  ambientVoltage: number,
+  jitter: number,
+  t: number,
+  system: ClosedLoopJarQuantumSystem,
+  dt: number = 0.001,
+  shots: number = 1024
+): ClosedFeedbackStepResult {
+  return system.step(ambientVoltage, jitter, t, dt, shots);
 }
 
 export function executeQuantumJarStep(
@@ -349,6 +504,51 @@ def run_hybrid_step(voltage, jitter, t, state, shots=${shots}):
         'quantum_po': quantum_po,
         'p1': p1
     }
+
+class ClosedLoopJarQuantum:
+    """
+    Closed Physical-Quantum Feedback Loop:
+    The quantum measurement collapse writes back directly into the Jar's voltage and memory substrate.
+    """
+    def __init__(self, feedback_gain=0.25, feedback_mode='dual'):
+        self.state = PhaseOutState()
+        self.gain = feedback_gain
+        self.mode = feedback_mode
+        self.delta_v = 0.0
+        self.delta_m = 0.0
+
+    def step(self, ambient_voltage, jitter, t, dt=0.001, shots=1024):
+        # 1. Effective Jar voltage modulated by previous quantum write-back
+        effective_voltage = np.clip(ambient_voltage + self.delta_v, 0.3, 1.85)
+        
+        # 2. Forward classical update inside the Jar
+        po, memory = self.state.update(effective_voltage, jitter, t, dt)
+        
+        # 3. Parameterized 3-qubit circuit carrying memory stick
+        qc, mem_angle = cedar_circuit(effective_voltage, memory)
+        sim = AerSimulator()
+        job = sim.run(transpile(qc, sim), shots=shots)
+        p1 = job.result().get_counts().get('1', 0) / shots
+        quantum_po = (p1 * 110.0) - 55.0
+        
+        # 4. CLOSED FEEDBACK: Quantum collapse writes back into the Jar
+        self.delta_v = (quantum_po / 55.0) * 0.12 * self.gain
+        self.delta_m = (quantum_po - memory) * 0.18 * self.gain
+        
+        # Write back directly into physical memory stick inside the Jar
+        self.state.memory = np.clip(self.state.memory + self.delta_m, -40.0, 40.0)
+        
+        return {
+            'effective_voltage': effective_voltage,
+            'classical_po': po,
+            'memory': self.state.memory,
+            'memory_angle_deg': np.degrees(mem_angle),
+            'quantum_po': quantum_po,
+            'p1': p1,
+            'delta_v_writeback': self.delta_v,
+            'delta_m_writeback': self.delta_m,
+            'locked': abs(quantum_po - po) < 6.0
+        }
 `;
 
   return {
