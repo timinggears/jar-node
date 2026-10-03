@@ -148,6 +148,14 @@ export default function Taskbar({
         onClick={() => onToggleWindow('phase_lab')}
       />
       <AppIcon 
+        id="qiskit_lab"
+        icon={<Cpu size={20} className="text-[#00ffcc]" />} 
+        label="Qiskit Quantum Circuit Lab (3-Qubit VQE)" 
+        isOpen={openWindows.includes('qiskit_lab')} 
+        isActive={activeWindow === 'qiskit_lab'}
+        onClick={() => onToggleWindow('qiskit_lab')}
+      />
+      <AppIcon 
         id="visualizer"
         icon={<Box size={20} />} 
         label="The Cube" 

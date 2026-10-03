@@ -11,6 +11,7 @@ import os from 'os';
 import * as glob from 'glob';
 import { GoogleGenAI } from '@google/genai';
 import { esnEngine, hysteresisEngine, entropyOracle, quantumCipherEngine, nodeMeshEngine } from './src/server/prcLabEngines.ts';
+import { executeQuantumJarStep, generateQuantumWaveformBatch, runHybridStep, PhaseOutState } from './src/quantum/qiskitEngine.ts';
 
 // --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
 const STATE_FILE = path.join(os.tmpdir(), 'system_state.json');
@@ -38,6 +39,9 @@ let systemState = {
   phaseOut: 0.0,
   memoryStick: 0.0,
   bPlus: 0.0,
+  quantumPhaseOut: 0.0,
+  quantumP1: 0.5,
+  quantumMemoryAngleDeg: 90.0,
   phaseModel: 'modified' as 'modified' | 'original'
 };
 
@@ -687,6 +691,16 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     systemState.phaseOut = phaseOut;
     systemState.memoryStick = substrateMemoryState;
     systemState.bPlus = bPlus;
+
+    // Working Hybrid: Jar voltage -> classical memory stick -> 3-qubit quantum circuit
+    try {
+      const hybridQuantum = executeQuantumJarStep(vNodal, substrateMemoryState, t, jitter, 1024);
+      systemState.quantumPhaseOut = hybridQuantum.quantumPhaseOut;
+      systemState.quantumP1 = hybridQuantum.prob1Sampled;
+      systemState.quantumMemoryAngleDeg = hybridQuantum.memoryAngleDeg;
+    } catch (e) {
+      // Fallback
+    }
 
     // If hashrate (index 6) is missing, <= 0 or not a number, inject real subprocess speed
     let hrate = parseFloat(parts[6]);
@@ -1572,6 +1586,9 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         phase_out: systemState.phaseOut,
         memory_stick: systemState.memoryStick,
         b_plus: systemState.bPlus,
+        quantum_phase_out: systemState.quantumPhaseOut,
+        quantum_p1: systemState.quantumP1,
+        quantum_memory_angle_deg: systemState.quantumMemoryAngleDeg,
         phase_model: systemState.phaseModel || 'modified'
       },
       telemetry: {
@@ -1936,6 +1953,119 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
         phaseOut: systemState.phaseOut
       });
       res.json({ success: true, phaseModel: systemState.phaseModel });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // --- 4.6 QISKIT QUANTUM CIRCUIT TRANSLATION API ---
+
+  // Specification and circuit mapping blueprint
+  app.get('/api/quantum/circuit/spec', (req, res) => {
+    res.json({
+      success: true,
+      title: "Qiskit Quantum Circuit Translation of Jar-Node Feedback Loop",
+      framework: "qiskit",
+      qubits: 3,
+      classicalBits: 1,
+      mappingStrategy: [
+        {
+          classicalElement: "Input Signal",
+          formula: "instant = (voltage - 0.68) * 42 - 0.15 * shimmer",
+          gate: "Rx(theta_0)",
+          qubit: 0,
+          mechanism: "Encodes instantaneous analog amplitude as a physical phase angle on qubit 0."
+        },
+        {
+          classicalElement: "Memory Stick",
+          formula: "memory += 0.08 * (instant - memory)",
+          gate: "Ry(theta_1)",
+          qubit: 1,
+          mechanism: "Uses qubit entanglement (CNOT 0->1) to store short-term historical dependencies."
+        },
+        {
+          classicalElement: "Base Harmony",
+          formula: "osc = 6 * sin(2*pi*28*t)",
+          gate: "Rz(theta_2)",
+          qubit: 2,
+          mechanism: "Continuous 28 GHz driving field frequency vector tracking time (t) along the Z-axis."
+        },
+        {
+          classicalElement: "Phase-Out Green Wave",
+          formula: "phase_out = clamp(...)",
+          gate: "Measure(q2 -> c0)",
+          qubit: 2,
+          mechanism: "Collapses quantum state upon measurement: quantum_phase_out = (prob_1 * 110.0) - 55.0."
+        }
+      ]
+    });
+  });
+
+  // Evaluate single dynamic quantum circuit step
+  app.post('/api/quantum/circuit/step', (req, res) => {
+    try {
+      const { voltage = 1.42, current_memory = 0.0, current_time = 0.0, jitter = 0.01, shots = 1024 } = req.body || {};
+      const result = executeQuantumJarStep(
+        Number(voltage),
+        Number(current_memory),
+        Number(current_time),
+        Number(jitter),
+        Number(shots)
+      );
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Evaluate one-shot hybrid step matching user's exact realization:
+  // Jar voltage -> classical memory stick -> quantum circuit that carries that stick -> measured quantum Phase-Out
+  app.post('/api/quantum/circuit/hybrid-step', (req, res) => {
+    try {
+      const { voltage = 1.42, memory = 0.0, jitter = 0.01, t = 0.0, shots = 1024, dt = 0.001 } = req.body || {};
+      const state = new PhaseOutState(Number(memory));
+      const result = runHybridStep(
+        Number(voltage),
+        Number(jitter),
+        Number(t),
+        state,
+        Number(shots),
+        Number(dt)
+      );
+      res.json({
+        success: true,
+        classical_po: result.classical_po,
+        memory: result.memory,
+        memory_angle_deg: result.memory_angle_deg,
+        quantum_po: result.quantum_po,
+        p1: result.p1,
+        details: {
+          instant: result.instant,
+          osc: result.osc,
+          theta0: result.theta0,
+          theta1: result.theta1,
+          theta2: result.theta2
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Evaluate batch waveform comparison
+  app.post('/api/quantum/circuit/batch', (req, res) => {
+    try {
+      const { voltage = 1.42, start_memory = 0.0, start_time = 0.0, duration = 0.2, step_count = 100, jitter = 0.01, shots = 1024 } = req.body || {};
+      const batch = generateQuantumWaveformBatch(
+        Number(voltage),
+        Number(start_memory),
+        Number(start_time),
+        Number(duration),
+        Number(step_count),
+        Number(jitter),
+        Number(shots)
+      );
+      res.json({ success: true, count: batch.length, batch });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

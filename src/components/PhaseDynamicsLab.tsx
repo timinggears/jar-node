@@ -36,6 +36,7 @@ interface PhaseDynamicsLabProps {
   onLog?: (msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   onTuneBias?: (val: number) => void;
   onOpenAttestation?: () => void;
+  onOpenQiskitLab?: () => void;
 }
 
 export default function PhaseDynamicsLab({ 
@@ -43,7 +44,8 @@ export default function PhaseDynamicsLab({
   carrierBias, 
   onLog, 
   onTuneBias,
-  onOpenAttestation 
+  onOpenAttestation,
+  onOpenQiskitLab
 }: PhaseDynamicsLabProps) {
   // Current active equation model ('modified' = current stick equation, 'original' = legacy no stick)
   const [model, setModel] = useState<'modified' | 'original'>(stats.phaseModel || 'modified');
@@ -359,6 +361,17 @@ export default function PhaseDynamicsLab({
             <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
             Original (No Stick)
           </button>
+
+          {onOpenQiskitLab && (
+            <button
+              onClick={onOpenQiskitLab}
+              className="px-3 py-1.5 rounded text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 bg-cyan-950/70 hover:bg-cyan-900/90 text-[#00ffcc] border border-cyan-400/60 shadow-[0_0_12px_rgba(6,182,212,0.3)] cursor-pointer"
+              title="Open Qiskit Quantum Circuit Translation (Rx, Ry, Rz + CNOT VQE Model)"
+            >
+              <Cpu className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+              <span>Qiskit Circuit (3-Qubit)</span>
+            </button>
+          )}
         </div>
       </div>
 

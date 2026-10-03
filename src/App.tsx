@@ -30,6 +30,7 @@ import ReservoirLab from './components/ReservoirLab';
 import QuantumCipherLab from './components/QuantumCipherLab';
 import NodeMeshAttestation from './components/NodeMeshAttestation';
 import PhaseDynamicsLab from './components/PhaseDynamicsLab';
+import QiskitQuantumLab from './components/QiskitQuantumLab';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -50,6 +51,7 @@ const ReservoirLabMemo = memo(ReservoirLab);
 const QuantumCipherLabMemo = memo(QuantumCipherLab);
 const NodeMeshAttestationMemo = memo(NodeMeshAttestation);
 const PhaseDynamicsLabMemo = memo(PhaseDynamicsLab);
+const QiskitQuantumLabMemo = memo(QiskitQuantumLab);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -1805,6 +1807,40 @@ export default function App() {
                 }
                 setActiveWindow('node_mesh');
               }}
+              onOpenQiskitLab={() => {
+                if (!openWindows.includes('qiskit_lab')) {
+                  setOpenWindows(prev => [...prev, 'qiskit_lab']);
+                }
+                setActiveWindow('qiskit_lab');
+              }}
+            />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('qiskit_lab') && (
+          <DesktopWindow 
+            key="qiskit_lab"
+            id="qiskit_lab" 
+            title="QISKIT_QUANTUM_CIRCUIT // CEDAR FEEDBACK LOOP TRANSLATION" 
+            icon={<Cpu size={16} className="text-[#00ffcc]" />}
+            onClose={() => closeWindow('qiskit_lab')}
+            onFocus={() => setActiveWindow('qiskit_lab')}
+            isActive={activeWindow === 'qiskit_lab'}
+            initialPos={{ x: 110, y: 50 }}
+            width="w-[1040px] max-w-[98vw]"
+            height="h-[720px] max-h-[94vh]"
+          >
+            <QiskitQuantumLabMemo
+              initialVoltage={stats.vNodal || 1.42}
+              initialMemory={stats.memoryStick || 12.0}
+              carrierBias={carrierBias}
+              onLog={addLog}
+              onOpenPhaseLab={() => {
+                if (!openWindows.includes('phase_lab')) {
+                  setOpenWindows(prev => [...prev, 'phase_lab']);
+                }
+                setActiveWindow('phase_lab');
+              }}
             />
           </DesktopWindow>
         )}
@@ -1891,6 +1927,19 @@ export default function App() {
           >
             <Waves size={9} className="text-emerald-400" />
             <span>PHASE_STICK</span>
+          </button>
+
+          {/* Qiskit Quantum Circuit Lab Button */}
+          <button 
+            onClick={() => toggleWindow('qiskit_lab')}
+            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-950/70 to-cyan-950/70 hover:from-amber-900/80 hover:to-cyan-900/80 text-amber-200 border border-amber-400/60 hover:border-amber-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(245,158,11,0.25)] shrink-0"
+            title="Open Qiskit Quantum Circuit Laboratory (Working Hybrid Realization: Jar Voltage → Classical Memory Stick → 3-Qubit Circuit → Measured Phase-Out)"
+          >
+            <Zap size={9} className="text-amber-400 animate-pulse" />
+            <span>QISKIT_HYBRID</span>
+            <span className="text-[7px] text-[#00ffcc] font-mono bg-cyan-500/20 px-1 py-0.2 rounded border border-cyan-400/30">
+              3-QUBIT
+            </span>
           </button>
 
           {/* PRC Quantum Lab Button */}

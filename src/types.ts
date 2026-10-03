@@ -24,6 +24,9 @@ export interface SystemStats {
   phaseModel?: 'modified' | 'original';
   memoryStick?: number;
   bPlus?: number;
+  quantumPhaseOut?: number;
+  quantumP1?: number;
+  quantumMemoryAngleDeg?: number;
   isOverdrive: boolean;
   isQec: boolean;
   boost2b?: boolean;
