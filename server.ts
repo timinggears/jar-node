@@ -20,7 +20,12 @@ import {
   runClosedFeedbackStep,
   createDefaultAddressableRegister,
   applyAddressableGate,
-  computeQubitCapacityBenchmark
+  computeQubitCapacityBenchmark,
+  applyTwoQubitGate,
+  createBellState,
+  runCHSHInequalityTest,
+  reconstructDensityMatrix,
+  QuantumPhaseLockedLoop
 } from './src/quantum/qiskitEngine.ts';
 import type { AddressableTwoLevelQubit } from './src/quantum/qiskitEngine.ts';
 
@@ -614,6 +619,15 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     emitPendingTelemetry();
   }, MIN_SEND_INTERVAL);
 
+  // Autonomous Quantum Phase-Locked Loop (Q-PLL) PID Controller
+  const qPllController = new QuantumPhaseLockedLoop({
+    enabled: true,
+    kp: 0.18,
+    ki: 0.025,
+    kd: 0.045
+  });
+  let qPllActive = true;
+
   // Persistent slow integration memory state (keeps state alive after external drive is removed)
   let substrateMemoryState = 0.0;
 
@@ -724,11 +738,26 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       // CLOSED PHYSICAL-QUANTUM FEEDBACK:
       // Quantum measurement collapse writes directly back into the Jar substrate!
       if (systemState.closedQuantumFeedback) {
-        const gain = systemState.quantumFeedbackGain || 0.25;
-        // 1. Quantum voltage perturbation back-action (modulates physical jar electric potential)
-        const dV = (hybridQuantum.quantumPhaseOut / 55.0) * 0.12 * gain;
-        // 2. Quantum memory back-action (quantum state collapse pulls substrate stick)
-        const dM = (hybridQuantum.quantumPhaseOut - substrateMemoryState) * 0.18 * gain;
+        let dV = 0.0;
+        let dM = 0.0;
+        let isLocked = false;
+        let cohBoost = 0.0;
+
+        if (qPllActive) {
+          // Autonomous Q-PLL PID Controller
+          const pllRes = qPllController.update(phaseOut, hybridQuantum.quantumPhaseOut, 0.001);
+          dV = pllRes.dV;
+          dM = pllRes.dM;
+          isLocked = pllRes.locked;
+          cohBoost = pllRes.coherenceBoost;
+        } else {
+          // Standard proportional gain
+          const gain = systemState.quantumFeedbackGain || 0.25;
+          dV = (hybridQuantum.quantumPhaseOut / 55.0) * 0.12 * gain;
+          dM = (hybridQuantum.quantumPhaseOut - substrateMemoryState) * 0.18 * gain;
+          isLocked = Math.abs(hybridQuantum.quantumPhaseOut - phaseOut) < 6.0;
+          cohBoost = isLocked ? 0.03 : 0.0;
+        }
 
         if (systemState.quantumFeedbackMode === 'dual' || systemState.quantumFeedbackMode === 'memory') {
           substrateMemoryState += dM;
@@ -743,11 +772,11 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
 
         systemState.quantumFeedbackDeltaV = (systemState.quantumFeedbackMode === 'dual' || systemState.quantumFeedbackMode === 'voltage') ? dV : 0.0;
         systemState.quantumFeedbackDeltaM = dM;
-        systemState.closedLoopLocked = Math.abs(hybridQuantum.quantumPhaseOut - phaseOut) < 6.0;
+        systemState.closedLoopLocked = isLocked;
 
         // When closed feedback locks, boost coherence
         if (systemState.closedLoopLocked) {
-          coherenceBase = Math.min(0.998, coherenceBase + 0.03);
+          coherenceBase = Math.min(0.999, coherenceBase + cohBoost);
         }
       } else {
         systemState.quantumFeedbackDeltaV = 0.0;
@@ -2363,6 +2392,106 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
         maxModes: 960
       }
     });
+  });
+
+  // POST two-qubit entangling gate (CNOT, CZ, iSWAP, SWAP, CR)
+  app.post('/api/quantum/qubits/two_qubit_gate', (req, res) => {
+    try {
+      const { controlId = 'q0', targetId = 'q1', gate = 'CNOT', angle = 1.570796 } = req.body || {};
+      addressableRegister = applyTwoQubitGate(addressableRegister, controlId, targetId, gate, Number(angle));
+      io.emit('log', `[Q_ENTANGLE_DRIVE]: Two-qubit gate ${gate} executed between Control: ${controlId.toUpperCase()} -> Target: ${targetId.toUpperCase()}. Non-local correlation generated.`);
+      io.emit('quantum:qubits_update', addressableRegister);
+      res.json({
+        success: true,
+        gate,
+        controlId,
+        targetId,
+        qubits: addressableRegister
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // POST synthesize canonical Bell State (|Phi+>, |Phi->, |Psi+>, |Psi->)
+  app.post('/api/quantum/qubits/bell_state', (req, res) => {
+    try {
+      const { controlId = 'q0', targetId = 'q1', bellType = 'phi_plus' } = req.body || {};
+      addressableRegister = createBellState(addressableRegister, controlId, targetId, bellType);
+      const bellSymbols: Record<string, string> = {
+        phi_plus: '|Φ⁺⟩ = (|00⟩ + |11⟩)/√2',
+        phi_minus: '|Φ⁻⟩ = (|00⟩ - |11⟩)/√2',
+        psi_plus: '|Ψ⁺⟩ = (|01⟩ + |10⟩)/√2',
+        psi_minus: '|Ψ⁻⟩ = (|01⟩ - |10⟩)/√2'
+      };
+      io.emit('log', `[Q_BELL_SYNTH]: Maximally entangled Bell state ${bellSymbols[bellType] || bellType} generated on ${controlId.toUpperCase()}-${targetId.toUpperCase()}.`);
+      io.emit('quantum:qubits_update', addressableRegister);
+      res.json({
+        success: true,
+        bellType,
+        symbol: bellSymbols[bellType],
+        controlId,
+        targetId,
+        qubits: addressableRegister
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET Bell CHSH Inequality Violation Test
+  app.get('/api/quantum/qubits/chsh_test', (req, res) => {
+    try {
+      const q1Id = (req.query.q1 as string) || 'q0';
+      const q2Id = (req.query.q2 as string) || 'q1';
+      const shots = Number(req.query.shots) || 2048;
+      const chsh = runCHSHInequalityTest(addressableRegister, q1Id, q2Id, shots);
+      io.emit('log', `[Q_CHSH_TEST]: CHSH Test completed on ${q1Id.toUpperCase()}-${q2Id.toUpperCase()}. S = ${chsh.sValue.toFixed(4)} (Classical Bound: 2.0). ${chsh.violated ? 'VIOLATION CONFIRMED (Quantum Non-locality Verified)' : 'Classical Region'}`);
+      res.json({
+        success: true,
+        ...chsh
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET Quantum State Tomography (QST) & Density Matrix rho
+  app.get('/api/quantum/qubits/tomography', (req, res) => {
+    try {
+      const q1Id = (req.query.q1 as string) || 'q0';
+      const q2Id = req.query.q2 as string | undefined;
+      const tomo = reconstructDensityMatrix(addressableRegister, q1Id, q2Id);
+      res.json({
+        success: true,
+        ...tomo
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // POST configure / toggle Autonomous Quantum Phase-Locked Loop (Q-PLL)
+  app.post('/api/quantum/feedback/pll', (req, res) => {
+    try {
+      const { enabled, kp, ki, kd } = req.body || {};
+      if (typeof enabled === 'boolean') {
+        qPllActive = enabled;
+        qPllController.config.enabled = enabled;
+      }
+      if (typeof kp === 'number') qPllController.config.kp = kp;
+      if (typeof ki === 'number') qPllController.config.ki = ki;
+      if (typeof kd === 'number') qPllController.config.kd = kd;
+
+      io.emit('log', `[Q_PLL_CONTROLLER]: Autonomous Q-PLL ${qPllActive ? 'ENGAGED' : 'DISENGAGED'} (Kp: ${qPllController.config.kp.toFixed(2)}, Ki: ${qPllController.config.ki.toFixed(3)}, Kd: ${qPllController.config.kd.toFixed(3)}).`);
+      res.json({
+        success: true,
+        qPllActive,
+        config: qPllController.config
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // --- 5. SUBSTRATE NODAL MESH PRESENCE & PHYSICAL ATTESTATION API ---

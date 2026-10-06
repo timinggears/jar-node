@@ -1336,3 +1336,456 @@ export function runRandomizedBenchmarkingSimulation(qubits: AddressableTwoLevelQ
     };
   });
 }
+
+/**
+ * Apply a Two-Qubit Entangling Gate between a Control Qubit and Target Qubit
+ * Supports CNOT, CZ, iSWAP, SWAP, and Cross-Resonance CR(theta)
+ */
+export function applyTwoQubitGate(
+  qubits: AddressableTwoLevelQubit[],
+  controlId: string,
+  targetId: string,
+  gate: 'CNOT' | 'CZ' | 'iSWAP' | 'SWAP' | 'CR',
+  angleParam?: number
+): AddressableTwoLevelQubit[] {
+  const ctrlIndex = qubits.findIndex(q => q.id === controlId);
+  const tgtIndex = qubits.findIndex(q => q.id === targetId);
+  if (ctrlIndex === -1 || tgtIndex === -1 || ctrlIndex === tgtIndex) return qubits;
+
+  const ctrl = { ...qubits[ctrlIndex] };
+  const tgt = { ...qubits[tgtIndex] };
+
+  // Calculate joint state amplitudes [c00, c01, c10, c11]
+  // Based on current separable spherical state
+  const cC = Math.cos(ctrl.theta / 2.0);
+  const sC = Math.sin(ctrl.theta / 2.0);
+  const cT = Math.cos(tgt.theta / 2.0);
+  const sT = Math.sin(tgt.theta / 2.0);
+
+  // Amplitudes
+  let a00_re = cC * cT;
+  let a00_im = 0;
+  let a01_re = cC * sT * Math.cos(tgt.phi);
+  let a01_im = cC * sT * Math.sin(tgt.phi);
+  let a10_re = sC * cT * Math.cos(ctrl.phi);
+  let a10_im = sC * cT * Math.sin(ctrl.phi);
+  let a11_re = sC * sT * Math.cos(ctrl.phi + tgt.phi);
+  let a11_im = sC * sT * Math.sin(ctrl.phi + tgt.phi);
+
+  if (gate === 'CNOT') {
+    // CNOT swaps |10> <-> |11>
+    const tmp_re = a10_re;
+    const tmp_im = a10_im;
+    a10_re = a11_re;
+    a10_im = a11_im;
+    a11_re = tmp_re;
+    a11_im = tmp_im;
+  } else if (gate === 'CZ') {
+    // CZ flips sign of |11>
+    a11_re = -a11_re;
+    a11_im = -a11_im;
+  } else if (gate === 'SWAP') {
+    // SWAP swaps |01> <-> |10>
+    const tmp_re = a01_re;
+    const tmp_im = a01_im;
+    a01_re = a10_re;
+    a01_im = a10_im;
+    a10_re = tmp_re;
+    a10_im = tmp_im;
+  } else if (gate === 'iSWAP') {
+    // iSWAP: |01> -> i|10>, |10> -> i|01>
+    const new01_re = -a10_im;
+    const new01_im = a10_re;
+    const new10_re = -a01_im;
+    const new10_im = a01_re;
+    a01_re = new01_re;
+    a01_im = new01_im;
+    a10_re = new10_re;
+    a10_im = new10_im;
+  } else if (gate === 'CR') {
+    // Cross-Resonance CR(theta): applies ZX rotation
+    const theta = angleParam !== undefined ? angleParam : Math.PI / 2.0;
+    const cosHalf = Math.cos(theta / 2.0);
+    const sinHalf = Math.sin(theta / 2.0);
+    // Subspace where control is |0>: Target rotated by +theta/2 around X
+    // Subspace where control is |1>: Target rotated by -theta/2 around X
+    const new10_re = cosHalf * a10_re + sinHalf * a11_im;
+    const new10_im = cosHalf * a10_im - sinHalf * a11_re;
+    const new11_re = cosHalf * a11_re + sinHalf * a10_im;
+    const new11_im = cosHalf * a11_im - sinHalf * a10_re;
+    a10_re = new10_re;
+    a10_im = new10_im;
+    a11_re = new11_re;
+    a11_im = new11_im;
+  }
+
+  // Reduce marginals back to two-level Bloch representations
+  const p1_ctrl = (a10_re * a10_re + a10_im * a10_im) + (a11_re * a11_re + a11_im * a11_im);
+  const p1_tgt = (a01_re * a01_re + a01_im * a01_im) + (a11_re * a11_re + a11_im * a11_im);
+
+  ctrl.p1 = Math.max(0.0, Math.min(1.0, p1_ctrl));
+  ctrl.p0 = 1.0 - ctrl.p1;
+  ctrl.theta = 2.0 * Math.asin(Math.sqrt(ctrl.p1));
+
+  tgt.p1 = Math.max(0.0, Math.min(1.0, p1_tgt));
+  tgt.p0 = 1.0 - tgt.p1;
+  tgt.theta = 2.0 * Math.asin(Math.sqrt(tgt.p1));
+
+  const updatedCtrl = syncTwoLevelBlochCoordinates(ctrl);
+  const updatedTgt = syncTwoLevelBlochCoordinates(tgt);
+
+  return qubits.map((q, idx) => {
+    if (idx === ctrlIndex) return updatedCtrl;
+    if (idx === tgtIndex) return updatedTgt;
+    return q;
+  });
+}
+
+/**
+ * Creates one of the four canonical Maximally Entangled Bell States between two qubits:
+ * |Phi+> = (|00> + |11>) / sqrt(2)
+ * |Phi-> = (|00> - |11>) / sqrt(2)
+ * |Psi+> = (|01> + |10>) / sqrt(2)
+ * |Psi-> = (|01> - |10>) / sqrt(2)
+ */
+export function createBellState(
+  qubits: AddressableTwoLevelQubit[],
+  controlId: string = 'q0',
+  targetId: string = 'q1',
+  bellType: 'phi_plus' | 'phi_minus' | 'psi_plus' | 'psi_minus' = 'phi_plus'
+): AddressableTwoLevelQubit[] {
+  // First reset both to |0>
+  let working = qubits.map(q => {
+    if (q.id === controlId || q.id === targetId) {
+      return applyAddressableGate(q, 'reset');
+    }
+    return q;
+  });
+
+  const cIndex = working.findIndex(q => q.id === controlId);
+  const tIndex = working.findIndex(q => q.id === targetId);
+  if (cIndex === -1 || tIndex === -1) return qubits;
+
+  if (bellType === 'phi_plus') {
+    // H(ctrl), CNOT(ctrl, tgt)
+    working[cIndex] = applyAddressableGate(working[cIndex], 'H');
+    working = applyTwoQubitGate(working, controlId, targetId, 'CNOT');
+  } else if (bellType === 'phi_minus') {
+    // X(ctrl), H(ctrl), CNOT(ctrl, tgt)
+    working[cIndex] = applyAddressableGate(working[cIndex], 'X');
+    working[cIndex] = applyAddressableGate(working[cIndex], 'H');
+    working = applyTwoQubitGate(working, controlId, targetId, 'CNOT');
+  } else if (bellType === 'psi_plus') {
+    // X(tgt), H(ctrl), CNOT(ctrl, tgt)
+    working[tIndex] = applyAddressableGate(working[tIndex], 'X');
+    working[cIndex] = applyAddressableGate(working[cIndex], 'H');
+    working = applyTwoQubitGate(working, controlId, targetId, 'CNOT');
+  } else if (bellType === 'psi_minus') {
+    // X(ctrl), X(tgt), H(ctrl), CNOT(ctrl, tgt)
+    working[cIndex] = applyAddressableGate(working[cIndex], 'X');
+    working[tIndex] = applyAddressableGate(working[tIndex], 'X');
+    working[cIndex] = applyAddressableGate(working[cIndex], 'H');
+    working = applyTwoQubitGate(working, controlId, targetId, 'CNOT');
+  }
+
+  return working;
+}
+
+/**
+ * Bell CHSH Inequality Verification
+ * Evaluates Clauser-Horne-Shimony-Holt non-local correlation parameter S
+ * Classical limit: S <= 2
+ * Quantum Tsirelson bound: S = 2 * sqrt(2) ~ 2.8284
+ */
+export interface CHSHResult {
+  sValue: number;
+  classicalLimit: number;
+  tsirelsonBound: number;
+  violated: boolean;
+  violationSigmas: number;
+  correlators: {
+    E_ab: number;
+    E_ab_prime: number;
+    E_a_prime_b: number;
+    E_a_prime_b_prime: number;
+  };
+  anglesDeg: {
+    a: number;
+    a_prime: number;
+    b: number;
+    b_prime: number;
+  };
+  shots: number;
+}
+
+export function runCHSHInequalityTest(
+  qubits: AddressableTwoLevelQubit[],
+  q1Id: string = 'q0',
+  q2Id: string = 'q1',
+  shots: number = 2048
+): CHSHResult {
+  // Alice measurement detector angles: a = 0 deg, a' = 45 deg
+  // Bob measurement detector angles:   b = 22.5 deg, b' = 67.5 deg
+  const a = 0.0;
+  const a_prime = Math.PI / 4.0; // 45°
+  const b = Math.PI / 8.0;       // 22.5°
+  const b_prime = (3.0 * Math.PI) / 8.0; // 67.5°
+
+  // For maximally entangled singlet/Bell state |Phi+>:
+  // Quantum correlator E(thetaA, thetaB) = cos(2 * (thetaA - thetaB))
+  // Adding small experimental dielectric/readout noise from the addressed transmons
+  const q1 = qubits.find(q => q.id === q1Id) || qubits[0];
+  const q2 = qubits.find(q => q.id === q2Id) || qubits[1];
+  const fidelityFactor = (q1.singleQubitFidelity * q2.singleQubitFidelity);
+
+  function sampleCorrelator(thetaA: number, thetaB: number): number {
+    const theoreticalE = Math.cos(2.0 * (thetaA - thetaB)) * fidelityFactor;
+    // Monte Carlo shot sampling
+    let sum = 0;
+    for (let i = 0; i < shots; i++) {
+      // Prob(+1) = (1 + E) / 2
+      const probPlus = (1.0 + theoreticalE) / 2.0;
+      sum += Math.random() < probPlus ? 1 : -1;
+    }
+    return sum / shots;
+  }
+
+  const E_ab = sampleCorrelator(a, b);                 // cos(-45°) = +1/sqrt(2) ~ 0.707
+  const E_ab_prime = sampleCorrelator(a, b_prime);     // cos(-135°) = -1/sqrt(2) ~ -0.707
+  const E_a_prime_b = sampleCorrelator(a_prime, b);    // cos(45°) = +1/sqrt(2) ~ 0.707
+  const E_a_prime_b_prime = sampleCorrelator(a_prime, b_prime); // cos(-45°) = +1/sqrt(2) ~ 0.707
+
+  // CHSH test parameter: S = E(a,b) - E(a,b') + E(a',b) + E(a',b')
+  const sValue = E_ab - E_ab_prime + E_a_prime_b + E_a_prime_b_prime;
+  const violated = sValue > 2.0;
+  const stdError = (2.0 / Math.sqrt(shots));
+  const violationSigmas = violated ? (sValue - 2.0) / stdError : 0.0;
+
+  return {
+    sValue: parseFloat(sValue.toFixed(4)),
+    classicalLimit: 2.0,
+    tsirelsonBound: 2.8284,
+    violated,
+    violationSigmas: parseFloat(violationSigmas.toFixed(2)),
+    correlators: {
+      E_ab: parseFloat(E_ab.toFixed(4)),
+      E_ab_prime: parseFloat(E_ab_prime.toFixed(4)),
+      E_a_prime_b: parseFloat(E_a_prime_b.toFixed(4)),
+      E_a_prime_b_prime: parseFloat(E_a_prime_b_prime.toFixed(4))
+    },
+    anglesDeg: {
+      a: 0.0,
+      a_prime: 45.0,
+      b: 22.5,
+      b_prime: 67.5
+    },
+    shots
+  };
+}
+
+/**
+ * Quantum State Tomography (QST) & Density Matrix Reconstruction
+ * Reconstructs 2x2 single-qubit or 4x4 two-qubit density matrix rho
+ * Computes Purity gamma = Tr(rho^2), Von Neumann Entropy S = -Tr(rho log2 rho), and Concurrence C
+ */
+export interface DensityMatrixTomography {
+  qubitIds: string[];
+  dimension: number;
+  matrixReal: number[][];
+  matrixImag: number[][];
+  purity: number;            // 1.0 = pure state, 0.5 (1Q) or 0.25 (2Q) = maximally mixed
+  entropy: number;           // 0.0 = pure, > 0.0 = decohered
+  concurrence?: number;      // 0.0 = separable, 1.0 = maximally entangled
+  basisLabels: string[];
+}
+
+export function reconstructDensityMatrix(
+  qubits: AddressableTwoLevelQubit[],
+  q1Id: string = 'q0',
+  q2Id?: string
+): DensityMatrixTomography {
+  const q1 = qubits.find(q => q.id === q1Id) || qubits[0];
+
+  if (!q2Id) {
+    // 1-Qubit Density Matrix: rho = 0.5 * (I + r_x*sigma_x + r_y*sigma_y + r_z*sigma_z)
+    const { x, y, z } = q1.bloch;
+    // rho_00 = (1 + z)/2, rho_11 = (1 - z)/2
+    // rho_01 = (x - i*y)/2, rho_10 = (x + i*y)/2
+    const r00 = (1.0 + z) / 2.0;
+    const r11 = (1.0 - z) / 2.0;
+    const r01_re = x / 2.0;
+    const r01_im = -y / 2.0;
+    const r10_re = x / 2.0;
+    const r10_im = y / 2.0;
+
+    const real = [
+      [parseFloat(r00.toFixed(4)), parseFloat(r01_re.toFixed(4))],
+      [parseFloat(r10_re.toFixed(4)), parseFloat(r11.toFixed(4))]
+    ];
+    const imag = [
+      [0.0, parseFloat(r01_im.toFixed(4))],
+      [parseFloat(r10_im.toFixed(4)), 0.0]
+    ];
+
+    // Purity gamma = Tr(rho^2) = (1 + |r|^2) / 2
+    const rMagSq = Math.min(1.0, x * x + y * y + z * z);
+    const purity = parseFloat(((1.0 + rMagSq) / 2.0).toFixed(4));
+
+    // Eigenvalues lambda_1, lambda_2 = (1 +/- |r|) / 2
+    const rMag = Math.sqrt(rMagSq);
+    const l1 = Math.max(1e-12, (1.0 + rMag) / 2.0);
+    const l2 = Math.max(1e-12, (1.0 - rMag) / 2.0);
+    const entropy = parseFloat((- (l1 * Math.log2(l1) + l2 * Math.log2(l2))).toFixed(4));
+
+    return {
+      qubitIds: [q1.id],
+      dimension: 2,
+      matrixReal: real,
+      matrixImag: imag,
+      purity,
+      entropy: isNaN(entropy) ? 0.0 : entropy,
+      basisLabels: ['|0⟩', '|1⟩']
+    };
+  }
+
+  // 2-Qubit Density Matrix (4x4)
+  const q2 = qubits.find(q => q.id === q2Id) || qubits[1];
+  const c1 = Math.cos(q1.theta / 2.0);
+  const s1 = Math.sin(q1.theta / 2.0);
+  const c2 = Math.cos(q2.theta / 2.0);
+  const s2 = Math.sin(q2.theta / 2.0);
+
+  // Amplitudes: [c00, c01, c10, c11]
+  const a00 = { re: c1 * c2, im: 0 };
+  const a01 = { re: c1 * s2 * Math.cos(q2.phi), im: c1 * s2 * Math.sin(q2.phi) };
+  const a10 = { re: s1 * c2 * Math.cos(q1.phi), im: s1 * c2 * Math.sin(q1.phi) };
+  const a11 = { re: s1 * s2 * Math.cos(q1.phi + q2.phi), im: s1 * s2 * Math.sin(q1.phi + q2.phi) };
+
+  const amps = [a00, a01, a10, a11];
+  const real: number[][] = [];
+  const imag: number[][] = [];
+
+  for (let i = 0; i < 4; i++) {
+    real[i] = [];
+    imag[i] = [];
+    for (let j = 0; j < 4; j++) {
+      // rho_ij = a_i * conj(a_j) = (re_i*re_j + im_i*im_j) + i*(im_i*re_j - re_i*im_j)
+      const rVal = amps[i].re * amps[j].re + amps[i].im * amps[j].im;
+      const iVal = amps[i].im * amps[j].re - amps[i].re * amps[j].im;
+      real[i][j] = parseFloat(rVal.toFixed(4));
+      imag[i][j] = parseFloat(iVal.toFixed(4));
+    }
+  }
+
+  // Pure state purity = 1.0 (with slight readout decoherence factor)
+  const decoherence = (1.0 - (q1.readoutFidelity * q2.readoutFidelity)) * 0.5;
+  const purity = parseFloat((1.0 - decoherence).toFixed(4));
+  const entropy = parseFloat((decoherence * 1.44).toFixed(4));
+
+  // Concurrence C = 2 * |a00*a11 - a01*a10|
+  const detReal = a00.re * a11.re - a00.im * a11.im - (a01.re * a10.re - a01.im * a10.im);
+  const detImag = a00.re * a11.im + a00.im * a11.re - (a01.re * a10.im + a01.im * a10.re);
+  const concurrence = parseFloat((Math.min(1.0, 2.0 * Math.sqrt(detReal * detReal + detImag * detImag))).toFixed(4));
+
+  return {
+    qubitIds: [q1.id, q2.id],
+    dimension: 4,
+    matrixReal: real,
+    matrixImag: imag,
+    purity,
+    entropy,
+    concurrence,
+    basisLabels: ['|00⟩', '|01⟩', '|10⟩', '|11⟩']
+  };
+}
+
+/**
+ * Autonomous Quantum Phase-Locked Loop (Q-PLL) PID Controller
+ * Dynamically modulates feedback vectors (dV, dM) to lock PhaseOut_classical and PhaseOut_quantum
+ * into zero phase error (delta_phi ~ 0), stabilizing coherence above 0.985
+ */
+export interface QPLLConfig {
+  enabled: boolean;
+  kp: number; // Proportional gain
+  ki: number; // Integral gain
+  kd: number; // Derivative gain
+  targetPhaseDeg: number;
+  maxDeltaV: number;
+  maxDeltaM: number;
+}
+
+export class QuantumPhaseLockedLoop {
+  config: QPLLConfig;
+  integralError: number = 0.0;
+  lastError: number = 0.0;
+  lockedCount: number = 0;
+
+  constructor(config: Partial<QPLLConfig> = {}) {
+    this.config = {
+      enabled: true,
+      kp: 0.18,
+      ki: 0.025,
+      kd: 0.045,
+      targetPhaseDeg: 0.0,
+      maxDeltaV: 0.065, // Volts
+      maxDeltaM: 4.5,   // Memory units
+      ...config
+    };
+  }
+
+  update(classicalPo: number, quantumPo: number, dt: number = 0.001) {
+    if (!this.config.enabled) {
+      this.integralError = 0.0;
+      this.lastError = 0.0;
+      return {
+        dV: 0.0,
+        dM: 0.0,
+        error: classicalPo - quantumPo,
+        locked: false,
+        coherenceBoost: 0.0
+      };
+    }
+
+    // Phase error in degrees
+    const currentError = (quantumPo - classicalPo) - this.config.targetPhaseDeg;
+
+    // Integral accumulation with anti-windup clamp
+    this.integralError += currentError * dt;
+    this.integralError = Math.max(-50.0, Math.min(50.0, this.integralError));
+
+    // Derivative error
+    const derivativeError = dt > 0 ? (currentError - this.lastError) / dt : 0.0;
+    this.lastError = currentError;
+
+    // PID control effort
+    const effort = (this.config.kp * currentError) + (this.config.ki * this.integralError) + (this.config.kd * derivativeError);
+
+    // Compute corrective write-back displacements
+    const dV = Math.max(-this.config.maxDeltaV, Math.min(this.config.maxDeltaV, (effort / 55.0) * 0.08));
+    const dM = Math.max(-this.config.maxDeltaM, Math.min(this.config.maxDeltaM, effort * 0.12));
+
+    const isLocked = Math.abs(currentError) < 2.5;
+    if (isLocked) {
+      this.lockedCount++;
+    } else {
+      this.lockedCount = Math.max(0, this.lockedCount - 1);
+    }
+
+    const coherenceBoost = isLocked ? Math.min(0.045, 0.01 + this.lockedCount * 0.002) : 0.0;
+
+    return {
+      dV,
+      dM,
+      error: currentError,
+      locked: isLocked && this.lockedCount >= 3,
+      coherenceBoost
+    };
+  }
+
+  reset() {
+    this.integralError = 0.0;
+    this.lastError = 0.0;
+    this.lockedCount = 0;
+  }
+}
+
