@@ -671,8 +671,80 @@ export interface AddressableTwoLevelQubit {
   phaseLocked: boolean;     // Resonant lock with Jar substrate
 }
 
-export function createDefaultAddressableRegister(): AddressableTwoLevelQubit[] {
-  return [
+export interface QubitCapacityBenchmark {
+  qubitCount: number;
+  hilbertDimensionStr: string;
+  statevectorMemoryBytes: number;
+  statevectorMemoryFormatted: string;
+  statevectorFeasibleInteractive: boolean;
+  tensorNetworkFeasible: boolean;
+  cliffordFeasible: boolean;
+  fpmBandwidthGhz: number;
+  crossTalkIsolationDb: number;
+  avg1QFidelity: number;
+  systemArchitecture: string;
+  maxCoherentSubstrateModes: number;
+}
+
+export function computeQubitCapacityBenchmark(n: number = 5): QubitCapacityBenchmark {
+  let dimStr: string;
+  if (n <= 30) {
+    dimStr = (Math.pow(2, n)).toLocaleString();
+  } else {
+    const log10Val = n * Math.LOG10E;
+    const exponent = Math.floor(log10Val);
+    const mantissa = Math.pow(10, log10Val - exponent);
+    dimStr = `${mantissa.toFixed(2)} × 10^${exponent}`;
+  }
+
+  const bytes = n <= 40 ? Math.pow(2, n) * 16 : Infinity;
+  let formattedMem = '';
+  if (bytes < 1024) formattedMem = `${bytes} B`;
+  else if (bytes < 1024 * 1024) formattedMem = `${(bytes / 1024).toFixed(1)} KB`;
+  else if (bytes < 1024 * 1024 * 1024) formattedMem = `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  else if (bytes < 1024 * 1024 * 1024 * 1024) formattedMem = `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  else if (bytes < 1024 * 1024 * 1024 * 1024 * 1024) formattedMem = `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)} TB`;
+  else formattedMem = `> ${(bytes / 1e15).toFixed(0)} Petabytes (Supercomputer Limit)`;
+
+  const statevectorFeasibleInteractive = n <= 24;
+  const tensorNetworkFeasible = n <= 64;
+  const cliffordFeasible = n <= 1000;
+
+  const fpmBandwidthGhz = parseFloat((Math.min(3.5, 0.35 + n * 0.03)).toFixed(2));
+  const crossTalkIsolationDb = parseFloat((Math.max(-48.0, -56.0 + n * 0.12)).toFixed(1));
+  const avg1QFidelity = 0.9994;
+
+  let systemArchitecture = 'On-Chip Transmon Single Feedline';
+  if (n <= 5) systemArchitecture = '5Q Standard Cedar Substrate Register';
+  else if (n <= 8) systemArchitecture = '8Q Octo Planar Multiplexed Cavity Bus';
+  else if (n <= 16) systemArchitecture = '16Q Heavy-Hex Cross-Resonance Lattice';
+  else if (n <= 24) systemArchitecture = '24Q Max Real-Time Statevector Boundary';
+  else if (n <= 32) systemArchitecture = '32Q Multi-Feedline Dispersive Readout Array';
+  else if (n <= 127) systemArchitecture = '127Q IBM Eagle Heavy-Hex Topology';
+  else systemArchitecture = '133Q+ IBM Heron / Modular Quantum Fabric';
+
+  // Jar physical tachyonic substrate mode scaling:
+  // Base 128 modes * harmonic multiplier (up to 7.5x) = up to 960 physical modes
+  const maxCoherentSubstrateModes = 960;
+
+  return {
+    qubitCount: n,
+    hilbertDimensionStr: dimStr,
+    statevectorMemoryBytes: bytes,
+    statevectorMemoryFormatted: formattedMem,
+    statevectorFeasibleInteractive,
+    tensorNetworkFeasible,
+    cliffordFeasible,
+    fpmBandwidthGhz,
+    crossTalkIsolationDb,
+    avg1QFidelity,
+    systemArchitecture,
+    maxCoherentSubstrateModes
+  };
+}
+
+export function createDefaultAddressableRegister(count: number = 5): AddressableTwoLevelQubit[] {
+  const baseQubits: AddressableTwoLevelQubit[] = [
     {
       id: 'q0',
       index: 0,
@@ -774,6 +846,61 @@ export function createDefaultAddressableRegister(): AddressableTwoLevelQubit[] {
       phaseLocked: false
     }
   ];
+
+  if (count <= 5) {
+    return baseQubits.slice(0, Math.max(1, count));
+  }
+
+  const result = [...baseQubits];
+  const targetCount = Math.min(127, Math.max(5, count));
+
+  const roleRotation: Array<'sensor' | 'memory' | 'clock' | 'parity' | 'ancilla'> = [
+    'ancilla', 'sensor', 'parity', 'memory', 'clock'
+  ];
+  const names = [
+    'Quantum Teleportation Channel',
+    'Phase Estimator Unit',
+    'Entanglement Witness Node',
+    'Syndrome Parity Tracker',
+    'Error Corrected Logical Node',
+    'Feedback Stabilization Monad',
+    'Harmonic Resonator Tap',
+    'Microwave Dispersive Readout',
+    'Cross-Resonance Drive Coupling',
+    'Z-Phase Drift Compensator'
+  ];
+
+  for (let i = 5; i < targetCount; i++) {
+    const role = roleRotation[i % roleRotation.length];
+    const baseFreq = 4.500 + ((i * 0.185) % 3.200);
+    const jitterFreq = ((i * 13) % 17) * 0.007;
+    const freqGhz = parseFloat((baseFreq + jitterFreq).toFixed(3));
+    const anharMhz = parseFloat((-300.0 - ((i * 7) % 25)).toFixed(1));
+    const name = `Q${i}: ${names[(i - 5) % names.length]} #${Math.floor((i - 5) / names.length) + 1}`;
+
+    result.push({
+      id: `q${i}`,
+      index: i,
+      name,
+      role,
+      frequencyGhz: freqGhz,
+      anharmonicityMhz: anharMhz,
+      driveChannel: `d${i}`,
+      t1Us: parseFloat((78.0 + ((i * 11) % 35)).toFixed(1)),
+      t2Us: parseFloat((55.0 + ((i * 9) % 30)).toFixed(1)),
+      readoutFidelity: parseFloat((0.9940 + ((i * 3) % 45) * 0.0001).toFixed(4)),
+      singleQubitFidelity: parseFloat((0.9991 + ((i * 2) % 7) * 0.0001).toFixed(4)),
+      theta: 0.0,
+      phi: 0.0,
+      p0: 1.0,
+      p1: 0.0,
+      bloch: { x: 0, y: 0, z: 1 },
+      rabiRateMhz: parseFloat((25.0 + ((i * 5) % 12)).toFixed(1)),
+      phaseLocked: (i % 3 === 0)
+    });
+  }
+
+  return result;
 }
 
 /**

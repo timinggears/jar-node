@@ -12,7 +12,7 @@
  * 4. Phase-Out Output:   Expectation value Z-measurement M(q2 -> c0) -> collapsed wave
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Cpu, 
   Zap, 
@@ -62,7 +62,9 @@ import {
   entangleAddressableRegisterGHZ,
   getAddressableCrosstalkMatrix,
   generateMultiplexedSpectrumData,
-  runRandomizedBenchmarkingSimulation
+  runRandomizedBenchmarkingSimulation,
+  computeQubitCapacityBenchmark,
+  QubitCapacityBenchmark
 } from '../quantum/qiskitEngine';
 
 interface QiskitQuantumLabProps {
@@ -114,6 +116,37 @@ export default function QiskitQuantumLab({
   const [pulseAngle, setPulseAngle] = useState<number>(Math.PI / 2);
   const [activeCharacterization, setActiveCharacterization] = useState<'rabi' | 'ramsey' | 't1' | 'spectrum' | 'crosstalk' | 'benchmark'>('rabi');
   const [benchmarkSummary, setBenchmarkSummary] = useState<{ avgFidelity: number; meanLeakage: number; isRunning: boolean } | null>(null);
+  const [isScalingRegister, setIsScalingRegister] = useState<boolean>(false);
+
+  const capacityBenchmark = useMemo(() => computeQubitCapacityBenchmark(addressableQubits.length), [addressableQubits.length]);
+
+  const handleScaleRegister = async (count: number) => {
+    setIsScalingRegister(true);
+    try {
+      const res = await fetch('/api/quantum/qubits/scale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count })
+      });
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.qubits)) {
+        setAddressableQubits(data.qubits);
+        if (!data.qubits.some((q: any) => q.id === selectedQubitId)) {
+          setSelectedQubitId('q0');
+        }
+        onLog?.(`[Q_SCALE]: Scaled addressable register to ${count} qubits! State space: 2^${count} = ${data.benchmark?.hilbertDimensionStr} states. Arch: ${data.benchmark?.systemArchitecture}`, 'success');
+      }
+    } catch {
+      const localQubits = createDefaultAddressableRegister(count);
+      setAddressableQubits(localQubits);
+      if (!localQubits.some(q => q.id === selectedQubitId)) {
+        setSelectedQubitId('q0');
+      }
+      onLog?.(`[Q_SCALE]: Scaled addressable register to ${count} qubits locally.`, 'info');
+    } finally {
+      setIsScalingRegister(false);
+    }
+  };
 
   // Synchronize with server state on mount
   useEffect(() => {
@@ -1598,6 +1631,85 @@ export default function QiskitQuantumLab({
             </div>
           </div>
 
+          {/* Maximum Qubit Capacity & Quantum Scaling Analysis Card */}
+          <div className="bg-gradient-to-r from-purple-950/60 via-zinc-950 to-cyan-950/60 border border-purple-500/40 rounded-xl p-4 shadow-[0_0_25px_rgba(168,85,247,0.15)] flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+              <div className="flex items-center gap-2">
+                <Binary className="w-4 h-4 text-purple-400" />
+                <span className="text-xs font-black uppercase tracking-wider text-white">
+                  Maximum Qubit Capacity &amp; Scaling Boundaries
+                </span>
+                <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-400/40 text-[8.5px] font-bold">
+                  ACTIVE: {addressableQubits.length} QUBITS (2^{addressableQubits.length} = {capacityBenchmark.hilbertDimensionStr} STATES)
+                </span>
+              </div>
+
+              {/* Register Scaler Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[8.5px] uppercase font-bold text-zinc-400 mr-1">Scale To:</span>
+                {[
+                  { n: 5, label: '5Q (Std)', desc: 'Physical Cedar Baseline' },
+                  { n: 8, label: '8Q (Octo)', desc: 'Cavity Bus' },
+                  { n: 16, label: '16Q (Hex)', desc: 'Heavy-Hex Lattice' },
+                  { n: 24, label: '24Q (Max Sim)', desc: 'Full-Statevector Limit (16.7M States)' },
+                  { n: 32, label: '32Q (Dense)', desc: 'Multi-Feedline Array' },
+                  { n: 127, label: '127Q (Eagle)', desc: 'IBM Eagle Heavy-Hex Topology' }
+                ].map(tier => {
+                  const isActive = addressableQubits.length === tier.n;
+                  return (
+                    <button
+                      key={tier.n}
+                      disabled={isScalingRegister}
+                      onClick={() => handleScaleRegister(tier.n)}
+                      className={`px-2 py-0.5 rounded text-[8px] font-bold transition-all border cursor-pointer ${
+                        isActive
+                          ? 'bg-purple-500 text-white border-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.5)]'
+                          : 'bg-black/60 hover:bg-white/10 text-zinc-300 border-white/10 hover:border-white/30'
+                      }`}
+                      title={`${tier.desc} - Click to scale register`}
+                    >
+                      {tier.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Capacity Metric Pills */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[9px] font-mono">
+              <div className="bg-black/60 p-2 rounded border border-white/5 space-y-0.5">
+                <span className="text-[8px] text-zinc-500 block uppercase">Hilbert Dimension</span>
+                <span className="text-purple-300 font-bold">{capacityBenchmark.hilbertDimensionStr}</span>
+                <span className="text-[7.5px] text-zinc-500 block">2^{addressableQubits.length} Basis Amplitudes</span>
+              </div>
+              <div className="bg-black/60 p-2 rounded border border-white/5 space-y-0.5">
+                <span className="text-[8px] text-zinc-500 block uppercase">Statevector RAM</span>
+                <span className="text-cyan-300 font-bold">{capacityBenchmark.statevectorMemoryFormatted}</span>
+                <span className="text-[7.5px] text-zinc-500 block">Float64 (16B / State)</span>
+              </div>
+              <div className="bg-black/60 p-2 rounded border border-white/5 space-y-0.5">
+                <span className="text-[8px] text-zinc-500 block uppercase">Exact Simulation Limit</span>
+                <span className="text-emerald-300 font-bold">24Q Interactive / 32Q HPC</span>
+                <span className="text-[7.5px] text-zinc-500 block">{capacityBenchmark.statevectorFeasibleInteractive ? '✓ Real-Time Feasible' : '⚠ Tensor/Clifford Mode'}</span>
+              </div>
+              <div className="bg-black/60 p-2 rounded border border-white/5 space-y-0.5">
+                <span className="text-[8px] text-zinc-500 block uppercase">Clifford / Stabilizer Limit</span>
+                <span className="text-amber-300 font-bold">1,000+ Qubits</span>
+                <span className="text-[7.5px] text-zinc-500 block">Polynomial O(N²) Time</span>
+              </div>
+              <div className="bg-black/60 p-2 rounded border border-white/5 space-y-0.5">
+                <span className="text-[8px] text-zinc-500 block uppercase">Physical Substrate Modes</span>
+                <span className="text-[#00ff66] font-bold">Up to 960 Modes</span>
+                <span className="text-[7.5px] text-zinc-500 block">128 × 7.5x Harmonic Drive</span>
+              </div>
+              <div className="bg-black/60 p-2 rounded border border-white/5 space-y-0.5">
+                <span className="text-[8px] text-zinc-500 block uppercase">Microwave FDM Band</span>
+                <span className="text-pink-300 font-bold">{capacityBenchmark.fpmBandwidthGhz} GHz Span</span>
+                <span className="text-[7.5px] text-zinc-500 block">Isolation: {capacityBenchmark.crossTalkIsolationDb} dB</span>
+              </div>
+            </div>
+          </div>
+
           {/* Global Register Control & Action Toolbar */}
           <div className="bg-zinc-950/80 border border-white/10 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-inner">
             <div className="flex items-center gap-2">
@@ -1638,7 +1750,15 @@ export default function QiskitQuantumLab({
           </div>
 
           {/* Addressable Physical Qubit Register Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className={`grid gap-2.5 max-h-[580px] overflow-y-auto pr-1 custom-scrollbar ${
+            addressableQubits.length <= 5 
+              ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5' 
+              : addressableQubits.length <= 8
+                ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
+                : addressableQubits.length <= 16
+                  ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'
+                  : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'
+          }`}>
             {addressableQubits.map((q) => {
               const isSelected = q.id === selectedQubitId;
               const roleColors = {
