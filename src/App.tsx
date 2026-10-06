@@ -148,8 +148,29 @@ export default function App() {
   const [onlineNodeCount, setOnlineNodeCount] = useState<number>(4);
   const [phaseModel, setPhaseModel] = useState<'modified' | 'original'>('modified');
   const phaseModelRef = useRef<'modified' | 'original'>('modified');
+  
+  // Closed Physical-Quantum Feedback Loop (Quantum result writing back into the Jar)
+  const [quantumFeedback, setQuantumFeedback] = useState<{
+    enabled: boolean;
+    deltaV: number;
+    deltaM: number;
+    quantumPo: number;
+    locked: boolean;
+  }>({
+    enabled: true,
+    deltaV: 0.0,
+    deltaM: 0.0,
+    quantumPo: 0.0,
+    locked: false
+  });
+  const quantumFeedbackRef = useRef(quantumFeedback);
+  useEffect(() => {
+    quantumFeedbackRef.current = quantumFeedback;
+  }, [quantumFeedback]);
+
   const [copiedShareLink, setCopiedShareLink] = useState<boolean>(false);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [qiskitInitialTab, setQiskitInitialTab] = useState<'simulator' | 'hybrid_runner' | 'addressable_qubits' | 'circuit_diagram' | 'bloch_states' | 'qiskit_code' | 'ibm_hardware'>('addressable_qubits');
 
   // Mining Parameters
   const [poolUrl, setPoolUrl] = useState('rx.unmineable.com:3333');
@@ -658,11 +679,23 @@ export default function App() {
       // 1. Shimmer: Less destructive weight
       const shimmer = 22.0 + (jitterValue * 38.0);
 
+      // CLOSED PHYSICAL-QUANTUM FEEDBACK:
+      // Modulate Jar input voltage via quantum measurement back-action
+      const effV = quantumFeedbackRef.current.enabled 
+        ? Math.max(0.30, Math.min(1.85, vValue + quantumFeedbackRef.current.deltaV))
+        : vValue;
+
       // 2. Instantaneous response: centered on 0.68V with weight 42, shimmer weight -0.15
-      const instant = (vValue - 0.68) * 42.0 - (0.15 * shimmer);
+      const instant = (effV - 0.68) * 42.0 - (0.15 * shimmer);
 
       // 3. Memory term: Slow integration state (keeps state alive after external drive is removed!)
       phaseMemoryRef.current += 0.08 * (instant - phaseMemoryRef.current);
+      
+      // CLOSED PHYSICAL-QUANTUM FEEDBACK:
+      // Direct state collapse injection into the dielectric substrate stick
+      if (quantumFeedbackRef.current.enabled && Math.abs(quantumFeedbackRef.current.deltaM) > 0.001) {
+        phaseMemoryRef.current += quantumFeedbackRef.current.deltaM * 0.15;
+      }
       phaseMemoryRef.current = Math.max(-40.0, Math.min(40.0, phaseMemoryRef.current));
       memory = phaseMemoryRef.current;
 
@@ -800,6 +833,11 @@ export default function App() {
       phaseModel: phaseModelRef.current,
       memoryStick: memory,
       bPlus: bPlus,
+      quantumPhaseOut: quantumFeedbackRef.current.quantumPo,
+      closedQuantumFeedback: quantumFeedbackRef.current.enabled,
+      quantumFeedbackDeltaV: quantumFeedbackRef.current.deltaV,
+      quantumFeedbackDeltaM: quantumFeedbackRef.current.deltaM,
+      closedLoopLocked: quantumFeedbackRef.current.locked,
       nodesOnline: onlineNodeCount,
       isOverdrive: isOverdriveRef.current,
       isQec: isQecActiveRef.current,
@@ -1834,12 +1872,30 @@ export default function App() {
               initialVoltage={stats.vNodal || 1.42}
               initialMemory={stats.memoryStick || 12.0}
               carrierBias={carrierBias}
+              initialTab={qiskitInitialTab}
+              closedQuantumFeedback={quantumFeedback.enabled}
               onLog={addLog}
               onOpenPhaseLab={() => {
                 if (!openWindows.includes('phase_lab')) {
                   setOpenWindows(prev => [...prev, 'phase_lab']);
                 }
                 setActiveWindow('phase_lab');
+              }}
+              onWritebackToJar={(fb) => {
+                setQuantumFeedback({
+                  enabled: true,
+                  deltaV: fb.deltaV,
+                  deltaM: fb.deltaM,
+                  quantumPo: fb.quantumPo,
+                  locked: fb.locked
+                });
+                addLog(`[QUANTUM_FEEDBACK_INJECTED]: Closed loop wrote back to Jar -> ΔV: ${(fb.deltaV * 1000).toFixed(1)} mV, ΔM: ${fb.deltaM.toFixed(2)}, Locked: ${fb.locked ? 'YES (Limit Cycle)' : 'TRACKING'}`, 'success');
+              }}
+              onToggleClosedFeedback={(enabled, gain, mode) => {
+                setQuantumFeedback(prev => ({ ...prev, enabled }));
+                if (socketRef.current) {
+                  socketRef.current.emit('quantum:toggle_feedback', { enabled, gain, mode });
+                }
               }}
             />
           </DesktopWindow>
@@ -1855,6 +1911,20 @@ export default function App() {
             <span className="font-bold tracking-widest hidden sm:inline">CyberOS Sovereignty</span>
             <span className="text-zinc-500 font-normal">v{systemVersion.toFixed(2)}</span>
           </div>
+
+          {/* Closed Physical-Quantum Feedback Status Badge */}
+          {quantumFeedback.enabled && (
+            <div className="hidden xl:flex items-center gap-1.5 px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/40 text-purple-300 shadow-[0_0_8px_rgba(168,85,247,0.2)]">
+              <span className={`w-1.5 h-1.5 rounded-full ${quantumFeedback.locked ? 'bg-emerald-400 shadow-[0_0_6px_#10b981]' : 'bg-purple-400 animate-pulse'}`} />
+              <span className="font-bold text-[8px]">QUANTUM WRITEBACK:</span>
+              <span className="font-mono text-[7.5px] text-zinc-300">
+                ΔV {quantumFeedback.deltaV >= 0 ? '+' : ''}{(quantumFeedback.deltaV * 1000).toFixed(1)}mV
+              </span>
+              <span className={`px-1 rounded text-[7px] font-bold ${quantumFeedback.locked ? 'bg-emerald-500/30 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                {quantumFeedback.locked ? 'LOCKED' : 'TRACKING'}
+              </span>
+            </div>
+          )}
 
           <div className="text-zinc-700 hidden sm:inline">/</div>
 
@@ -1931,7 +2001,10 @@ export default function App() {
 
           {/* Qiskit Quantum Circuit Lab Button */}
           <button 
-            onClick={() => toggleWindow('qiskit_lab')}
+            onClick={() => {
+              setQiskitInitialTab('hybrid_runner');
+              toggleWindow('qiskit_lab');
+            }}
             className="flex items-center gap-1.5 bg-gradient-to-r from-amber-950/70 to-cyan-950/70 hover:from-amber-900/80 hover:to-cyan-900/80 text-amber-200 border border-amber-400/60 hover:border-amber-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(245,158,11,0.25)] shrink-0"
             title="Open Qiskit Quantum Circuit Laboratory (Working Hybrid Realization: Jar Voltage → Classical Memory Stick → 3-Qubit Circuit → Measured Phase-Out)"
           >
@@ -1939,6 +2012,25 @@ export default function App() {
             <span>QISKIT_HYBRID</span>
             <span className="text-[7px] text-[#00ffcc] font-mono bg-cyan-500/20 px-1 py-0.2 rounded border border-cyan-400/30">
               3-QUBIT
+            </span>
+          </button>
+
+          {/* Addressable Two-Level Qubit Register Button */}
+          <button 
+            onClick={() => {
+              setQiskitInitialTab('addressable_qubits');
+              if (!openWindows.includes('qiskit_lab')) {
+                setOpenWindows(prev => [...prev, 'qiskit_lab']);
+              }
+              setActiveWindow('qiskit_lab');
+            }}
+            className="flex items-center gap-1.5 bg-gradient-to-r from-purple-950/80 to-pink-950/80 hover:from-purple-900/90 hover:to-pink-900/90 text-purple-200 border border-purple-400/60 hover:border-purple-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(168,85,247,0.3)] shrink-0"
+            title="Open Reliable, Addressable Two-Level Quantum Bits Register (DiVincenzo #1 & #3: Isolated 2-Level Manifold, Calibrated Microwave Addressing d0-d4, T1/T2 Coherence, Rabi/Ramsey Curves)"
+          >
+            <Radio size={9} className="text-purple-400 animate-pulse" />
+            <span>2-LEVEL QUBITS</span>
+            <span className="text-[7px] text-purple-300 font-mono bg-purple-500/20 px-1 py-0.2 rounded border border-purple-400/40">
+              5-QUBIT
             </span>
           </button>
 

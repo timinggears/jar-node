@@ -150,7 +150,7 @@ export default function Taskbar({
       <AppIcon 
         id="qiskit_lab"
         icon={<Cpu size={20} className="text-[#00ffcc]" />} 
-        label="Qiskit Quantum Circuit Lab (3-Qubit VQE)" 
+        label="Qiskit Quantum Circuit & Addressable 2-Level Qubits (DiVincenzo #1 & #3)" 
         isOpen={openWindows.includes('qiskit_lab')} 
         isActive={activeWindow === 'qiskit_lab'}
         onClick={() => onToggleWindow('qiskit_lab')}
