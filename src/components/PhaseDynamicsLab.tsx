@@ -150,7 +150,7 @@ export default function PhaseDynamicsLab({
         // MODIFIED PHASE-OUT EQUATION (CURRENT):
         // shimmer   = 22 + (jitter * 38)
         // instant   = (voltage - 0.68) * 42 - 0.15 * shimmer
-        // memory   += 0.08 * (instant - memory)          # slow integration
+        // memory   += 0.025 * (instant - memory) * (dt / 0.001)          # slow integration
         // memory    = clamp(memory, -40, 40)
         // osc       = 6 * sin(2π * 28 * t)
         // phase_out = 0.65 * instant + 0.90 * memory + 0.25 * osc
@@ -160,7 +160,7 @@ export default function PhaseDynamicsLab({
         instant = (v - 0.68) * 42.0 - (0.15 * shimmer);
 
         if (driveActive) {
-          localMemory += 0.08 * (instant - localMemory);
+          localMemory += 0.025 * (instant - localMemory);
         } else {
           // Slow passive dissipation without external drive - the stick persists!
           localMemory += 0.004 * (0 - localMemory); 
@@ -443,7 +443,7 @@ export default function PhaseDynamicsLab({
             <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded ${
               model === 'modified' ? 'bg-[#ff00aa]/20 text-[#ff00aa]' : 'bg-zinc-800 text-zinc-500'
             }`}>
-              {model === 'modified' ? 'SLOW INTEGRATION (+0.08)' : 'NONE (0.0)'}
+              {model === 'modified' ? 'SLOW INTEGRATION (+0.025)' : 'NONE (0.0)'}
             </span>
           </div>
           <div className="text-2xl font-black font-mono my-1">
@@ -518,7 +518,7 @@ export default function PhaseDynamicsLab({
             {model === 'modified' && (
               <>
                 <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded bg-[#ff00aa]" /> Memory Term (0.08dt Stick)
+                  <span className="w-2 h-2 rounded bg-[#ff00aa]" /> Memory Term (0.025dt Stick)
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded bg-[#06b6d4]" /> Instantaneous (42x)
@@ -586,7 +586,7 @@ export default function PhaseDynamicsLab({
                 </td>
                 <td className="py-2.5 px-3 text-amber-300">none (zero memory integration)</td>
                 <td className="py-2.5 px-3 text-pink-400 font-black">
-                  += 0.08 * (instant - memory) [clamped -40..40]
+                  += 0.025 * (instant - memory) [clamped -40..40]
                 </td>
                 <td className="py-2.5 px-3 text-white font-semibold">
                   Allows the stick to persist after external drive is removed
@@ -619,7 +619,7 @@ export default function PhaseDynamicsLab({
             <strong className="text-white uppercase tracking-wider block mb-1">
               THE SINGLE MOST IMPORTANT ADDITION:
             </strong>
-            The <span className="text-pink-400 font-bold">memory term</span> is what keeps the substrate state alive after the external drive is removed. Under the legacy equation, without a slow-integrating state variable, turning off the drive causes immediate decoherence and phase zeroing. The slow integration rate (<code className="text-[#00ffcc]">0.08 dt</code>) acts as a physical charge reservoir, locking the nodal vector into persistent resonance.
+            The <span className="text-pink-400 font-bold">memory term</span> is what keeps the substrate state alive after the external drive is removed. Under the legacy equation, without a slow-integrating state variable, turning off the drive causes immediate decoherence and phase zeroing. The slow integration rate (<code className="text-[#00ffcc]">0.025 dt</code>) acts as a physical charge reservoir, locking the nodal vector into persistent resonance.
           </div>
         </div>
       </div>

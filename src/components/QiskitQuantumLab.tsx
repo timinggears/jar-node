@@ -1257,7 +1257,7 @@ export default function QiskitQuantumLab({
 
                   <div className="p-2 bg-black/60 rounded border border-white/5 space-y-1 font-mono text-[9px]">
                     <div className="text-zinc-400">
-                      memory += 0.08 * (instant - memory)
+                      memory += 0.025 * (instant - memory) * (dt / 0.001)
                     </div>
                     <div className="text-pink-300 font-bold">
                       memory stick = {lastHybridResult.memory.toFixed(2)}
@@ -2349,7 +2349,7 @@ export default function QiskitQuantumLab({
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 text-pink-300 font-bold">Memory Stick</td>
-                    <td className="py-2.5 px-3 text-zinc-300">memory += 0.08 * (instant - memory)</td>
+                    <td className="py-2.5 px-3 text-zinc-300">memory += 0.025 * (instant - memory)</td>
                     <td className="py-2.5 px-3 text-pink-400">Parameterized Rotation Ry(θ₁) + CNOT(0,1)</td>
                     <td className="py-2.5 px-3 text-zinc-400">Uses entanglement to store short-term historical dependencies across multiple steps.</td>
                   </tr>
@@ -2568,7 +2568,7 @@ class PhaseOutState:
         shimmer = 22.0 + (jitter * 38.0)
         instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
 
-        self.memory += 0.08 * (instant - self.memory) * (dt / 0.001)
+        self.memory += 0.025 * (instant - self.memory) * (dt / 0.001)
         self.memory = max(-40.0, min(40.0, self.memory))
 
         osc = 6.0 * math.sin(2 * math.pi * 28.0 * t)
@@ -2593,7 +2593,7 @@ class PhaseOutState:
         shimmer = 22.0 + (jitter * 38.0)
         instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
 
-        self.memory += 0.08 * (instant - self.memory) * (dt / 0.001)
+        self.memory += 0.025 * (instant - self.memory) * (dt / 0.001)
         self.memory = max(-40.0, min(40.0, self.memory))
 
         osc = 6.0 * math.sin(2 * math.pi * 28.0 * t)

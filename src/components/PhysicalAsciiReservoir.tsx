@@ -808,7 +808,7 @@ export default function PhysicalAsciiReservoir({
           onClick={() => setActiveTab('phase_dynamics')}
           className="p-3 bg-zinc-900/40 border border-[#00ccff]/20 hover:border-[#00ccff]/60 rounded-lg flex flex-col justify-between cursor-pointer transition-all group" 
           id="stat-phaseout"
-          title="Click to inspect Phase-Out Dynamics, Memory Stick (+0.08dt), and Multi-Harmonic B+(t)"
+          title="Click to inspect Phase-Out Dynamics, Memory Stick (+0.025dt), and Multi-Harmonic B+(t)"
         >
           <div className="flex items-center justify-between">
             <span className="text-[9px] tracking-wider text-zinc-500 font-black uppercase">phase-out angle</span>
@@ -1472,7 +1472,7 @@ export default function PhysicalAsciiReservoir({
               <div className="p-3 bg-black/40 border border-pink-500/20 rounded">
                 <span className="text-[8.5px] text-pink-400 font-bold uppercase">Memory Stick State</span>
                 <div className="text-xl font-black text-pink-400 font-mono my-1">
-                  +0.08dt ACTIVE
+                  +0.025dt ACTIVE
                 </div>
                 <span className="text-[7.5px] text-zinc-400">Persistent integration state</span>
               </div>
@@ -1525,7 +1525,7 @@ export default function PhysicalAsciiReservoir({
                     <tr className="bg-pink-950/20">
                       <td className="py-1 px-2 font-bold text-pink-300">Memory term (KEY)</td>
                       <td className="py-1 px-2 text-amber-300">none (zero memory integration)</td>
-                      <td className="py-1 px-2 text-pink-400 font-black">+= 0.08 * (instant - memory)</td>
+                      <td className="py-1 px-2 text-pink-400 font-black">+= 0.025 * (instant - memory)</td>
                       <td className="py-1 px-2 text-white font-semibold">Allows the stick to persist</td>
                     </tr>
                     <tr>

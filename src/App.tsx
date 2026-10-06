@@ -689,7 +689,7 @@ export default function App() {
       const instant = (effV - 0.68) * 42.0 - (0.15 * shimmer);
 
       // 3. Memory term: Slow integration state (keeps state alive after external drive is removed!)
-      phaseMemoryRef.current += 0.08 * (instant - phaseMemoryRef.current);
+      phaseMemoryRef.current += 0.025 * (instant - phaseMemoryRef.current);
       
       // CLOSED PHYSICAL-QUANTUM FEEDBACK:
       // Direct state collapse injection into the dielectric substrate stick

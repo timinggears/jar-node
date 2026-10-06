@@ -7,7 +7,7 @@
  * Direct Physical Coupling:
  * 1. Classical side (Jar -> Phase-Out + Memory):
  *    - instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
- *    - memory += 0.08 * (instant - memory) * (dt / 0.001)
+ *    - memory += 0.025 * (instant - memory) * (dt / 0.001)
  *    - osc = 6.0 * sin(2*pi*28*t)
  *    - po = 0.65 * instant + 0.90 * memory + 0.25 * osc
  * 
@@ -102,7 +102,7 @@ export class PhaseOutState {
     const shimmer = 22.0 + (jitter * 38.0);
     const instant = (voltage - 0.68) * 42.0 - (0.15 * shimmer);
 
-    this.memory += 0.08 * (instant - this.memory) * (dt / 0.001);
+    this.memory += 0.025 * (instant - this.memory) * (dt / 0.001);
     this.memory = Math.max(-40.0, Math.min(40.0, this.memory));
 
     const osc = 6.0 * Math.sin(2.0 * Math.PI * 28.0 * t);
@@ -339,7 +339,7 @@ export function executeQuantumJarStep(
   const shimmer = 22.0 + (jitter * 38.0);
   const instant = (voltage - 0.68) * 42.0 - (0.15 * shimmer);
 
-  let updatedMemory = currentMemory + 0.08 * (instant - currentMemory) * (dt / 0.001);
+  let updatedMemory = currentMemory + 0.025 * (instant - currentMemory) * (dt / 0.001);
   updatedMemory = Math.max(-40.0, Math.min(40.0, updatedMemory));
 
   const oscAngle = 6.0 * Math.sin(2.0 * Math.PI * 28.0 * currentTime);
@@ -458,7 +458,7 @@ class PhaseOutState:
         shimmer = 22.0 + (jitter * 38.0)
         instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
 
-        self.memory += 0.08 * (instant - self.memory) * (dt / 0.001)
+        self.memory += 0.025 * (instant - self.memory) * (dt / 0.001)
         self.memory = max(-40.0, min(40.0, self.memory))
 
         osc = 6.0 * math.sin(2 * math.pi * 28.0 * t)

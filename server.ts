@@ -677,7 +677,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       const instant = (vNodal - 0.68) * 42.0 - (0.15 * shimmer);
 
       // 3. Memory term: Slow integration state (keeps state alive after external drive is removed!)
-      substrateMemoryState += 0.08 * (instant - substrateMemoryState);
+      substrateMemoryState += 0.025 * (instant - substrateMemoryState);
       substrateMemoryState = Math.max(-40.0, Math.min(40.0, substrateMemoryState));
 
       // 4. Oscillation: 28 Hz, amplitude 6 (matches multi-harmonic drive fundamental)
@@ -1973,7 +1973,7 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
           name: "Modified Phase-Out equation (Current specification)",
           shimmer: "22 + (jitter * 38)",
           instant: "(voltage - 0.68) * 42 - 0.15 * shimmer",
-          memory: "memory += 0.08 * (instant - memory) [clamped -40..40]",
+          memory: "memory += 0.025 * (instant - memory) * (dt / 0.001) [clamped -40..40]",
           osc: "6 * sin(2π * 28 * t)",
           phase_out: "0.65 * instant + 0.90 * memory + 0.25 * osc [clamped -55..55]",
           coherence: "Peaks in moderate band of |phase_out| (roughly 8–28°), not only at zero",
@@ -2038,7 +2038,7 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
         },
         {
           classicalElement: "Memory Stick",
-          formula: "memory += 0.08 * (instant - memory)",
+          formula: "memory += 0.025 * (instant - memory) * (dt / 0.001)",
           gate: "Ry(theta_1)",
           qubit: 1,
           mechanism: "Uses qubit entanglement (CNOT 0->1) to store short-term historical dependencies."
