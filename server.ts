@@ -2064,13 +2064,14 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
   // Evaluate single dynamic quantum circuit step
   app.post('/api/quantum/circuit/step', (req, res) => {
     try {
-      const { voltage = 1.42, current_memory = 0.0, current_time = 0.0, jitter = 0.01, shots = 1024 } = req.body || {};
+      const { voltage = 1.42, current_memory = 0.0, current_time = 0.0, jitter = 0.01, shots = 1024, dt = 0.001 } = req.body || {};
       const result = executeQuantumJarStep(
         Number(voltage),
         Number(current_memory),
         Number(current_time),
         Number(jitter),
-        Number(shots)
+        Number(shots),
+        Number(dt)
       );
       res.json({ success: true, ...result });
     } catch (err: any) {
