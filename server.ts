@@ -19,9 +19,9 @@ import {
   ClosedLoopJarQuantumSystem,
   runClosedFeedbackStep,
   createDefaultAddressableRegister,
-  applyAddressableGate,
-  AddressableTwoLevelQubit
+  applyAddressableGate
 } from './src/quantum/qiskitEngine.ts';
+import type { AddressableTwoLevelQubit } from './src/quantum/qiskitEngine.ts';
 
 // --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
 const STATE_FILE = path.join(os.tmpdir(), 'system_state.json');
