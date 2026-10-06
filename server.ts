@@ -2834,8 +2834,12 @@ Keep your responses conversational, sleek, under 4-5 sentences, keeping the comm
 
   // --- VITE MIDDLEWARE ---
   if (process.env.NODE_ENV !== 'production') {
+    process.env.DISABLE_HMR = 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { 
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

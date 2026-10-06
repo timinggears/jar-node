@@ -11,6 +11,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#010602" />
+    <script>
+      // Ignore Vite HMR WebSocket errors in AI Studio iframe environment
+      window.addEventListener('error', function(event) {
+        if (event?.message?.includes('WebSocket') || event?.filename?.includes('@vite/client') || event?.error?.stack?.includes('@vite/client')) {
+          event.stopImmediatePropagation?.();
+          event.preventDefault?.();
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event?.reason?.message?.includes('WebSocket') || event?.reason?.stack?.includes('@vite/client')) {
+          event.stopImmediatePropagation?.();
+          event.preventDefault?.();
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>
