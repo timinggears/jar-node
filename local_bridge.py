@@ -121,10 +121,16 @@ def update_phase_out(voltage, jitter, bias=50.0, dt=0.001):
     # 3. Instantaneous response: × 42 and centered on 0.68V (prevents immediate saturation)
     instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
     
-    # 4. Memory term: Slow integration state (keeps state alive after external drive is removed!)
-    # Stronger-hold rate: 0.025 with dt normalization
+    # 4. Memory term: Slow integration + soft bounds
     memory_state += 0.025 * (instant - memory_state) * (dt / 0.001)
-    memory_state = max(-40.0, min(40.0, memory_state))
+
+    # Gentle restoring forces so it doesn't pin at the rails
+    if memory_state < -25.0:
+        memory_state += 0.04 * (-15.0 - memory_state)
+    elif memory_state > 35.0:
+        memory_state += 0.03 * (25.0 - memory_state)
+
+    memory_state = max(-32.0, min(38.0, memory_state))
     
     # 5. Oscillation: 28 Hz, amplitude 6 (matches the 28 Hz fundamental multi-harmonic drive)
     osc = 6.0 * math.sin(2.0 * math.pi * 28.0 * t)

@@ -103,7 +103,12 @@ export class PhaseOutState {
     const instant = (voltage - 0.68) * 42.0 - (0.15 * shimmer);
 
     this.memory += 0.025 * (instant - this.memory) * (dt / 0.001);
-    this.memory = Math.max(-40.0, Math.min(40.0, this.memory));
+    if (this.memory < -25.0) {
+      this.memory += 0.04 * (-15.0 - this.memory);
+    } else if (this.memory > 35.0) {
+      this.memory += 0.03 * (25.0 - this.memory);
+    }
+    this.memory = Math.max(-32.0, Math.min(38.0, this.memory));
 
     const osc = 6.0 * Math.sin(2.0 * Math.PI * 28.0 * t);
     this.po = 0.65 * instant + 0.90 * this.memory + 0.25 * osc;
@@ -280,7 +285,13 @@ export class ClosedLoopJarQuantumSystem {
       if (this.config.mode === 'dual' || this.config.mode === 'memory') {
         this.lastDeltaM = dM;
         // Write back directly into physical memory stick inside the Jar
-        this.state.memory = Math.max(-40.0, Math.min(40.0, this.state.memory + dM));
+        this.state.memory += dM;
+        if (this.state.memory < -25.0) {
+          this.state.memory += 0.04 * (-15.0 - this.state.memory);
+        } else if (this.state.memory > 35.0) {
+          this.state.memory += 0.03 * (25.0 - this.state.memory);
+        }
+        this.state.memory = Math.max(-32.0, Math.min(38.0, this.state.memory));
       } else {
         this.lastDeltaM = 0.0;
       }
@@ -340,7 +351,12 @@ export function executeQuantumJarStep(
   const instant = (voltage - 0.68) * 42.0 - (0.15 * shimmer);
 
   let updatedMemory = currentMemory + 0.025 * (instant - currentMemory) * (dt / 0.001);
-  updatedMemory = Math.max(-40.0, Math.min(40.0, updatedMemory));
+  if (updatedMemory < -25.0) {
+    updatedMemory += 0.04 * (-15.0 - updatedMemory);
+  } else if (updatedMemory > 35.0) {
+    updatedMemory += 0.03 * (25.0 - updatedMemory);
+  }
+  updatedMemory = Math.max(-32.0, Math.min(38.0, updatedMemory));
 
   const oscAngle = 6.0 * Math.sin(2.0 * Math.PI * 28.0 * currentTime);
   const classicalRaw = 0.65 * instant + 0.90 * updatedMemory + 0.25 * oscAngle;
@@ -459,7 +475,11 @@ class PhaseOutState:
         instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
 
         self.memory += 0.025 * (instant - self.memory) * (dt / 0.001)
-        self.memory = max(-40.0, min(40.0, self.memory))
+        if self.memory < -25.0:
+            self.memory += 0.04 * (-15.0 - self.memory)
+        elif self.memory > 35.0:
+            self.memory += 0.03 * (25.0 - self.memory)
+        self.memory = max(-32.0, min(38.0, self.memory))
 
         osc = 6.0 * math.sin(2 * math.pi * 28.0 * t)
         self.po = 0.65 * instant + 0.90 * self.memory + 0.25 * osc

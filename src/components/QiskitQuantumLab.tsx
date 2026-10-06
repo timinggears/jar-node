@@ -451,7 +451,13 @@ export default function QiskitQuantumLab({
           writebackVRef.current = (feedbackMode === 'dual' || feedbackMode === 'voltage') ? dV : 0.0;
 
           if (feedbackMode === 'dual' || feedbackMode === 'memory') {
-            memRef.current = Math.max(-40.0, Math.min(40.0, stepResult.updatedMemory + dM));
+            let nextM = stepResult.updatedMemory + dM;
+            if (nextM < -25.0) {
+              nextM += 0.04 * (-15.0 - nextM);
+            } else if (nextM > 35.0) {
+              nextM += 0.03 * (25.0 - nextM);
+            }
+            memRef.current = Math.max(-32.0, Math.min(38.0, nextM));
           } else {
             memRef.current = stepResult.updatedMemory;
           }
@@ -2568,8 +2574,16 @@ class PhaseOutState:
         shimmer = 22.0 + (jitter * 38.0)
         instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
 
+        # 4. Memory term: Slow integration + soft bounds
         self.memory += 0.025 * (instant - self.memory) * (dt / 0.001)
-        self.memory = max(-40.0, min(40.0, self.memory))
+
+        # Gentle restoring forces so it doesn't pin at the rails
+        if self.memory < -25.0:
+            self.memory += 0.04 * (-15.0 - self.memory)
+        elif self.memory > 35.0:
+            self.memory += 0.03 * (25.0 - self.memory)
+
+        self.memory = max(-32.0, min(38.0, self.memory))
 
         osc = 6.0 * math.sin(2 * math.pi * 28.0 * t)
         self.po = 0.65 * instant + 0.90 * self.memory + 0.25 * osc
@@ -2593,8 +2607,16 @@ class PhaseOutState:
         shimmer = 22.0 + (jitter * 38.0)
         instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
 
+        # 4. Memory term: Slow integration + soft bounds
         self.memory += 0.025 * (instant - self.memory) * (dt / 0.001)
-        self.memory = max(-40.0, min(40.0, self.memory))
+
+        # Gentle restoring forces so it doesn't pin at the rails
+        if self.memory < -25.0:
+            self.memory += 0.04 * (-15.0 - self.memory)
+        elif self.memory > 35.0:
+            self.memory += 0.03 * (25.0 - self.memory)
+
+        self.memory = max(-32.0, min(38.0, self.memory))
 
         osc = 6.0 * math.sin(2 * math.pi * 28.0 * t)
         self.po = 0.65 * instant + 0.90 * self.memory + 0.25 * osc

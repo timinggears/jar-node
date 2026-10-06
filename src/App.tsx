@@ -688,7 +688,7 @@ export default function App() {
       // 2. Instantaneous response: centered on 0.68V with weight 42, shimmer weight -0.15
       const instant = (effV - 0.68) * 42.0 - (0.15 * shimmer);
 
-      // 3. Memory term: Slow integration state (keeps state alive after external drive is removed!)
+      // 3. Memory term: Slow integration + soft bounds
       phaseMemoryRef.current += 0.025 * (instant - phaseMemoryRef.current);
       
       // CLOSED PHYSICAL-QUANTUM FEEDBACK:
@@ -696,7 +696,12 @@ export default function App() {
       if (quantumFeedbackRef.current.enabled && Math.abs(quantumFeedbackRef.current.deltaM) > 0.001) {
         phaseMemoryRef.current += quantumFeedbackRef.current.deltaM * 0.15;
       }
-      phaseMemoryRef.current = Math.max(-40.0, Math.min(40.0, phaseMemoryRef.current));
+      if (phaseMemoryRef.current < -25.0) {
+        phaseMemoryRef.current += 0.04 * (-15.0 - phaseMemoryRef.current);
+      } else if (phaseMemoryRef.current > 35.0) {
+        phaseMemoryRef.current += 0.03 * (25.0 - phaseMemoryRef.current);
+      }
+      phaseMemoryRef.current = Math.max(-32.0, Math.min(38.0, phaseMemoryRef.current));
       memory = phaseMemoryRef.current;
 
       // 4. Oscillation: 28 Hz, amplitude 6 (matches multi-harmonic drive fundamental)

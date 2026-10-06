@@ -165,7 +165,12 @@ export default function PhaseDynamicsLab({
           // Slow passive dissipation without external drive - the stick persists!
           localMemory += 0.004 * (0 - localMemory); 
         }
-        localMemory = Math.max(-40.0, Math.min(40.0, localMemory));
+        if (localMemory < -25.0) {
+          localMemory += 0.04 * (-15.0 - localMemory);
+        } else if (localMemory > 35.0) {
+          localMemory += 0.03 * (25.0 - localMemory);
+        }
+        localMemory = Math.max(-32.0, Math.min(38.0, localMemory));
 
         osc = driveActive ? 6.0 * Math.sin(2.0 * Math.PI * 28.0 * t) : 0;
         pOut = 0.65 * instant + 0.90 * localMemory + 0.25 * osc;
@@ -586,7 +591,7 @@ export default function PhaseDynamicsLab({
                 </td>
                 <td className="py-2.5 px-3 text-amber-300">none (zero memory integration)</td>
                 <td className="py-2.5 px-3 text-pink-400 font-black">
-                  += 0.025 * (instant - memory) [clamped -40..40]
+                  += 0.025 * (instant - memory) [soft bounds: restore -25..+35, clamped -32..38]
                 </td>
                 <td className="py-2.5 px-3 text-white font-semibold">
                   Allows the stick to persist after external drive is removed

@@ -30,9 +30,16 @@ class PhaseOutState:
         shimmer = 22.0 + (jitter * 38.0)
         instant = (voltage - 0.68) * 42.0 - 0.15 * shimmer
 
-        # Slow integration rate (0.025 dt) acts as a persistent physical charge reservoir (hard stick)
+        # 4. Memory term: Slow integration + soft bounds
         self.memory += 0.025 * (instant - self.memory) * (dt / 0.001)
-        self.memory = max(-40.0, min(40.0, self.memory))
+
+        # Gentle restoring forces so it doesn't pin at the rails
+        if self.memory < -25.0:
+            self.memory += 0.04 * (-15.0 - self.memory)
+        elif self.memory > 35.0:
+            self.memory += 0.03 * (25.0 - self.memory)
+
+        self.memory = max(-32.0, min(38.0, self.memory))
 
         osc = 6.0 * math.sin(2.0 * math.pi * 28.0 * t)
         self.po = 0.65 * instant + 0.90 * self.memory + 0.25 * osc
@@ -87,7 +94,12 @@ class ClosedLoopJarQuantumSystem:
 
             if self.mode in ('dual', 'memory'):
                 self.last_delta_m = dM
-                self.state.memory = max(-40.0, min(40.0, self.state.memory + dM))
+                self.state.memory += dM
+                if self.state.memory < -25.0:
+                    self.state.memory += 0.04 * (-15.0 - self.state.memory)
+                elif self.state.memory > 35.0:
+                    self.state.memory += 0.03 * (25.0 - self.state.memory)
+                self.state.memory = max(-32.0, min(38.0, self.state.memory))
             else:
                 self.last_delta_m = 0.0
         else:
