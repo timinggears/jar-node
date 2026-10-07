@@ -37,7 +37,8 @@ import {
   ShieldCheck, 
   Info,
   Check,
-  Disc
+  Disc,
+  Compass
 } from 'lucide-react';
 import { SystemStats } from '../types';
 
@@ -61,13 +62,15 @@ interface AmbientSignalMeshProps {
   carrierBias: number;
   onLog?: (msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   onOpenPhaseLab?: () => void;
+  onOpenJarChamber?: () => void;
 }
 
 export default function AmbientSignalMesh({
   stats,
   carrierBias,
   onLog,
-  onOpenPhaseLab
+  onOpenPhaseLab,
+  onOpenJarChamber
 }: AmbientSignalMeshProps) {
   // --- AUDIO LISTENING MONITOR (HEAR THE AIR, THE JAR, AND THE PC) ---
   const [isAudioMonitorActive, setIsAudioMonitorActive] = useState<boolean>(false);
@@ -671,6 +674,18 @@ export default function AmbientSignalMesh({
             <Plus size={12} />
             <span>DEPLOY NODE</span>
           </button>
+
+          {/* View Physical Jar Button */}
+          {onOpenJarChamber && (
+            <button
+              onClick={onOpenJarChamber}
+              className="px-3 py-1.5 rounded-lg bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-200 border border-emerald-400/50 text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+              title="Open the actual photograph and 3D schematic of the Physical Jar Apparatus"
+            >
+              <Compass size={12} className="text-emerald-400" />
+              <span>JAR SHAPE &amp; PHOTO ↗</span>
+            </button>
+          )}
         </div>
       </div>
 

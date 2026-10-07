@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check, Headphones } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check, Headphones, Compass } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -32,6 +32,7 @@ import NodeMeshAttestation from './components/NodeMeshAttestation';
 import PhaseDynamicsLab from './components/PhaseDynamicsLab';
 import QiskitQuantumLab from './components/QiskitQuantumLab';
 import AmbientSignalMesh from './components/AmbientSignalMesh';
+import PhysicalJarViewer from './components/PhysicalJarViewer';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -54,6 +55,7 @@ const NodeMeshAttestationMemo = memo(NodeMeshAttestation);
 const PhaseDynamicsLabMemo = memo(PhaseDynamicsLab);
 const QiskitQuantumLabMemo = memo(QiskitQuantumLab);
 const AmbientSignalMeshMemo = memo(AmbientSignalMesh);
+const PhysicalJarViewerMemo = memo(PhysicalJarViewer);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -145,8 +147,8 @@ export default function App() {
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>(['ambient_mesh', 'ascii_reservoir', 'substrate_io', 'quantum_cipher', 'node_mesh', 'phase_lab']);
-  const [activeWindow, setActiveWindow] = useState<string | null>('ambient_mesh');
+  const [openWindows, setOpenWindows] = useState<string[]>(['jar_chamber', 'ambient_mesh', 'ascii_reservoir', 'substrate_io', 'quantum_cipher', 'node_mesh', 'phase_lab']);
+  const [activeWindow, setActiveWindow] = useState<string | null>('jar_chamber');
   const [onlineNodeCount, setOnlineNodeCount] = useState<number>(4);
   const [phaseModel, setPhaseModel] = useState<'modified' | 'original'>('modified');
   const phaseModelRef = useRef<'modified' | 'original'>('modified');
@@ -1857,6 +1859,44 @@ export default function App() {
                 }
                 setActiveWindow('phase_lab');
               }}
+              onOpenJarChamber={() => {
+                if (!openWindows.includes('jar_chamber')) {
+                  setOpenWindows(prev => [...prev, 'jar_chamber']);
+                }
+                setActiveWindow('jar_chamber');
+              }}
+            />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('jar_chamber') && (
+          <DesktopWindow 
+            key="jar_chamber"
+            id="jar_chamber" 
+            title="PHYSICAL_JAR_CHAMBER // HARDWARE SUBSTRATE APPARATUS & OPTICAL FEED" 
+            icon={<Compass size={16} className="text-emerald-400" />}
+            onClose={() => closeWindow('jar_chamber')}
+            onFocus={() => setActiveWindow('jar_chamber')}
+            isActive={activeWindow === 'jar_chamber'}
+            initialPos={{ x: 120, y: 48 }}
+            width="w-[1040px] max-w-[98vw]"
+            height="h-[740px] max-h-[94vh]"
+          >
+            <PhysicalJarViewerMemo
+              stats={stats}
+              carrierBias={carrierBias}
+              onOpenAmbientEar={() => {
+                if (!openWindows.includes('ambient_mesh')) {
+                  setOpenWindows(prev => [...prev, 'ambient_mesh']);
+                }
+                setActiveWindow('ambient_mesh');
+              }}
+              onOpenPhaseLab={() => {
+                if (!openWindows.includes('phase_lab')) {
+                  setOpenWindows(prev => [...prev, 'phase_lab']);
+                }
+                setActiveWindow('phase_lab');
+              }}
             />
           </DesktopWindow>
         )}
@@ -2039,6 +2079,19 @@ export default function App() {
             <span>AMBIENT_EAR</span>
             <span className="text-[7px] text-[#00ffcc] font-mono bg-cyan-500/20 px-1 py-0.2 rounded border border-cyan-400/30">
               AIR•JAR•PC
+            </span>
+          </button>
+
+          {/* Physical Jar Chamber & Apparatus Shape Viewer Button */}
+          <button 
+            onClick={() => toggleWindow('jar_chamber')}
+            className="flex items-center gap-1.5 bg-emerald-950/70 hover:bg-emerald-900/90 text-emerald-200 border border-emerald-400/60 hover:border-emerald-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(16,185,129,0.3)] shrink-0"
+            title="Open Physical Jar Chamber & Apparatus Shape Viewer: High-res laboratory photograph and 3D isometric schematic"
+          >
+            <Compass size={9} className="text-emerald-400 animate-pulse" />
+            <span>JAR_CHAMBER</span>
+            <span className="text-[7px] text-[#00ffcc] font-mono bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-400/30">
+              PHOTO•3D
             </span>
           </button>
 

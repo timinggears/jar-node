@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive, GitBranch, Binary, Network, Lock, Radio, Waves, Headphones } from 'lucide-react';
+import { Terminal, Cpu, Layout, Folder, Settings, Search, Zap, Activity, ShieldCheck, RefreshCw, Cloud, Brain, Database, Box, HardDrive, GitBranch, Binary, Network, Lock, Radio, Waves, Headphones, Compass } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface TaskbarProps {
@@ -146,6 +146,14 @@ export default function Taskbar({
         isOpen={openWindows.includes('ambient_mesh')} 
         isActive={activeWindow === 'ambient_mesh'}
         onClick={() => onToggleWindow('ambient_mesh')}
+      />
+      <AppIcon 
+        id="jar_chamber"
+        icon={<Compass size={20} className="text-emerald-400" />} 
+        label="Physical Jar Chamber & Visual Apparatus (Photo & 3D Schematic)" 
+        isOpen={openWindows.includes('jar_chamber')} 
+        isActive={activeWindow === 'jar_chamber'}
+        onClick={() => onToggleWindow('jar_chamber')}
       />
       <AppIcon 
         id="phase_lab"
