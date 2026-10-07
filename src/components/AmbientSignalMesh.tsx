@@ -124,7 +124,7 @@ export default function AmbientSignalMesh({
     },
     {
       id: 'node_jar_01',
-      name: 'VESSEL_NODAL_01 (Dielectric Memory Stick)',
+      name: 'VESSEL_NODAL_01 (Liquid Dielectric Cell)',
       source: 'jar',
       frequencyHz: 28000.0,
       rmsPowerDb: -18.5,
@@ -408,13 +408,12 @@ export default function AmbientSignalMesh({
 
       // --- Read Jar Dielectric Data ---
       const jarV = stats.vNodal || 1.537;
-      const jarMemory = stats.memoryStick || 5.14;
       const jarJitter = stats.jitter || 0.015;
       const jarWave: number[] = [];
       const tSec = Date.now() / 1000;
       for (let i = 0; i < 64; i++) {
         const ph = (tSec * 28.0 + i * 0.08) % (2 * Math.PI);
-        const w = (Math.sin(ph) * 0.7) + (jarMemory / 40.0 * 0.25) + ((Math.random() - 0.5) * jarJitter * 8.0);
+        const w = (Math.sin(ph) * 0.7) + ((jarV - 1.4) * 0.6) + ((Math.random() - 0.5) * jarJitter * 8.0);
         jarWave.push(Math.max(-1, Math.min(1, w)));
       }
 
