@@ -25,7 +25,8 @@ import {
   createBellState,
   runCHSHInequalityTest,
   reconstructDensityMatrix,
-  QuantumPhaseLockedLoop
+  QuantumPhaseLockedLoop,
+  executeQuantumAlgorithmSuite
 } from './src/quantum/qiskitEngine.ts';
 import type { AddressableTwoLevelQubit } from './src/quantum/qiskitEngine.ts';
 
@@ -2346,11 +2347,11 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
     }
   });
 
-  // POST scale addressable two-level register size (e.g. 5, 8, 16, 24, 32, 127)
+  // POST scale addressable two-level register size (e.g. 5, 8, 16, 24, 32, 64, 127, 133, 433, 1121)
   app.post('/api/quantum/qubits/scale', (req, res) => {
     try {
       const { count = 5 } = req.body || {};
-      const targetCount = Math.max(1, Math.min(127, Number(count) || 5));
+      const targetCount = Math.max(1, Math.min(1121, Number(count) || 5));
       addressableRegister = createDefaultAddressableRegister(targetCount);
       const benchmark = computeQubitCapacityBenchmark(targetCount);
 
@@ -2383,7 +2384,11 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
         { count: 16, label: "16Q Hex-Lattice", type: "Heavy-Hex Cross-Resonance" },
         { count: 24, label: "24Q Max Statevector", type: "Full Hilbert Array (16.7M Basis States)" },
         { count: 32, label: "32Q Enterprise Array", type: "Dual-Bus Dispersive Readout" },
-        { count: 127, label: "127Q IBM Eagle QPU", type: "Heavy-Hex Multi-Feedline Fabric" }
+        { count: 64, label: "64Q MPS Tensor Net", type: "Matrix Product State Simulation" },
+        { count: 127, label: "127Q IBM Eagle QPU", type: "Heavy-Hex Multi-Feedline Fabric" },
+        { count: 133, label: "133Q IBM Heron QPU", type: "Tunable Coupler Modular Fabric" },
+        { count: 433, label: "433Q IBM Osprey QPU", type: "Multi-Chip 3D Interconnect" },
+        { count: 1121, label: "1,121Q IBM Condor", type: "Ultra-Dense Superconducting Limit" }
       ],
       tachyonicSubstrateModes: {
         baseModes: 128,
@@ -2392,6 +2397,46 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
         maxModes: 960
       }
     });
+  });
+
+  // POST execute high-dimensional quantum algorithm processing on physical Jar telemetry
+  app.post('/api/quantum/process', (req, res) => {
+    try {
+      const {
+        algorithm = 'qpe',
+        qubitCount,
+        voltage = 1.537,
+        memory = substrateMemoryState || 5.14,
+        jitter = 0.015,
+        targetBitstring,
+        groverTargetIndex,
+        qpePrecisionBits,
+        reservoirSteps
+      } = req.body || {};
+
+      const count = qubitCount !== undefined ? Number(qubitCount) : addressableRegister.length;
+
+      const result = executeQuantumAlgorithmSuite({
+        algorithm,
+        qubitCount: count,
+        voltage: Number(voltage),
+        memory: Number(memory),
+        jitter: Number(jitter),
+        targetBitstring,
+        groverTargetIndex: groverTargetIndex !== undefined ? Number(groverTargetIndex) : undefined,
+        qpePrecisionBits: qpePrecisionBits !== undefined ? Number(qpePrecisionBits) : undefined,
+        reservoirSteps: reservoirSteps !== undefined ? Number(reservoirSteps) : undefined
+      });
+
+      io.emit('log', `[Q_PROCESSOR]: Executed ${result.name} on ${result.qubitsUsed} qubits! Hilbert space: ${result.hilbertDimensionStr} states. Simulation: ${result.simulationMode}. Runtime: ${result.executionTimeMs}ms.`);
+
+      res.json({
+        success: true,
+        result
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // POST two-qubit entangling gate (CNOT, CZ, iSWAP, SWAP, CR)

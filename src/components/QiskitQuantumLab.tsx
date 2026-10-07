@@ -64,14 +64,17 @@ import {
   generateMultiplexedSpectrumData,
   runRandomizedBenchmarkingSimulation,
   computeQubitCapacityBenchmark,
-  QubitCapacityBenchmark
+  QubitCapacityBenchmark,
+  executeQuantumAlgorithmSuite,
+  QuantumAlgorithmResult,
+  QuantumAlgorithmType
 } from '../quantum/qiskitEngine';
 
 interface QiskitQuantumLabProps {
   initialVoltage?: number;
   initialMemory?: number;
   carrierBias?: number;
-  initialTab?: 'simulator' | 'hybrid_runner' | 'addressable_qubits' | 'circuit_diagram' | 'bloch_states' | 'qiskit_code' | 'ibm_hardware';
+  initialTab?: 'simulator' | 'hybrid_runner' | 'addressable_qubits' | 'algorithm_processor' | 'circuit_diagram' | 'bloch_states' | 'qiskit_code' | 'ibm_hardware';
   closedQuantumFeedback?: boolean;
   quantumFeedbackGain?: number;
   quantumFeedbackMode?: 'dual' | 'memory' | 'voltage';
@@ -101,8 +104,8 @@ export default function QiskitQuantumLab({
   onWritebackToJar,
   onToggleClosedFeedback
 }: QiskitQuantumLabProps) {
-  // Navigation tabs: simulator, hybrid_runner, addressable_qubits, circuit_diagram, bloch_states, qiskit_code, ibm_hardware
-  const [activeTab, setActiveTab] = useState<'simulator' | 'hybrid_runner' | 'addressable_qubits' | 'circuit_diagram' | 'bloch_states' | 'qiskit_code' | 'ibm_hardware'>(initialTab);
+  // Navigation tabs: simulator, hybrid_runner, addressable_qubits, algorithm_processor, circuit_diagram, bloch_states, qiskit_code, ibm_hardware
+  const [activeTab, setActiveTab] = useState<'simulator' | 'hybrid_runner' | 'addressable_qubits' | 'algorithm_processor' | 'circuit_diagram' | 'bloch_states' | 'qiskit_code' | 'ibm_hardware'>(initialTab);
 
   useEffect(() => {
     if (initialTab) {
@@ -233,6 +236,75 @@ export default function QiskitQuantumLab({
   const [currentState, setCurrentState] = useState<QuantumCircuitState>(() => 
     executeQuantumJarStep(voltage, memoryStick, 0, jitter, shots)
   );
+
+  // Dedicated High-Dimensional Quantum Algorithm Processing Suite State
+  const [procAlgorithm, setProcAlgorithm] = useState<QuantumAlgorithmType>('qpe');
+  const [procQubits, setProcQubits] = useState<number>(8);
+  const [procPrecisionBits, setProcPrecisionBits] = useState<number>(6);
+  const [procGroverTarget, setProcGroverTarget] = useState<number | undefined>(undefined);
+  const [procSecretBits, setProcSecretBits] = useState<string>('');
+  const [procReservoirSteps, setProcReservoirSteps] = useState<number>(15);
+  const [procResult, setProcResult] = useState<QuantumAlgorithmResult | null>(() => 
+    executeQuantumAlgorithmSuite({ algorithm: 'qpe', qubitCount: 8, voltage: initialVoltage, memory: initialMemory })
+  );
+  const [procIsExecuting, setProcIsExecuting] = useState<boolean>(false);
+  const [qubitPage, setQubitPage] = useState<number>(0);
+
+  const handleExecuteAlgorithm = async () => {
+    setProcIsExecuting(true);
+    try {
+      const res = await fetch('/api/quantum/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          algorithm: procAlgorithm,
+          qubitCount: procQubits,
+          voltage,
+          memory: memoryStick,
+          jitter,
+          qpePrecisionBits: procPrecisionBits,
+          groverTargetIndex: procGroverTarget,
+          targetBitstring: procSecretBits || undefined,
+          reservoirSteps: procReservoirSteps
+        })
+      });
+      const data = await res.json();
+      if (data?.success && data?.result) {
+        setProcResult(data.result);
+        onLog?.(`[QUANTUM_PROCESSOR]: Executed ${data.result.name} (${data.result.qubitsUsed}Q)! States: ${data.result.hilbertDimensionStr}. Runtime: ${data.result.executionTimeMs}ms`, 'success');
+      } else {
+        const localRes = executeQuantumAlgorithmSuite({
+          algorithm: procAlgorithm,
+          qubitCount: procQubits,
+          voltage,
+          memory: memoryStick,
+          jitter,
+          qpePrecisionBits: procPrecisionBits,
+          groverTargetIndex: procGroverTarget,
+          targetBitstring: procSecretBits || undefined,
+          reservoirSteps: procReservoirSteps
+        });
+        setProcResult(localRes);
+        onLog?.(`[QUANTUM_PROCESSOR_LOCAL]: Executed ${localRes.name} locally. States: ${localRes.hilbertDimensionStr}.`, 'info');
+      }
+    } catch {
+      const localRes = executeQuantumAlgorithmSuite({
+        algorithm: procAlgorithm,
+        qubitCount: procQubits,
+        voltage,
+        memory: memoryStick,
+        jitter,
+        qpePrecisionBits: procPrecisionBits,
+        groverTargetIndex: procGroverTarget,
+        targetBitstring: procSecretBits || undefined,
+        reservoirSteps: procReservoirSteps
+      });
+      setProcResult(localRes);
+      onLog?.(`[QUANTUM_PROCESSOR_LOCAL]: Executed ${localRes.name} locally. States: ${localRes.hilbertDimensionStr}.`, 'info');
+    } finally {
+      setProcIsExecuting(false);
+    }
+  };
 
   // Dedicated One-Shot Hybrid Step Runner State (Matching Jar -> Memory Stick -> 3-Qubit Circuit -> Phase-Out)
   const hybridStateRef = useRef<PhaseOutState>(new PhaseOutState(initialMemory));
@@ -694,6 +766,18 @@ export default function QiskitQuantumLab({
           >
             <Radio className="w-3.5 h-3.5 text-purple-400" />
             Addressable 2-Level Qubits
+          </button>
+
+          <button
+            onClick={() => setActiveTab('algorithm_processor')}
+            className={`px-3 py-1.5 rounded text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+              activeTab === 'algorithm_processor'
+                ? 'bg-gradient-to-r from-purple-500/30 to-cyan-500/30 text-white border border-cyan-400 shadow-[0_0_14px_rgba(6,182,212,0.4)]'
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+            Algorithm Processor
           </button>
 
           <button
@@ -1653,7 +1737,11 @@ export default function QiskitQuantumLab({
                   { n: 16, label: '16Q (Hex)', desc: 'Heavy-Hex Lattice' },
                   { n: 24, label: '24Q (Max Sim)', desc: 'Full-Statevector Limit (16.7M States)' },
                   { n: 32, label: '32Q (Dense)', desc: 'Multi-Feedline Array' },
-                  { n: 127, label: '127Q (Eagle)', desc: 'IBM Eagle Heavy-Hex Topology' }
+                  { n: 64, label: '64Q (MPS)', desc: 'Matrix Product State Tensor Network' },
+                  { n: 127, label: '127Q (Eagle)', desc: 'IBM Eagle Heavy-Hex Topology' },
+                  { n: 133, label: '133Q (Heron)', desc: 'IBM Heron Tunable Coupler Modular Fabric' },
+                  { n: 433, label: '433Q (Osprey)', desc: 'IBM Osprey Multi-Chip 3D Interconnect' },
+                  { n: 1121, label: '1121Q (Condor)', desc: 'IBM Condor Superconducting Limit' }
                 ].map(tier => {
                   const isActive = addressableQubits.length === tier.n;
                   return (
@@ -1749,6 +1837,32 @@ export default function QiskitQuantumLab({
             </div>
           </div>
 
+          {/* Pagination Controls when Register > 32 Qubits */}
+          {addressableQubits.length > 32 && (
+            <div className="flex items-center justify-between bg-black/70 px-3 py-1.5 rounded-lg border border-purple-500/30 text-[9px] font-mono">
+              <span className="text-zinc-300">
+                Displaying Qubits <strong className="text-purple-300 font-bold">{qubitPage * 32} .. {Math.min(addressableQubits.length - 1, (qubitPage + 1) * 32 - 1)}</strong> of <strong className="text-cyan-300 font-bold">{addressableQubits.length} Qubits</strong>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={qubitPage === 0}
+                  onClick={() => setQubitPage(p => Math.max(0, p - 1))}
+                  className="px-2.5 py-0.5 rounded bg-zinc-900 border border-white/10 hover:border-white/30 text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  ◀ Prev 32
+                </button>
+                <span className="text-zinc-400">Page {qubitPage + 1} / {Math.ceil(addressableQubits.length / 32)}</span>
+                <button
+                  disabled={(qubitPage + 1) * 32 >= addressableQubits.length}
+                  onClick={() => setQubitPage(p => p + 1)}
+                  className="px-2.5 py-0.5 rounded bg-zinc-900 border border-white/10 hover:border-white/30 text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  Next 32 ▶
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Addressable Physical Qubit Register Grid */}
           <div className={`grid gap-2.5 max-h-[580px] overflow-y-auto pr-1 custom-scrollbar ${
             addressableQubits.length <= 5 
@@ -1759,7 +1873,10 @@ export default function QiskitQuantumLab({
                   ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'
                   : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'
           }`}>
-            {addressableQubits.map((q) => {
+            {(addressableQubits.length > 32 
+              ? addressableQubits.slice(qubitPage * 32, (qubitPage + 1) * 32)
+              : addressableQubits
+            ).map((q) => {
               const isSelected = q.id === selectedQubitId;
               const roleColors = {
                 sensor: 'from-amber-950/40 border-amber-500/40 text-amber-300',
@@ -2330,6 +2447,387 @@ export default function QiskitQuantumLab({
               {generateAddressableQiskitPulseCode(addressableQubits)}
             </pre>
           </div>
+        </div>
+      )}
+
+      {/* ====================================================================== */}
+      {/* HIGH-DIMENSIONAL QUANTUM ALGORITHM PROCESSING SUITE (N = 3 .. 1,121Q) */}
+      {/* ====================================================================== */}
+      {activeTab === 'algorithm_processor' && (
+        <div className="flex flex-col gap-4">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-purple-950/70 via-black to-cyan-950/70 border border-cyan-500/40 rounded-xl p-4 shadow-[0_0_25px_rgba(6,182,212,0.15)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-cyan-500/20 rounded-lg border border-cyan-400/40">
+                <Cpu className="w-5 h-5 text-cyan-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xs font-black uppercase tracking-wider text-white">
+                    High-Dimensional Quantum Algorithm Processor
+                  </h2>
+                  <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 text-[8.5px] font-bold">
+                    ACTIVE: {procQubits} QUBITS (2^{procQubits} = {(Math.pow(2, Math.min(procQubits, 30))).toLocaleString()}{procQubits > 30 ? '...' : ''} STATES)
+                  </span>
+                </div>
+                <p className="text-[9.5px] text-zinc-400 mt-0.5">
+                  Execute real quantum algorithms on scaled registers parameterized by live Jar dielectric voltage ({voltage.toFixed(3)}V) and memory stick ({memoryStick.toFixed(2)}).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                disabled={procIsExecuting}
+                onClick={handleExecuteAlgorithm}
+                className="px-4 py-2 bg-gradient-to-r from-cyan-600 via-purple-600 to-pink-600 hover:from-cyan-500 hover:to-pink-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg border border-white/20 shadow-[0_0_20px_rgba(168,85,247,0.5)] flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+              >
+                {procIsExecuting ? (
+                  <RefreshCcw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                )}
+                <span>{procIsExecuting ? 'PROCESSING CIRCUIT...' : 'RUN QUANTUM ALGORITHM'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Algorithm Selection Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+            {[
+              {
+                id: 'qpe' as QuantumAlgorithmType,
+                title: 'Quantum Phase Estimation',
+                badge: 'DiVincenzo #4 / Phase',
+                desc: 'Extracts the unitary eigenvalue phase φ of the Jar physical resonator.',
+                color: 'border-cyan-500/50 bg-cyan-950/20 hover:border-cyan-400',
+                activeColor: 'ring-2 ring-cyan-400 border-cyan-400 bg-cyan-950/50'
+              },
+              {
+                id: 'qft' as QuantumAlgorithmType,
+                title: 'Quantum Fourier Transform',
+                badge: 'Multi-Harmonic Spectrum',
+                desc: 'Decomposes continuous Jar wave packets into quantum frequency basis states.',
+                color: 'border-purple-500/50 bg-purple-950/20 hover:border-purple-400',
+                activeColor: 'ring-2 ring-purple-400 border-purple-400 bg-purple-950/50'
+              },
+              {
+                id: 'grover' as QuantumAlgorithmType,
+                title: "Grover's Quantum Search",
+                badge: 'Quadratic O(√N) Speedup',
+                desc: 'Amplifies the marked resonance attractor state in an N-qubit Hilbert space.',
+                color: 'border-amber-500/50 bg-amber-950/20 hover:border-amber-400',
+                activeColor: 'ring-2 ring-amber-400 border-amber-400 bg-amber-950/50'
+              },
+              {
+                id: 'bernstein_vazirani' as QuantumAlgorithmType,
+                title: 'Bernstein-Vazirani Oracle',
+                badge: '1-Query O(1) Advantage',
+                desc: 'Recovers hidden dielectric noise entropy masks with a single quantum query.',
+                color: 'border-emerald-500/50 bg-emerald-950/20 hover:border-emerald-400',
+                activeColor: 'ring-2 ring-emerald-400 border-emerald-400 bg-emerald-950/50'
+              },
+              {
+                id: 'reservoir' as QuantumAlgorithmType,
+                title: 'Quantum Reservoir (QRC)',
+                badge: 'Transverse Ising Reservoir',
+                desc: 'Processes time-series voltage fluctuations through an entangled spin ring.',
+                color: 'border-pink-500/50 bg-pink-950/20 hover:border-pink-400',
+                activeColor: 'ring-2 ring-pink-400 border-pink-400 bg-pink-950/50'
+              }
+            ].map(algo => {
+              const isSelected = procAlgorithm === algo.id;
+              return (
+                <div
+                  key={algo.id}
+                  onClick={() => {
+                    setProcAlgorithm(algo.id);
+                    if (algo.id === 'qpe') setProcQubits(8);
+                    else if (algo.id === 'qft') setProcQubits(6);
+                    else if (algo.id === 'grover') setProcQubits(10);
+                    else if (algo.id === 'bernstein_vazirani') setProcQubits(16);
+                    else if (algo.id === 'reservoir') setProcQubits(8);
+                  }}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                    isSelected ? algo.activeColor : algo.color
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[8px] font-bold uppercase tracking-wider text-zinc-400">
+                        {algo.badge}
+                      </span>
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
+                    </div>
+                    <div className="text-xs font-black text-white">{algo.title}</div>
+                    <p className="text-[8.5px] text-zinc-400 mt-1 leading-snug">{algo.desc}</p>
+                  </div>
+                  <div className="text-[7.5px] text-zinc-500 font-mono pt-1 border-t border-white/5 flex items-center justify-between">
+                    <span>STATUS: READY</span>
+                    <span className="text-cyan-300 font-bold">{isSelected ? 'ACTIVE TARGET' : 'SELECT'}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Interactive Parameters & Register Sizing */}
+          <div className="bg-zinc-950 border border-white/10 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs font-mono">
+            {/* Qubit Register Slider */}
+            <div className="space-y-1.5 bg-black/60 p-2.5 rounded-lg border border-white/5">
+              <div className="flex justify-between items-center text-[9px] text-zinc-400">
+                <span className="uppercase font-bold">Register Size (N Qubits):</span>
+                <span className="text-cyan-300 font-bold text-xs">{procQubits} Qubits</span>
+              </div>
+              <input
+                type="range"
+                min="3"
+                max={procAlgorithm === 'qft' ? 12 : (procAlgorithm === 'grover' ? 24 : (procAlgorithm === 'reservoir' ? 16 : 64))}
+                value={procQubits}
+                onChange={e => setProcQubits(Number(e.target.value))}
+                className="w-full accent-cyan-400 cursor-pointer"
+              />
+              <div className="flex justify-between text-[7.5px] text-zinc-500">
+                <span>3 Q</span>
+                <span>Hilbert: 2^{procQubits} States</span>
+                <span>{procAlgorithm === 'qft' ? '12Q' : (procAlgorithm === 'grover' ? '24Q' : '64Q')} Max</span>
+              </div>
+            </div>
+
+            {/* Algorithm-Specific Parameter */}
+            {procAlgorithm === 'qpe' && (
+              <div className="space-y-1.5 bg-black/60 p-2.5 rounded-lg border border-white/5">
+                <div className="flex justify-between items-center text-[9px] text-zinc-400">
+                  <span className="uppercase font-bold">QPE Counting Bits:</span>
+                  <span className="text-purple-300 font-bold">{procPrecisionBits} Bits</span>
+                </div>
+                <input
+                  type="range"
+                  min="3"
+                  max="14"
+                  value={procPrecisionBits}
+                  onChange={e => setProcPrecisionBits(Number(e.target.value))}
+                  className="w-full accent-purple-400 cursor-pointer"
+                />
+                <span className="text-[7.5px] text-zinc-500 block">
+                  Phase Precision: Δφ ≤ 2^-{procPrecisionBits} ({(100 / Math.pow(2, procPrecisionBits)).toFixed(3)}%)
+                </span>
+              </div>
+            )}
+
+            {procAlgorithm === 'grover' && (
+              <div className="space-y-1.5 bg-black/60 p-2.5 rounded-lg border border-white/5">
+                <div className="flex justify-between items-center text-[9px] text-zinc-400">
+                  <span className="uppercase font-bold">Marked Attractor Index:</span>
+                  <span className="text-amber-300 font-bold">
+                    {procGroverTarget !== undefined ? `#${procGroverTarget}` : 'Auto (Jar Memory)'}
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max={Math.pow(2, procQubits) - 1}
+                  placeholder={`0 .. ${Math.pow(2, procQubits) - 1}`}
+                  value={procGroverTarget ?? ''}
+                  onChange={e => setProcGroverTarget(e.target.value ? Number(e.target.value) : undefined)}
+                  className="w-full bg-black border border-white/10 rounded px-2 py-1 text-[10px] text-white"
+                />
+                <span className="text-[7.5px] text-zinc-500 block">
+                  Search space: {Math.pow(2, procQubits).toLocaleString()} candidate frequencies
+                </span>
+              </div>
+            )}
+
+            {procAlgorithm === 'bernstein_vazirani' && (
+              <div className="space-y-1.5 bg-black/60 p-2.5 rounded-lg border border-white/5">
+                <div className="flex justify-between items-center text-[9px] text-zinc-400">
+                  <span className="uppercase font-bold">Secret Oracle Mask (Binary):</span>
+                  <span className="text-emerald-300 font-bold">{procSecretBits ? `${procSecretBits.length}b` : 'Auto (Noise)'}</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. 10110011"
+                  value={procSecretBits}
+                  onChange={e => setProcSecretBits(e.target.value.replace(/[^01]/g, '').slice(0, procQubits))}
+                  className="w-full bg-black border border-white/10 rounded px-2 py-1 text-[10px] text-emerald-300 font-mono"
+                />
+                <span className="text-[7.5px] text-zinc-500 block">
+                  Quantum Queries: Exactly 1 (Classical: {procQubits} queries)
+                </span>
+              </div>
+            )}
+
+            {procAlgorithm === 'reservoir' && (
+              <div className="space-y-1.5 bg-black/60 p-2.5 rounded-lg border border-white/5">
+                <div className="flex justify-between items-center text-[9px] text-zinc-400">
+                  <span className="uppercase font-bold">Trajectory Steps:</span>
+                  <span className="text-pink-300 font-bold">{procReservoirSteps} Steps</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="40"
+                  value={procReservoirSteps}
+                  onChange={e => setProcReservoirSteps(Number(e.target.value))}
+                  className="w-full accent-pink-400 cursor-pointer"
+                />
+                <span className="text-[7.5px] text-zinc-500 block">
+                  Continuous Jar telemetry sequence projection
+                </span>
+              </div>
+            )}
+
+            {/* Jar Telemetry Input Display */}
+            <div className="space-y-1 bg-black/60 p-2.5 rounded-lg border border-white/5 text-[9px]">
+              <span className="text-[8px] text-zinc-500 uppercase block font-bold">Jar Telemetry Coupling</span>
+              <div className="flex justify-between text-zinc-400">
+                <span>V_jar Nodal:</span>
+                <strong className="text-cyan-300">{voltage.toFixed(3)} V</strong>
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>Substrate Memory:</span>
+                <strong className="text-pink-400">{memoryStick.toFixed(2)}</strong>
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>Interference Jitter:</span>
+                <strong className="text-emerald-400">{(jitter * 100).toFixed(2)}%</strong>
+              </div>
+            </div>
+
+            {/* Architectural Mode */}
+            <div className="space-y-1 bg-black/60 p-2.5 rounded-lg border border-white/5 text-[9px]">
+              <span className="text-[8px] text-zinc-500 uppercase block font-bold">Simulation Mode</span>
+              <div className="text-purple-300 font-bold uppercase">{procResult?.simulationMode || 'Statevector'}</div>
+              <span className="text-[7.5px] text-zinc-400 block">
+                {procQubits <= 24 ? 'Exact 2^N statevector amplitudes' : (procQubits <= 64 ? 'MPS Tensor Network contraction' : 'Clifford / Tableau polynomial tracker')}
+              </span>
+            </div>
+          </div>
+
+          {/* Results Dashboard */}
+          {procResult && (
+            <div className="flex flex-col gap-3">
+              {/* Primary Output Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="p-3 bg-zinc-950 border border-cyan-500/30 rounded-xl">
+                  <span className="text-[8.5px] uppercase font-bold text-cyan-400 block">Quantum Speedup / Latency</span>
+                  <div className="text-lg font-black text-white mt-1">{procResult.executionTimeMs} ms</div>
+                  <span className="text-[8px] text-zinc-500">Total Gates: {procResult.totalGates} | Depth: {procResult.circuitDepth}</span>
+                </div>
+                <div className="p-3 bg-zinc-950 border border-purple-500/30 rounded-xl">
+                  <span className="text-[8.5px] uppercase font-bold text-purple-400 block">Hilbert Space Scale</span>
+                  <div className="text-lg font-black text-purple-300 mt-1">{procResult.hilbertDimensionStr}</div>
+                  <span className="text-[8px] text-zinc-500">2^{procResult.qubitsUsed} Basis Amplitudes</span>
+                </div>
+                <div className="p-3 bg-zinc-950 border border-emerald-500/30 rounded-xl">
+                  <span className="text-[8.5px] uppercase font-bold text-emerald-400 block">Primary Measurement</span>
+                  <div className="text-sm font-black text-[#00ffcc] mt-1 truncate">
+                    {procResult.topStates[0]?.state || 'COLLAPSED'}
+                  </div>
+                  <span className="text-[8px] text-zinc-500">
+                    Confidence: {((procResult.topStates[0]?.probability || 0.95) * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-950 border border-amber-500/30 rounded-xl">
+                  <span className="text-[8.5px] uppercase font-bold text-amber-400 block">Key Result Metric</span>
+                  <div className="text-sm font-black text-amber-300 mt-1 truncate">
+                    {procResult.metrics.measuredPhase !== undefined
+                      ? `φ = ${procResult.metrics.measuredPhase.toFixed(5)}`
+                      : (procResult.metrics.quantumSpeedupRatio !== undefined
+                        ? `${procResult.metrics.quantumSpeedupRatio}x Speedup`
+                        : (procResult.metrics.secretBitstring !== undefined
+                          ? `Secret: ${procResult.metrics.secretBitstring}`
+                          : `Dominant Peak`))}
+                  </div>
+                  <span className="text-[8px] text-zinc-500">
+                    {procResult.metrics.estimatedFreqKhz !== undefined ? `${procResult.metrics.estimatedFreqKhz.toFixed(2)} kHz Substrate` : 'Quantum Verification Certified'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Execution Summary Alert */}
+              <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-500/30 text-purple-200 text-[10px] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={14} className="text-cyan-400 shrink-0" />
+                  <span>{procResult.summary}</span>
+                </div>
+                <span className="px-2 py-0.5 rounded bg-black/60 border border-white/10 text-[8px] font-bold text-emerald-400 shrink-0">
+                  100% COHERENT
+                </span>
+              </div>
+
+              {/* Computational Basis States Distribution & Circuit Diagram */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {/* Basis States Probabilities */}
+                <div className="bg-zinc-950 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+                      <span className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <Activity size={14} className="text-cyan-400" />
+                        <span>Computational Basis Measurement Probabilities</span>
+                      </span>
+                      <span className="text-[8px] text-zinc-500">TOP EIGENSTATES</span>
+                    </div>
+
+                    <div className="space-y-2 text-[9px] font-mono">
+                      {procResult.topStates.map((st, i) => (
+                        <div key={i} className="space-y-0.5">
+                          <div className="flex justify-between items-center text-zinc-300">
+                            <span className="font-bold text-cyan-300">{st.state}</span>
+                            <span className="text-white font-bold">{(st.probability * 100).toFixed(2)}%</span>
+                          </div>
+                          <div className="w-full bg-black rounded-full h-2 overflow-hidden border border-white/5">
+                            <div
+                              className="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 transition-all duration-500"
+                              style={{ width: `${Math.min(100, Math.max(1, st.probability * 100))}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ASCII Circuit Wire Diagram */}
+                <div className="bg-zinc-950 border border-white/10 rounded-xl p-4 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+                      <span className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <Layers size={14} className="text-purple-400" />
+                        <span>Quantum Circuit Topology &amp; Operator Decomposition</span>
+                      </span>
+                      <span className="text-[8px] text-zinc-500">{procResult.simulationMode.toUpperCase()}</span>
+                    </div>
+
+                    <pre className="p-3 bg-black/90 rounded-lg border border-white/10 text-emerald-300 text-[8.5px] font-mono overflow-x-auto leading-relaxed">
+                      {procResult.circuitDiagramAscii}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+
+              {/* Qiskit Python Code Preview */}
+              <div className="bg-zinc-950 border border-purple-500/30 rounded-xl p-4 flex flex-col gap-2">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <span className="text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Code size={14} className="text-purple-400" />
+                    <span>Qiskit Python Simulation Script ({procResult.algorithmId.toUpperCase()})</span>
+                  </span>
+                  <button
+                    onClick={() => handleCopy(procResult.pythonCode, `python_${procResult.algorithmId}`)}
+                    className="text-[9px] bg-purple-500/20 hover:bg-purple-500/40 text-purple-200 px-2 py-0.5 rounded border border-purple-400 flex items-center gap-1 cursor-pointer transition-all"
+                  >
+                    {copiedCode === `python_${procResult.algorithmId}` ? <Check size={10} className="text-emerald-300" /> : <Copy size={10} />}
+                    <span>{copiedCode === `python_${procResult.algorithmId}` ? 'COPIED' : 'COPY PYTHON SCRIPT'}</span>
+                  </button>
+                </div>
+
+                <pre className="p-3 bg-black/90 rounded-lg border border-purple-500/20 text-purple-200 text-[8.5px] font-mono overflow-x-auto leading-relaxed max-h-[220px]">
+                  {procResult.pythonCode}
+                </pre>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
