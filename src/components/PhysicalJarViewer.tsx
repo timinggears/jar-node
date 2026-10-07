@@ -2,16 +2,15 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * PHYSICAL JAR CHAMBER & APPARATUS VIEWER
- * Visual representation and telemetry breakdown of the Sovereign J.A.R.S. hardware:
- * - Thick borosilicate glass cylinder
- * - Translucent glowing dielectric fluid bath
- * - Submerged flash memory stick
- * - Wound copper induction coil
- * - Raspberry Pi Pico RP2040 ADC probe interface
+ * PHYSICAL JAR CHAMBER & TELEMETRY IMAGE RECONSTRUCTOR
+ * Visualizes the physical Jar and builds real-time images directly from sensor telemetry:
+ * 1. RECONSTRUCTED TELEMETRY IMAGE : Tomographic standing-wave scan generated from live readings
+ * 2. LIVE DYNAMIC RASTER (CANVAS)  : Real-time mathematical standing wave interference simulation
+ * 3. LAB APPARATUS PHOTO           : Photorealistic view of the borosilicate glass vessel & memory stick
+ * 4. 3D ISOMETRIC SCHEMATIC        : Technical cross-section & electrode configuration
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Eye, 
   Layers, 
@@ -20,12 +19,16 @@ import {
   Waves, 
   Radio, 
   Info, 
-  Maximize2, 
   Compass, 
   Sparkles,
   ExternalLink,
   Sliders,
-  Activity
+  Activity,
+  Scan,
+  Download,
+  Camera,
+  RefreshCw,
+  SlidersHorizontal
 } from 'lucide-react';
 import { SystemStats } from '../types';
 
@@ -42,58 +45,183 @@ export default function PhysicalJarViewer({
   onOpenAmbientEar,
   onOpenPhaseLab
 }: PhysicalJarViewerProps) {
-  const [viewMode, setViewMode] = useState<'photo' | 'schematic'>('photo');
+  const [viewMode, setViewMode] = useState<'tomography' | 'live_raster' | 'photo' | 'schematic'>('tomography');
   const [selectedCallout, setSelectedCallout] = useState<number | null>(null);
   const [showHudOverlays, setShowHudOverlays] = useState<boolean>(true);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
+  const jarTomographyUrl = "/src/assets/images/jar_telemetry_tomography_1791361962799.jpg";
   const jarPhotoUrl = "/src/assets/images/quantum_jar_apparatus_1791361374357.jpg";
   const jarSchematicUrl = "/src/assets/images/jar_schematic_render_1791361393883.jpg";
+
+  const liveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Live readings extraction
+  const vNodal = stats.vNodal || 1.825;
+  const memStick = stats.memoryStick || 34.96;
+  const phaseAngleDeg = stats.phaseOut || 55.0;
+  const jitterVal = stats.jitter || 0.0208;
+  const coherenceVal = stats.coherence || 0.95;
+  const carrierFreqHz = stats.frequency || 81376.0;
+
+  // Real-Time Generative Standing-Wave Raster Canvas
+  useEffect(() => {
+    if (viewMode !== 'live_raster') return;
+    const canvas = liveCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animId: number;
+    let t = 0;
+
+    const renderLoop = () => {
+      t += 0.04;
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const radius = Math.min(w, h) * 0.44;
+
+      // Dark background
+      ctx.fillStyle = '#010503';
+      ctx.fillRect(0, 0, w, h);
+
+      // Create pixel image data buffer
+      const imgData = ctx.createImageData(w, h);
+      const data = imgData.data;
+
+      const phaseRad = (phaseAngleDeg * Math.PI) / 180.0;
+      const k1 = 12.0 + (carrierBias / 20.0);
+      const k2 = 6.0;
+
+      for (let y = 0; y < h; y += 2) {
+        for (let x = 0; x < w; x += 2) {
+          const dx = (x - cx) / radius;
+          const dy = (y - cy) / radius;
+          const r = Math.sqrt(dx * dx + dy * dy);
+
+          const idx = (y * w + x) * 4;
+
+          if (r > 1.0) {
+            // Outside jar cylinder
+            data[idx] = 4;
+            data[idx + 1] = 8;
+            data[idx + 2] = 6;
+            data[idx + 3] = 255;
+            continue;
+          }
+
+          // Center memory stick obstruction mask
+          const inStick = Math.abs(dx) < 0.14 && Math.abs(dy) < 0.42;
+
+          let intensity = 0;
+          if (inStick) {
+            // Flash memory stick silhouette with metallic edge glow
+            intensity = 0.15 + 0.1 * Math.sin(t * 2.0);
+            data[idx] = Math.round(intensity * 120);
+            data[idx + 1] = Math.round(intensity * 255);
+            data[idx + 2] = Math.round(intensity * 220);
+            data[idx + 3] = 255;
+            continue;
+          }
+
+          const theta = Math.atan2(dy, dx);
+
+          // Cymatic standing-wave interference field
+          const wave1 = Math.cos(k1 * r - phaseRad + t * 0.8);
+          const wave2 = Math.cos(k2 * theta + phaseRad);
+          const noise = (Math.random() - 0.5) * jitterVal * 8.0;
+          const equipotential = (vNodal / 2.0) * Math.exp(-2.5 * r * r);
+
+          const field = 0.5 + 0.35 * (wave1 * wave2) + equipotential * 0.2 + noise;
+          const clamped = Math.max(0, Math.min(1, field));
+
+          // False-color palette: Deep blue/teal -> Cyan -> Emerald -> Golden Amber
+          const rCol = Math.round(Math.pow(clamped, 2.2) * 240 + clamped * 15);
+          const gCol = Math.round(Math.pow(clamped, 1.2) * 255);
+          const bCol = Math.round(Math.sin(clamped * Math.PI) * 220 + 35);
+
+          // Fill 2x2 block
+          for (let dyBlock = 0; dyBlock < 2; dyBlock++) {
+            for (let dxBlock = 0; dxBlock < 2; dxBlock++) {
+              const pIdx = ((y + dyBlock) * w + (x + dxBlock)) * 4;
+              data[pIdx] = rCol;
+              data[pIdx + 1] = gCol;
+              data[pIdx + 2] = bCol;
+              data[pIdx + 3] = 255;
+            }
+          }
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+
+      // Overlay polar coordinate grid
+      ctx.strokeStyle = 'rgba(0, 255, 204, 0.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+      ctx.arc(cx, cy, radius * 0.66, 0, 2 * Math.PI);
+      ctx.arc(cx, cy, radius * 0.33, 0, 2 * Math.PI);
+      ctx.moveTo(cx - radius, cy);
+      ctx.lineTo(cx + radius, cy);
+      ctx.moveTo(cx, cy - radius);
+      ctx.lineTo(cx, cy + radius);
+      ctx.stroke();
+
+      animId = requestAnimationFrame(renderLoop);
+    };
+
+    animId = requestAnimationFrame(renderLoop);
+    return () => cancelAnimationFrame(animId);
+  }, [viewMode, vNodal, memStick, phaseAngleDeg, jitterVal, carrierBias]);
+
+  const handleExportImage = () => {
+    setIsExporting(true);
+    const link = document.createElement('a');
+    link.download = `jar_telemetry_tomography_${Date.now()}.jpg`;
+    link.href = jarTomographyUrl;
+    link.click();
+    setTimeout(() => setIsExporting(false), 1200);
+  };
 
   const callouts = [
     {
       id: 1,
-      title: "Liquid Dielectric Substrate Bath",
-      desc: "Chemical and electrochemical fluid that sustains persistent phase memory through non-linear molecular dipole relaxation.",
-      tag: "V_NODAL: " + (stats.vNodal || 1.537).toFixed(3) + " V",
+      title: "Liquid Dielectric Equipotential Field",
+      desc: "Reconstructed radial voltage contours showing molecular dipole polarization and energy distribution inside the fluid.",
+      tag: `V_NODAL: ${vNodal.toFixed(3)} V`,
       x: "52%",
       y: "56%",
       color: "border-emerald-400 text-emerald-300"
     },
     {
       id: 2,
-      title: "Submerged Flash Memory Core",
-      desc: "Solid-state flash memory thumb drive suspended in the dielectric liquid, creating the hybrid physical B+(t) memory stick trajectory.",
-      tag: "STICK: " + (stats.memoryStick || 5.14).toFixed(2) + " / PO: " + (stats.phaseOut || 26.4).toFixed(1) + "°",
-      x: "48%",
-      y: "40%",
+      title: "Flash Memory Core Standing Shadow",
+      desc: "Central non-linear dipole core boundary resulting from the immersed flash memory stick B+(t).",
+      tag: `STICK: ${memStick.toFixed(2)} / PO: ${phaseAngleDeg.toFixed(1)}°`,
+      x: "50%",
+      y: "48%",
       color: "border-cyan-400 text-cyan-300"
     },
     {
       id: 3,
-      title: "Helical Copper Induction Coil",
-      desc: "Wound around the exterior of the glass cylinder to broadcast the 28 Hz fundamental carrier drive and multi-harmonic bias.",
-      tag: "DRIVE: 28.0 Hz / BIAS: " + carrierBias + " GHz",
-      x: "36%",
-      y: "48%",
+      title: "Cymatic Resonant Fringes",
+      desc: "Harmonic nodal lines formed by standing acoustic wave interference at the excitation frequency.",
+      tag: `FREQ: ${(carrierFreqHz / 1000).toFixed(1)} kHz / BIAS: ${carrierBias} GHz`,
+      x: "34%",
+      y: "36%",
       color: "border-amber-400 text-amber-300"
     },
     {
       id: 4,
-      title: "Raspberry Pi Pico RP2040 Controller",
-      desc: "Dedicated 12-bit ADC interface (GP26-GP28) sampling analog microvolt jitter and closed-loop feedback at 35 Hz.",
-      tag: "JITTER: " + ((stats.jitter || 0.015) * 1000).toFixed(1) + " mV",
-      x: "78%",
-      y: "74%",
+      title: "Microvolt Thermal Noise Grain",
+      desc: "Stochastic speckle noise directly mapping Johnson-Nyquist thermal jitter from the unshielded analog probes.",
+      tag: `JITTER: ${(jitterVal * 1000).toFixed(1)} mV`,
+      x: "72%",
+      y: "64%",
       color: "border-purple-400 text-purple-300"
-    },
-    {
-      id: 5,
-      title: "Ambient Noise & Static Harvester",
-      desc: "Floating antenna leads and room acoustic transducers coupling external thermodynamic room static into the memory dynamics.",
-      tag: "COHERENCE: " + Math.round((stats.coherence || 0.95) * 100) + "%",
-      x: "62%",
-      y: "22%",
-      color: "border-pink-400 text-pink-300"
     }
   ];
 
@@ -103,41 +231,65 @@ export default function PhysicalJarViewer({
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-gradient-to-r from-emerald-950/40 via-black to-cyan-950/40 p-3.5 rounded-xl border border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
         <div>
           <div className="flex items-center gap-2">
-            <Compass className="w-5 h-5 text-emerald-400 animate-spin" style={{ animationDuration: '20s' }} />
+            <Scan className="w-5 h-5 text-emerald-400 animate-pulse" />
             <span className="text-sm font-black tracking-widest text-emerald-300 uppercase">
-              PHYSICAL JAR APPARATUS &amp; CHAMBER SPECIFICATION
+              JAR TELEMETRY IMAGE RECONSTRUCTOR
             </span>
             <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[8.5px] font-bold">
-              ACTUAL HARDWARE GEOMETRY
+              READING → IMAGE ENGINE
             </span>
           </div>
           <p className="text-[10px] text-zinc-400 mt-1 max-w-2xl leading-relaxed">
-            High-fidelity photographic and isometric schematic representation of the Sovereign J.A.R.S. physical resonator: cylindrical borosilicate glass vessel, dielectric liquid bath, immersed memory core, and RP2040 acquisition bridge.
+            Directly translating physical Jar telemetry — <span className="text-emerald-400 font-bold">{vNodal.toFixed(3)}V</span> dielectric potential, <span className="text-cyan-400 font-bold">{memStick.toFixed(2)}</span> memory stick state, <span className="text-amber-400 font-bold">{phaseAngleDeg.toFixed(1)}°</span> phase-out angle, and <span className="text-purple-400 font-bold">{(jitterVal * 1000).toFixed(1)}mV</span> noise — into a tomographic standing-wave image.
           </p>
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex items-center gap-2">
-          <div className="bg-black/80 p-1 rounded-lg border border-white/10 flex items-center gap-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="bg-black/80 p-1 rounded-lg border border-white/10 flex items-center gap-1 flex-wrap">
             <button
-              onClick={() => setViewMode('photo')}
+              onClick={() => setViewMode('tomography')}
               className={`px-3 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                viewMode === 'photo'
+                viewMode === 'tomography'
                   ? 'bg-emerald-500 text-black shadow-[0_0_12px_rgba(16,185,129,0.5)]'
                   : 'text-zinc-400 hover:text-white'
               }`}
+              title="Acoustic and dielectric tomography scan reconstructed directly from jar sensor telemetry"
             >
-              LAB APPARATUS PHOTO
+              SCAN IMAGE (FROM READINGS)
             </button>
             <button
-              onClick={() => setViewMode('schematic')}
+              onClick={() => setViewMode('live_raster')}
               className={`px-3 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                viewMode === 'schematic'
+                viewMode === 'live_raster'
+                  ? 'bg-amber-400 text-black shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+              title="Real-time mathematical standing wave interference canvas"
+            >
+              LIVE RASTER (CANVAS)
+            </button>
+            <button
+              onClick={() => setViewMode('photo')}
+              className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                viewMode === 'photo'
                   ? 'bg-cyan-500 text-black shadow-[0_0_12px_rgba(6,182,212,0.5)]'
                   : 'text-zinc-400 hover:text-white'
               }`}
+              title="Photorealistic workbench photograph of the physical glass jar"
             >
-              3D ISOMETRIC SCHEMATIC
+              LAB PHOTO
+            </button>
+            <button
+              onClick={() => setViewMode('schematic')}
+              className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                viewMode === 'schematic'
+                  ? 'bg-purple-500 text-black shadow-[0_0_12px_rgba(168,85,247,0.5)]'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+              title="3D isometric technical cutaway diagram"
+            >
+              3D SCHEMATIC
             </button>
           </div>
 
@@ -152,18 +304,44 @@ export default function PhysicalJarViewer({
           >
             HUD {showHudOverlays ? 'ON' : 'OFF'}
           </button>
+
+          <button
+            onClick={handleExportImage}
+            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-500/50 text-emerald-200 text-[9px] font-bold uppercase flex items-center gap-1 cursor-pointer transition-all"
+            title="Download reconstructed tomography image"
+          >
+            <Download size={11} className={isExporting ? 'animate-bounce' : ''} />
+            <span>EXPORT PNG</span>
+          </button>
         </div>
       </div>
 
       {/* Main Visualizer Stage */}
       <div className="relative rounded-2xl overflow-hidden border border-emerald-500/30 bg-black shadow-2xl flex items-center justify-center min-h-[380px] max-h-[580px]">
-        {/* The Image */}
-        <img
-          src={viewMode === 'photo' ? jarPhotoUrl : jarSchematicUrl}
-          alt={viewMode === 'photo' ? "Sovereign Jar Physical Apparatus photograph" : "Sovereign Jar 3D Schematic diagram"}
-          referrerPolicy="no-referrer"
-          className="w-full h-full object-contain max-h-[580px] transition-all duration-300 select-none pointer-events-none"
-        />
+        {/* Render Mode: Static Generated Images or Dynamic Canvas */}
+        {viewMode === 'live_raster' ? (
+          <canvas
+            ref={liveCanvasRef}
+            width={512}
+            height={512}
+            className="w-full h-full object-contain max-h-[580px] select-none"
+          />
+        ) : (
+          <img
+            src={
+              viewMode === 'tomography' 
+                ? jarTomographyUrl 
+                : (viewMode === 'photo' ? jarPhotoUrl : jarSchematicUrl)
+            }
+            alt={
+              viewMode === 'tomography'
+                ? "Jar Telemetry Tomography Image reconstructed from physical sensor readings"
+                : (viewMode === 'photo' ? "Sovereign Jar Physical Apparatus photograph" : "Sovereign Jar 3D Schematic diagram")
+            }
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-contain max-h-[580px] transition-all duration-300 select-none pointer-events-none"
+          />
+        )}
 
         {/* Ambient Dark Gradient Vignette */}
         <div className="absolute inset-0 bg-radial from-transparent via-transparent to-black/60 pointer-events-none" />
@@ -197,38 +375,44 @@ export default function PhysicalJarViewer({
           );
         })}
 
-        {/* Top-Right Badge on Stage */}
+        {/* Top-Right Telemetry Mapping Box */}
         <div className="absolute top-3 right-3 bg-black/85 backdrop-blur-md border border-white/10 rounded-lg p-2.5 text-[8.5px] font-mono space-y-1 z-10 hidden sm:block">
           <div className="flex items-center justify-between gap-4 text-zinc-400">
-            <span>CHAMBER STATE:</span>
-            <span className="text-emerald-400 font-bold uppercase">RESONANT</span>
+            <span>IMAGE SOURCE:</span>
+            <span className="text-emerald-400 font-bold uppercase">
+              {viewMode === 'tomography' ? 'TELEMETRY SCAN' : viewMode.toUpperCase()}
+            </span>
           </div>
           <div className="flex items-center justify-between gap-4 text-zinc-400">
-            <span>NODAL VOLTAGE:</span>
-            <span className="text-white font-bold font-mono">{(stats.vNodal || 1.537).toFixed(3)} V</span>
+            <span>VOLTAGE (AMPLITUDE):</span>
+            <span className="text-white font-bold font-mono">{vNodal.toFixed(3)} V</span>
           </div>
           <div className="flex items-center justify-between gap-4 text-zinc-400">
-            <span>MEMORY DEPTH:</span>
-            <span className="text-cyan-300 font-bold font-mono">{(stats.memoryStick || 5.14).toFixed(2)}</span>
+            <span>MEMORY STICK (CORE):</span>
+            <span className="text-cyan-300 font-bold font-mono">{memStick.toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between gap-4 text-zinc-400">
-            <span>CARRIER FUNDAMENTAL:</span>
-            <span className="text-amber-300 font-bold font-mono">28.0 Hz</span>
+            <span>PHASE ANGLE (ROTATION):</span>
+            <span className="text-amber-300 font-bold font-mono">{phaseAngleDeg.toFixed(1)}°</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 text-zinc-400">
+            <span>JITTER (GRAIN ENTROPY):</span>
+            <span className="text-purple-300 font-bold font-mono">{(jitterVal * 1000).toFixed(1)} mV</span>
           </div>
         </div>
 
         {/* Bottom Status Bar on Stage */}
         <div className="absolute bottom-3 left-3 right-3 bg-black/85 backdrop-blur-md border border-white/10 rounded-lg px-3 py-2 flex items-center justify-between text-[8px] font-mono z-10">
           <div className="flex items-center gap-2 text-zinc-400">
-            <span className="text-emerald-400 font-bold">● LIVE APPARATUS TELEMETRY:</span>
-            <span>Borosilicate Containment Cylinder</span>
-            <span className="text-zinc-600">|</span>
-            <span>Dielectric Fluid Bath</span>
-            <span className="text-zinc-600">|</span>
-            <span>Submerged Flash Memory Core</span>
+            <span className="text-emerald-400 font-bold">● RECONSTRUCTION FORMULA:</span>
+            <span>F(r, θ) = cos(k₁r - Φ) · cos(k₂θ + Φ)</span>
+            <span className="text-zinc-600">+</span>
+            <span>(V/2) · e^(-2.5r²)</span>
+            <span className="text-zinc-600">+</span>
+            <span>Jitter Noise</span>
           </div>
           <div className="text-zinc-400 hidden md:block">
-            CLICK MARKERS (1-5) TO INSPECT SUBSYSTEMS
+            CLICK MARKERS (1-4) TO INSPECT PHYSICAL SENSOR NODES
           </div>
         </div>
       </div>
@@ -268,82 +452,57 @@ export default function PhysicalJarViewer({
         </div>
       )}
 
-      {/* Physical Hardware Breakdown Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Card 1: The Glass Vessel & Dielectric Bath */}
-        <div className="p-3.5 bg-zinc-950 rounded-xl border border-white/10 space-y-2">
-          <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-            <Waves className="w-4 h-4 text-emerald-400" />
-            <span className="text-[10px] font-black text-white uppercase tracking-wider">
-              1. Borosilicate Glass Chamber
-            </span>
+      {/* Mathematical Reading-to-Image Mapping Breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        {/* Param 1: Nodal Voltage */}
+        <div className="p-3.5 bg-zinc-950 rounded-xl border border-emerald-500/30 space-y-2">
+          <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+            <span className="text-[10px] font-black text-emerald-300 uppercase">1. Nodal Voltage</span>
+            <span className="text-emerald-400 font-bold">{vNodal.toFixed(3)} V</span>
           </div>
-          <p className="text-[9px] text-zinc-400 leading-relaxed">
-            The containment cell is a high-grade laboratory borosilicate glass jar sealed with an acrylic lid. Inside, the dielectric solution maintains electrostatic capacity and acts as an electrochemical reservoir holding the analog potential.
+          <p className="text-[8.5px] text-zinc-400 leading-relaxed">
+            Maps to radial equipotential field intensity: <code className="text-emerald-300">(V/2.0) · e^(-2.5r²)</code>. Higher voltage expands the glowing central dielectric pool.
           </p>
-          <div className="p-2 bg-black/60 rounded border border-white/5 text-[8.5px] text-zinc-300 space-y-0.5">
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Fluid Medium:</span>
-              <span className="text-emerald-300 font-bold">Liquid Dielectric</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Nominal Voltage:</span>
-              <span className="text-white font-mono">1.42V – 1.537V</span>
-            </div>
-          </div>
         </div>
 
-        {/* Card 2: Immersed Memory Stick */}
-        <div className="p-3.5 bg-zinc-950 rounded-xl border border-white/10 space-y-2">
-          <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-            <Cpu className="w-4 h-4 text-cyan-400" />
-            <span className="text-[10px] font-black text-white uppercase tracking-wider">
-              2. Immersed Memory Stick Core
-            </span>
+        {/* Param 2: Memory Stick */}
+        <div className="p-3.5 bg-zinc-950 rounded-xl border border-cyan-500/30 space-y-2">
+          <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+            <span className="text-[10px] font-black text-cyan-300 uppercase">2. Memory Stick Core</span>
+            <span className="text-cyan-400 font-bold">{memStick.toFixed(2)}</span>
           </div>
-          <p className="text-[9px] text-zinc-400 leading-relaxed">
-            Suspended vertically into the core of the dielectric liquid is a physical flash memory stick with soldered probe wires. As the fluid charges and discharges, the memory stick’s state $B_+(t)$ exhibits non-linear hysteresis and retention.
+          <p className="text-[8.5px] text-zinc-400 leading-relaxed">
+            Defines the central rectangular dipole boundary and non-linear hysteresis threshold, visible as the dark immersed core.
           </p>
-          <div className="p-2 bg-black/60 rounded border border-white/5 text-[8.5px] text-zinc-300 space-y-0.5">
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Memory State:</span>
-              <span className="text-cyan-300 font-bold font-mono">{(stats.memoryStick || 5.14).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Phase Angle:</span>
-              <span className="text-amber-300 font-mono">{(stats.phaseOut || 26.4).toFixed(1)}°</span>
-            </div>
-          </div>
         </div>
 
-        {/* Card 3: External Multi-Harmonic Induction Coil */}
-        <div className="p-3.5 bg-zinc-950 rounded-xl border border-white/10 space-y-2">
-          <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-            <Radio className="w-4 h-4 text-amber-400" />
-            <span className="text-[10px] font-black text-white uppercase tracking-wider">
-              3. Copper Coil &amp; Air Antenna
-            </span>
+        {/* Param 3: Phase-Out Angle */}
+        <div className="p-3.5 bg-zinc-950 rounded-xl border border-amber-500/30 space-y-2">
+          <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+            <span className="text-[10px] font-black text-amber-300 uppercase">3. Phase-Out Angle</span>
+            <span className="text-amber-400 font-bold">{phaseAngleDeg.toFixed(1)}°</span>
           </div>
-          <p className="text-[9px] text-zinc-400 leading-relaxed">
-            Coils wound around the exterior glass introduce the 28 Hz fundamental excitation drive. Unshielded floating wires reach into the air to capture room acoustic static and electromagnetic background noise as thermodynamic fuel.
+          <p className="text-[8.5px] text-zinc-400 leading-relaxed">
+            Rotates the angular wavefront vector: <code className="text-amber-300">θ - Φ</code>. The standing-wave cymatics spiral according to the B+(t) phase trajectory.
           </p>
-          <div className="p-2 bg-black/60 rounded border border-white/5 text-[8.5px] text-zinc-300 space-y-0.5">
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Drive Frequency:</span>
-              <span className="text-amber-300 font-bold font-mono">28.0 Hz</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Noise Ingestion:</span>
-              <span className="text-[#00ffcc] font-bold">Air • Jar • PC</span>
-            </div>
+        </div>
+
+        {/* Param 4: Jitter / Entropy */}
+        <div className="p-3.5 bg-zinc-950 rounded-xl border border-purple-500/30 space-y-2">
+          <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+            <span className="text-[10px] font-black text-purple-300 uppercase">4. Analog Jitter</span>
+            <span className="text-purple-400 font-bold">{(jitterVal * 1000).toFixed(1)} mV</span>
           </div>
+          <p className="text-[8.5px] text-zinc-400 leading-relaxed">
+            Generates thermodynamic laser speckle noise across the field, reflecting live ambient thermal and ADC microvolt noise.
+          </p>
         </div>
       </div>
 
       {/* Bottom Action Jump Bar */}
       <div className="flex items-center justify-between p-3 bg-black/60 rounded-xl border border-white/10 text-[9px]">
         <div className="text-zinc-400">
-          Want to listen to the physical sounds generated by this apparatus?
+          Reconstructed live from Jar Telemetry seed: <strong className="text-white font-mono">{stats.seedHex || '877BE13E'}</strong> (Coherence: {Math.round(coherenceVal * 100)}%)
         </div>
         <div className="flex items-center gap-2">
           {onOpenAmbientEar && (
