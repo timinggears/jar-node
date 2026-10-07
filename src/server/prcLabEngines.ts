@@ -1967,10 +1967,164 @@ export class SubstrateNodeMeshAttestationEngine {
   }
 }
 
+// ============================================================================
+// 6. AMBIENT SIGNAL HARVESTER ENGINE (AIR, JAR, PC & COSMIC NOISE MESH)
+// ============================================================================
+
+export interface AmbientSignalNodeData {
+  id: string;
+  name: string;
+  source: 'air' | 'jar' | 'pc' | 'cosmic' | 'rf';
+  frequencyHz: number;
+  rmsPowerDb: number;
+  entropyBits: number;
+  couplingWeight: number;
+  gain: number;
+  status: 'listening' | 'resonant' | 'stochastic_lock';
+  lastSeen: number;
+  sampleCount: number;
+  waveform?: number[];
+}
+
+export class AmbientSignalHarvesterEngine {
+  private nodes: Map<string, AmbientSignalNodeData> = new Map();
+  private signalHistory: Array<{ timestamp: number; source: string; value: number }> = [];
+  private maxHistory = 1000;
+
+  constructor() {
+    this.seedDefaultNodes();
+  }
+
+  private seedDefaultNodes() {
+    const defaults: AmbientSignalNodeData[] = [
+      {
+        id: 'node_air_01',
+        name: 'AERO_MIC_01 (Room Acoustic Static)',
+        source: 'air',
+        frequencyHz: 142.5,
+        rmsPowerDb: -34.2,
+        entropyBits: 7.82,
+        couplingWeight: 0.75,
+        gain: 1.2,
+        status: 'listening',
+        lastSeen: Date.now(),
+        sampleCount: 1420
+      },
+      {
+        id: 'node_jar_01',
+        name: 'VESSEL_NODAL_01 (Dielectric Memory Stick)',
+        source: 'jar',
+        frequencyHz: 28000.0,
+        rmsPowerDb: -18.5,
+        entropyBits: 8.65,
+        couplingWeight: 0.95,
+        gain: 1.5,
+        status: 'resonant',
+        lastSeen: Date.now(),
+        sampleCount: 5210
+      },
+      {
+        id: 'node_pc_01',
+        name: 'SILICON_JITTER_01 (PC Event-Loop Timing)',
+        source: 'pc',
+        frequencyHz: 1250.0,
+        rmsPowerDb: -42.8,
+        entropyBits: 6.94,
+        couplingWeight: 0.50,
+        gain: 0.9,
+        status: 'listening',
+        lastSeen: Date.now(),
+        sampleCount: 3890
+      },
+      {
+        id: 'node_cosmic_01',
+        name: 'EM_STATIC_01 (Atmospheric RF Harvester)',
+        source: 'cosmic',
+        frequencyHz: 84000.0,
+        rmsPowerDb: -49.1,
+        entropyBits: 9.12,
+        couplingWeight: 0.60,
+        gain: 1.0,
+        status: 'stochastic_lock',
+        lastSeen: Date.now(),
+        sampleCount: 8840
+      }
+    ];
+
+    defaults.forEach(n => this.nodes.set(n.id, n));
+  }
+
+  public registerOrUpdateNode(node: Partial<AmbientSignalNodeData> & { id: string; name?: string; source?: 'air' | 'jar' | 'pc' | 'cosmic' | 'rf' }): AmbientSignalNodeData {
+    const existing = this.nodes.get(node.id);
+    const updated: AmbientSignalNodeData = {
+      id: node.id,
+      name: node.name || existing?.name || `Listening Node [${node.id}]`,
+      source: (node.source || existing?.source || 'pc') as any,
+      frequencyHz: node.frequencyHz ?? existing?.frequencyHz ?? 1000,
+      rmsPowerDb: node.rmsPowerDb ?? existing?.rmsPowerDb ?? -40,
+      entropyBits: node.entropyBits ?? existing?.entropyBits ?? 7.5,
+      couplingWeight: node.couplingWeight ?? existing?.couplingWeight ?? 0.7,
+      gain: node.gain ?? existing?.gain ?? 1.0,
+      status: node.status ?? existing?.status ?? 'listening',
+      lastSeen: Date.now(),
+      sampleCount: (existing?.sampleCount || 0) + 1,
+      waveform: node.waveform || existing?.waveform
+    };
+    this.nodes.set(node.id, updated);
+    return updated;
+  }
+
+  public ingestSample(source: 'air' | 'jar' | 'pc' | 'cosmic' | 'rf', value: number, frequencyHz?: number, entropyBits?: number, nodeId?: string): AmbientSignalNodeData {
+    this.signalHistory.push({ timestamp: Date.now(), source, value });
+    if (this.signalHistory.length > this.maxHistory) {
+      this.signalHistory.shift();
+    }
+
+    const targetId = nodeId || `node_${source}_01`;
+    const existing = this.nodes.get(targetId);
+
+    const rms = Math.max(-90, Math.min(0, 20 * Math.log10(Math.abs(value) + 1e-5)));
+    const entropy = entropyBits ?? (7.0 + Math.abs(value % 2.0));
+
+    return this.registerOrUpdateNode({
+      id: targetId,
+      source,
+      rmsPowerDb: parseFloat(rms.toFixed(1)),
+      frequencyHz: frequencyHz ?? existing?.frequencyHz ?? (source === 'jar' ? 28000 : 1200),
+      entropyBits: parseFloat(entropy.toFixed(2)),
+      status: Math.abs(value) > 1.2 ? 'resonant' : 'listening'
+    });
+  }
+
+  public getAllNodes(): AmbientSignalNodeData[] {
+    return Array.from(this.nodes.values());
+  }
+
+  public getSignalSummary() {
+    const nodes = this.getAllNodes();
+    const totalEntropy = nodes.reduce((acc, n) => acc + n.entropyBits, 0) / (nodes.length || 1);
+    const meanRms = nodes.reduce((acc, n) => acc + n.rmsPowerDb, 0) / (nodes.length || 1);
+    return {
+      nodeCount: nodes.length,
+      meanEntropyBits: parseFloat(totalEntropy.toFixed(2)),
+      meanRmsPowerDb: parseFloat(meanRms.toFixed(1)),
+      nodes,
+      historyCount: this.signalHistory.length,
+      timestamp: Date.now()
+    };
+  }
+
+  public dropNode(nodeId: string): boolean {
+    return this.nodes.delete(nodeId);
+  }
+}
+
 // Export singletons for use in server.ts
 export const esnEngine = new EchoStateNetworkEngine();
 export const hysteresisEngine = new SubstrateHysteresisEngine();
 export const entropyOracle = new PhysicalEntropyOracleEngine();
 export const quantumCipherEngine = new QuantumReservoirCipherEngine();
 export const nodeMeshEngine = new SubstrateNodeMeshAttestationEngine();
+export const ambientSignalEngine = new AmbientSignalHarvesterEngine();
+
 

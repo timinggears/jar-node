@@ -356,6 +356,14 @@ def main():
                     )
                     try:
                         sio.emit("hardware:telemetry_input", enriched_line)
+                        if random.random() < 0.2:
+                            sio.emit("signal:external", {
+                                "source": "jar",
+                                "value": v,
+                                "frequencyHz": 28000.0,
+                                "entropyBits": round(8.4 + jitter * 10.0, 2),
+                                "nodeId": "bridge_jar_node"
+                            })
                         if random.random() < 0.01:
                             sio.emit("hardware:log_input", f"PYTHON_BRIDGE: Emulated Pico telemetry pipeline running on bias {virtual_bias:.1f} GHz.")
                     except Exception:

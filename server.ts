@@ -10,7 +10,7 @@ import { spawn, ChildProcess } from 'child_process';
 import os from 'os';
 import * as glob from 'glob';
 import { GoogleGenAI } from '@google/genai';
-import { esnEngine, hysteresisEngine, entropyOracle, quantumCipherEngine, nodeMeshEngine } from './src/server/prcLabEngines.ts';
+import { esnEngine, hysteresisEngine, entropyOracle, quantumCipherEngine, nodeMeshEngine, ambientSignalEngine } from './src/server/prcLabEngines.ts';
 import { 
   executeQuantumJarStep, 
   generateQuantumWaveformBatch, 
@@ -1198,6 +1198,18 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         epoch: nodeMeshEngine.getCurrentEpoch(),
         secretFingerprint: nodeMeshEngine.getMasterAttestationFingerprint()
       });
+    });
+
+    // Ambient Signal Harvesting Socket Events (Air, Jar, PC, Cosmic Nodes)
+    socket.on('signal:external', (data: any) => {
+      const { source = 'pc', value = 0, frequencyHz, entropyBits, nodeId } = data || {};
+      const node = ambientSignalEngine.ingestSample(source, Number(value), frequencyHz, entropyBits, nodeId);
+      socket.broadcast.emit('signal:external_sample', node);
+    });
+
+    socket.on('signal:deploy_node', (nodeData: any) => {
+      const node = ambientSignalEngine.registerOrUpdateNode(nodeData);
+      io.emit('signal:node_deployed', node);
     });
 
     socket.on('disconnect', () => {
@@ -2692,6 +2704,79 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
 
       const signature = nodeMeshEngine.generateAttestationSignature(nodeId, epoch, carrierBias, frequency, nonce);
       res.json({ success: true, nodeId, signature, epoch });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // --- 6. AMBIENT SIGNAL HARVESTING & EXTERNAL SENSOR NODES API ---
+  // Ingest external signals from Air (mic), Jar (dielectric), PC (CPU jitter), or Cosmic/RF static
+  app.post('/api/signals/external', (req, res) => {
+    try {
+      const { source = 'pc', value = 0.5, frequencyHz, entropyBits, nodeId } = req.body || {};
+      const node = ambientSignalEngine.ingestSample(source, Number(value), frequencyHz ? Number(frequencyHz) : undefined, entropyBits ? Number(entropyBits) : undefined, nodeId);
+      
+      io.emit('signal:external_sample', node);
+
+      res.json({ success: true, node });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Get external signals summary and all listening nodes
+  app.get('/api/signals/external', (req, res) => {
+    try {
+      const summary = ambientSignalEngine.getSignalSummary();
+      res.json({ success: true, ...summary });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Deploy / register a new external listening node
+  app.post('/api/signals/nodes/deploy', (req, res) => {
+    try {
+      const { id, name, source = 'pc', frequencyHz = 1000, gain = 1.0, couplingWeight = 0.7 } = req.body || {};
+      const targetId = id || `node_${source}_${Date.now()}`;
+      const node = ambientSignalEngine.registerOrUpdateNode({
+        id: targetId,
+        name: name || `Node ${targetId}`,
+        source,
+        frequencyHz: Number(frequencyHz),
+        gain: Number(gain),
+        couplingWeight: Number(couplingWeight),
+        status: 'listening'
+      });
+
+      io.emit('signal:node_deployed', node);
+      const logMsg = `[SIGNAL_HARVESTER]: Deployed external listening node '${node.name}' [Source: ${node.source.toUpperCase()}].`;
+      io.emit('log', logMsg);
+
+      res.json({ success: true, node });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Get all listening nodes
+  app.get('/api/signals/nodes', (req, res) => {
+    try {
+      const nodes = ambientSignalEngine.getAllNodes();
+      res.json({ success: true, nodes });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Decommission / drop a listening node
+  app.post('/api/signals/nodes/drop', (req, res) => {
+    try {
+      const { id } = req.body || {};
+      if (!id) return res.status(400).json({ success: false, error: 'Missing node id' });
+      const dropped = ambientSignalEngine.dropNode(id);
+      io.emit('signal:node_dropped', { id });
+      res.json({ success: true, dropped });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

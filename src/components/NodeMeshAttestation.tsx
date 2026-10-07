@@ -29,16 +29,18 @@ import {
   Layers, 
   HelpCircle,
   Eye,
-  Crosshair
+  Crosshair,
+  Headphones
 } from 'lucide-react';
 import { AttestedNode } from '../types';
 
 interface NodeMeshProps {
   onLog?: (msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   onOpenCipherLab?: () => void;
+  onOpenAmbientMesh?: () => void;
 }
 
-export default function NodeMeshAttestation({ onLog, onOpenCipherLab }: NodeMeshProps) {
+export default function NodeMeshAttestation({ onLog, onOpenCipherLab, onOpenAmbientMesh }: NodeMeshProps) {
   const [nodes, setNodes] = useState<AttestedNode[]>([]);
   const [onlineCount, setOnlineCount] = useState<number>(4);
   const [epoch, setEpoch] = useState<number>(0);
@@ -233,6 +235,17 @@ export default function NodeMeshAttestation({ onLog, onOpenCipherLab }: NodeMesh
             >
               <Lock size={12} className="text-[#00ffcc]" />
               <span>CIPHER LAB ↗</span>
+            </button>
+          )}
+
+          {onOpenAmbientMesh && (
+            <button
+              onClick={onOpenAmbientMesh}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-600/25 hover:bg-cyan-600/40 text-cyan-200 border border-cyan-500/50 font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_12px_rgba(6,182,212,0.3)] active:scale-95"
+              title="Open Ambient Signal Mesh & Ear Monitor (Air • Jar • PC)"
+            >
+              <Headphones size={12} className="text-cyan-400" />
+              <span>EAR MONITOR ↗</span>
             </button>
           )}
         </div>

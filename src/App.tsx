@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check, Headphones } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import StatsGrid from './components/StatsGrid';
@@ -31,6 +31,7 @@ import QuantumCipherLab from './components/QuantumCipherLab';
 import NodeMeshAttestation from './components/NodeMeshAttestation';
 import PhaseDynamicsLab from './components/PhaseDynamicsLab';
 import QiskitQuantumLab from './components/QiskitQuantumLab';
+import AmbientSignalMesh from './components/AmbientSignalMesh';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -52,6 +53,7 @@ const QuantumCipherLabMemo = memo(QuantumCipherLab);
 const NodeMeshAttestationMemo = memo(NodeMeshAttestation);
 const PhaseDynamicsLabMemo = memo(PhaseDynamicsLab);
 const QiskitQuantumLabMemo = memo(QiskitQuantumLab);
+const AmbientSignalMeshMemo = memo(AmbientSignalMesh);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -143,8 +145,8 @@ export default function App() {
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
   // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>(['ascii_reservoir', 'substrate_io', 'quantum_cipher', 'node_mesh', 'phase_lab']);
-  const [activeWindow, setActiveWindow] = useState<string | null>('node_mesh');
+  const [openWindows, setOpenWindows] = useState<string[]>(['ambient_mesh', 'ascii_reservoir', 'substrate_io', 'quantum_cipher', 'node_mesh', 'phase_lab']);
+  const [activeWindow, setActiveWindow] = useState<string | null>('ambient_mesh');
   const [onlineNodeCount, setOnlineNodeCount] = useState<number>(4);
   const [phaseModel, setPhaseModel] = useState<'modified' | 'original'>('modified');
   const phaseModelRef = useRef<'modified' | 'original'>('modified');
@@ -1822,6 +1824,39 @@ export default function App() {
                 }
                 setActiveWindow('quantum_cipher');
               }}
+              onOpenAmbientMesh={() => {
+                if (!openWindows.includes('ambient_mesh')) {
+                  setOpenWindows(prev => [...prev, 'ambient_mesh']);
+                }
+                setActiveWindow('ambient_mesh');
+              }}
+            />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('ambient_mesh') && (
+          <DesktopWindow 
+            key="ambient_mesh"
+            id="ambient_mesh" 
+            title="AMBIENT_SIGNAL_MESH // EXTERNAL LISTENING NODES & ACOUSTIC-RF EAR MONITOR" 
+            icon={<Headphones size={16} className="text-cyan-400" />}
+            onClose={() => closeWindow('ambient_mesh')}
+            onFocus={() => setActiveWindow('ambient_mesh')}
+            isActive={activeWindow === 'ambient_mesh'}
+            initialPos={{ x: 110, y: 46 }}
+            width="w-[1040px] max-w-[98vw]"
+            height="h-[730px] max-h-[94vh]"
+          >
+            <AmbientSignalMeshMemo
+              stats={stats}
+              carrierBias={carrierBias}
+              onLog={addLog}
+              onOpenPhaseLab={() => {
+                if (!openWindows.includes('phase_lab')) {
+                  setOpenWindows(prev => [...prev, 'phase_lab']);
+                }
+                setActiveWindow('phase_lab');
+              }}
             />
           </DesktopWindow>
         )}
@@ -1992,6 +2027,19 @@ export default function App() {
                 {pingMs}ms
               </span>
             )}
+          </button>
+
+          {/* Ambient Signal Ear & External Sensor Nodes Button */}
+          <button 
+            onClick={() => toggleWindow('ambient_mesh')}
+            className="flex items-center gap-1.5 bg-cyan-950/70 hover:bg-cyan-900/90 text-cyan-200 border border-cyan-400/60 hover:border-cyan-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(6,182,212,0.3)] shrink-0"
+            title="Open Ambient Signal Mesh & External Sensor Ear: Hear what is in the Air (mic/acoustic), the Jar (28Hz dielectric sub-bass), and the PC (silicon timing jitter)"
+          >
+            <Headphones size={9} className="text-cyan-400 animate-pulse" />
+            <span>AMBIENT_EAR</span>
+            <span className="text-[7px] text-[#00ffcc] font-mono bg-cyan-500/20 px-1 py-0.2 rounded border border-cyan-400/30">
+              AIR•JAR•PC
+            </span>
           </button>
 
           {/* Phase-Out & Memory Stick Dynamics Lab Button */}
