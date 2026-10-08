@@ -101,16 +101,38 @@ export default function PhaseDynamicsLab({
     }
   };
 
+  const statsRef = useRef(stats);
+  useEffect(() => {
+    statsRef.current = stats;
+  }, [stats]);
+
+  const carrierBiasRef = useRef(carrierBias);
+  useEffect(() => {
+    carrierBiasRef.current = carrierBias;
+  }, [carrierBias]);
+
   // Animation and physics simulation step
   useEffect(() => {
     let animId: number;
     let localMemory = liveMemory;
+    let lastRenderTime = 0;
+    let lastStateUpdateTime = 0;
 
-    const tick = () => {
+    const tick = (timestamp: number) => {
+      // Throttle oscilloscope render to ~30 FPS
+      if (timestamp - lastRenderTime < 32) {
+        animId = requestAnimationFrame(tick);
+        return;
+      }
+      lastRenderTime = timestamp;
+
+      const currentStats = statsRef.current;
+      const currentBias = carrierBiasRef.current;
+
       const t = Date.now() / 1000;
-      const v = driveActive ? (stats.vNodal || 1.42) : 0.08; // residual noise if drive cut
-      const jit = driveActive ? (stats.jitter || 0.02) : 0.005;
-      const b0 = driveActive ? Math.max(0.1, carrierBias / 50.0) : 0.0;
+      const v = driveActive ? (currentStats.vNodal || 1.42) : 0.08; // residual noise if drive cut
+      const jit = driveActive ? (currentStats.jitter || 0.02) : 0.005;
+      const b0 = driveActive ? Math.max(0.1, currentBias / 50.0) : 0.0;
 
       // Multi-Harmonic Field Drive:
       // B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]
@@ -120,7 +142,6 @@ export default function PhaseDynamicsLab({
       const h3 = Math.sin(2.0 * Math.PI * 84.0 * t);
       const h4 = Math.sin(2.0 * Math.PI * 112.0 * t);
       const bPlus = piSq * b0 * (h1 + h2 + h3 + h4);
-      setLiveBPlus(bPlus);
 
       let instant = 0;
       let osc = 0;
@@ -191,9 +212,14 @@ export default function PhaseDynamicsLab({
         }
       }
 
-      setLiveMemory(localMemory);
-      setLivePhaseOut(pOut);
-      setLiveCoherence(coh);
+      // Throttle React state dispatches to ~5 Hz (every 200ms) to prevent UI frame drops
+      if (timestamp - lastStateUpdateTime > 200) {
+        lastStateUpdateTime = timestamp;
+        setLiveMemory(localMemory);
+        setLivePhaseOut(pOut);
+        setLiveCoherence(coh);
+        setLiveBPlus(bPlus);
+      }
 
       // Record oscilloscope history
       const hist = historyRef.current;
@@ -217,7 +243,7 @@ export default function PhaseDynamicsLab({
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [model, driveActive, carrierBias, stats.vNodal, stats.jitter]);
+  }, [model, driveActive]);
 
   // Render Oscilloscope Canvas
   const drawOscilloscope = () => {

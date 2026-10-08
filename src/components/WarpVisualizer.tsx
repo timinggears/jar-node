@@ -252,9 +252,9 @@ export default function WarpVisualizer({
       const cells = planeGridRef.current;
       if (!cells || cells.length === 0) return;
 
-      // Continuously scan & excite 3 to 6 cells per tick across the 16x16 matrix in a traveling wave pattern
+      // Continuously scan & excite 2 to 4 cells per tick across the 16x16 matrix in a traveling wave pattern
       const rowSelect = stepCount % 16;
-      const count = 3 + Math.floor(Math.random() * 3);
+      const count = 2 + Math.floor(Math.random() * 2);
 
       for (let i = 0; i < count; i++) {
         const colSelect = Math.floor(Math.random() * 16);
@@ -269,7 +269,7 @@ export default function WarpVisualizer({
           cell.lastUpdated = Date.now();
         }
       }
-    }, 65); // ~15 Hz continuous block scanning read loop
+    }, 150); // Balanced continuous block scanning read loop
 
     return () => clearInterval(readInterval);
   }, []);
@@ -331,8 +331,16 @@ export default function WarpVisualizer({
 
     let animationId: number;
     let startTime = performance.now();
+    let lastDrawTime = 0;
 
     const draw = (time: number) => {
+      // Throttle background wallpaper canvas to ~30 FPS to relieve CPU/GPU for active windows
+      if (time - lastDrawTime < 32) {
+        animationId = requestAnimationFrame(draw);
+        return;
+      }
+      lastDrawTime = time;
+
       const container = containerRef.current;
       if (!container || !canvas) return;
 
@@ -430,13 +438,18 @@ export default function WarpVisualizer({
               // --- COLLAPSED DISCRETE PARTICLE BLOCK EVENT ---
               const alpha = Math.min(0.95, particleWeight * (systemCoh > 0.8 ? 1.15 : 1.0));
               ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${alpha})` : `rgba(0, 230, 180, ${alpha * 0.85})`;
-              ctx.shadowBlur = isCombined ? 16 : 8;
-              ctx.shadowColor = '#00ffcc';
+              if (isCombined) {
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = '#00ffcc';
+              } else {
+                ctx.shadowBlur = 0;
+              }
               ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2);
 
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 1.0;
               ctx.strokeRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2);
+              ctx.shadowBlur = 0;
 
               if (tokenStr) {
                 ctx.save();
@@ -445,8 +458,12 @@ export default function WarpVisualizer({
                 const fontPx = Math.max(7, Math.floor(cellSize * 0.48));
                 ctx.fillStyle = '#ffffff';
                 ctx.font = isCombined ? `900 ${fontPx + 2}px monospace` : `800 ${fontPx}px monospace`;
-                ctx.shadowBlur = 6;
-                ctx.shadowColor = '#00ffcc';
+                if (isCombined) {
+                  ctx.shadowBlur = 6;
+                  ctx.shadowColor = '#00ffcc';
+                } else {
+                  ctx.shadowBlur = 0;
+                }
                 ctx.fillText(tokenStr, cx + cellSize / 2, cy + cellSize / 2);
                 ctx.restore();
               }
@@ -626,13 +643,18 @@ export default function WarpVisualizer({
 
               const fillAlpha = Math.min(0.92, particleWeight * (systemCoh > 0.8 ? 1.15 : 1.0));
               ctx.fillStyle = isCombined ? `rgba(0, 255, 204, ${fillAlpha})` : `rgba(0, 230, 180, ${fillAlpha * 0.88})`;
-              ctx.shadowBlur = isCombined ? 18 : 10;
-              ctx.shadowColor = '#00ffcc';
+              if (isCombined) {
+                ctx.shadowBlur = 14;
+                ctx.shadowColor = '#00ffcc';
+              } else {
+                ctx.shadowBlur = 0;
+              }
               ctx.fill();
 
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 1.2;
               ctx.stroke();
+              ctx.shadowBlur = 0;
 
               // Character Token
               if (tokenStr) {
@@ -646,8 +668,12 @@ export default function WarpVisualizer({
 
                 ctx.fillStyle = '#ffffff';
                 ctx.font = isCombined ? `900 ${fontPx + 1}px monospace` : `800 ${fontPx}px monospace`;
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = '#00ffcc';
+                if (isCombined) {
+                  ctx.shadowBlur = 8;
+                  ctx.shadowColor = '#00ffcc';
+                } else {
+                  ctx.shadowBlur = 0;
+                }
                 ctx.fillText(tokenStr, cellCenterX, cellCenterY);
                 ctx.restore();
               }
@@ -718,7 +744,6 @@ export default function WarpVisualizer({
         }
       }
 
-      ctx.restore();
       ctx.restore();
 
       animationId = requestAnimationFrame(draw);

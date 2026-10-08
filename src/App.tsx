@@ -5,9 +5,10 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check, Headphones, Compass } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check, Headphones, Compass, ChevronDown } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
+import ErrorBoundary from './components/ErrorBoundary';
 import StatsGrid from './components/StatsGrid';
 import WarpVisualizer from './components/WarpVisualizer';
 import ConsoleLog from './components/ConsoleLog';
@@ -146,9 +147,10 @@ export default function App() {
   const [lastSyncSuccess, setLastSyncSuccess] = useState(false);
   const [hardwareState, setHardwareState] = useState<'disconnected' | 'bridged' | 'connected'>('disconnected');
 
-  // OS State
-  const [openWindows, setOpenWindows] = useState<string[]>(['jar_chamber', 'ambient_mesh', 'ascii_reservoir', 'substrate_io', 'quantum_cipher', 'node_mesh', 'phase_lab']);
+  // OS State - Defaulting to single focused workspace window for peak FPS and clean UI
+  const [openWindows, setOpenWindows] = useState<string[]>(['jar_chamber']);
   const [activeWindow, setActiveWindow] = useState<string | null>('jar_chamber');
+  const [showMoreLabs, setShowMoreLabs] = useState<boolean>(false);
   const [onlineNodeCount, setOnlineNodeCount] = useState<number>(4);
   const [phaseModel, setPhaseModel] = useState<'modified' | 'original'>('modified');
   const phaseModelRef = useRef<'modified' | 'original'>('modified');
@@ -964,20 +966,30 @@ export default function App() {
     };
 
     const onTelemetry = (line: string) => {
-      if (line.startsWith('!S|')) {
+      if (line && line.startsWith('!S|')) {
         setHardwareState(prev => prev !== 'connected' ? 'connected' : prev);
         const parts = line.split('|');
-        if (parts.length >= 6) {
-          const seedStr = parts[1];
-          const jitter = parseFloat(parts[2]);
-          const v = parseFloat(parts[3]);
-          const parity = parseInt(parts[4]);
-          const freq = parseFloat(parts[5]);
-          const hrate = parts[6] ? parseFloat(parts[6]) : 0;
-          const coherence = parts[7] ? parseFloat(parts[7]) : 0;
-          const depth = parts[8] ? parseFloat(parts[8]) : 0;
-          const gpuParity = parts[9] ? parseFloat(parts[9]) : 0;
-          const zpeLevel = parts[10] ? parseFloat(parts[10]) : 0;
+        if (parts.length >= 4) {
+          const seedStr = parts[1] || '000';
+          const rawJitter = parseFloat(parts[2]);
+          const rawV = parseFloat(parts[3]);
+          const rawParity = parseInt(parts[4]);
+          const rawFreq = parseFloat(parts[5]);
+          const rawHrate = parts[6] ? parseFloat(parts[6]) : 0;
+          const rawCoherence = parts[7] ? parseFloat(parts[7]) : 0.85;
+          const rawDepth = parts[8] ? parseFloat(parts[8]) : 1.0;
+          const rawGpuParity = parts[9] ? parseFloat(parts[9]) : 90;
+          const rawZpeLevel = parts[10] ? parseFloat(parts[10]) : 85;
+
+          const jitter = !isNaN(rawJitter) ? rawJitter : 0.015;
+          const v = !isNaN(rawV) ? rawV : 1.52;
+          const parity = !isNaN(rawParity) ? rawParity : 0;
+          const freq = !isNaN(rawFreq) ? rawFreq : 28000;
+          const hrate = !isNaN(rawHrate) ? rawHrate : 0;
+          const coherence = !isNaN(rawCoherence) ? Math.max(0, Math.min(1, rawCoherence)) : 0.85;
+          const depth = !isNaN(rawDepth) ? rawDepth : 1.0;
+          const gpuParity = !isNaN(rawGpuParity) ? rawGpuParity : 90;
+          const zpeLevel = !isNaN(rawZpeLevel) ? rawZpeLevel : 85;
           
           if (Date.now() % 5000 < 100) {
              console.log(`[JARS_CLIENT] Telemetry Recv: ${freq.toFixed(1)} GHz | ZPE: ${zpeLevel.toFixed(1)}%`);
@@ -1365,6 +1377,16 @@ export default function App() {
     });
   }, [activeWindow]);
 
+  const handleCleanWorkspace = useCallback(() => {
+    setOpenWindows(prev => {
+      if (activeWindow && prev.includes(activeWindow)) {
+        return [activeWindow];
+      }
+      return ['jar_chamber'];
+    });
+    addLog('[WORKSPACE]: Background windows cleared. Peak framerate and clean workspace restored.', 'success');
+  }, [activeWindow, addLog]);
+
   return (
     <div className={`h-screen text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black transition-colors duration-700 relative ${isOverdrive ? 'bg-[#0a0000]' : 'bg-[#050505]'}`}>
       
@@ -1476,6 +1498,7 @@ export default function App() {
 
       {/* DESKTOP AREA */}
       <div className="relative flex-1 z-20 pointer-events-none">
+        <ErrorBoundary fallbackTitle="DESKTOP WINDOW CONTAINER">
         {openWindows.includes('terminal') && (
           <DesktopWindow 
             key="terminal"
@@ -1779,7 +1802,7 @@ export default function App() {
           >
             <ReservoirLabMemo
               stats={stats}
-              onLog={addLog}
+              onLog={(msg, type) => addLog(msg, type === 'warn' ? 'warning' : type)}
             />
           </DesktopWindow>
         )}
@@ -1800,7 +1823,7 @@ export default function App() {
             <QuantumCipherLabMemo
               stats={stats}
               carrierBias={carrierBias}
-              onLog={addLog}
+              onLog={(msg, type) => addLog(msg, type === 'warn' ? 'warning' : type)}
             />
           </DesktopWindow>
         )}
@@ -1980,6 +2003,7 @@ export default function App() {
             />
           </DesktopWindow>
         )}
+        </ErrorBoundary>
       </div>
 
       {/* MASTER TOP NAVIGATION BAR */}
@@ -2046,8 +2070,21 @@ export default function App() {
           </button>
         </div>
 
-        {/* Center: Lab Quick Launchers (Scrollable if constrained) */}
+        {/* Center: Clean Quick Launchers & Workspace Controls */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar mx-2 px-1">
+          {/* Clean Desk Quick Action */}
+          <button
+            onClick={handleCleanWorkspace}
+            className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/15 px-2 py-0.5 rounded text-[8px] font-bold cursor-pointer transition-all shrink-0"
+            title="Clean Workspace: minimize background window overhead to maximize framerate"
+          >
+            <RefreshCw size={9} className="text-cyan-400" />
+            <span>CLEAN DESK</span>
+            <span className="text-[7.5px] font-mono px-1 rounded bg-black/60 text-zinc-400">
+              {openWindows.length}
+            </span>
+          </button>
+
           {/* Console Performance & Remote Latency Indicator */}
           <button
             onClick={cyclePerfMode}
@@ -2069,116 +2106,140 @@ export default function App() {
             )}
           </button>
 
-          {/* Ambient Signal Ear & External Sensor Nodes Button */}
-          <button 
-            onClick={() => toggleWindow('ambient_mesh')}
-            className="flex items-center gap-1.5 bg-cyan-950/70 hover:bg-cyan-900/90 text-cyan-200 border border-cyan-400/60 hover:border-cyan-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(6,182,212,0.3)] shrink-0"
-            title="Open Ambient Signal Mesh & External Sensor Ear: Hear what is in the Air (mic/acoustic), the Jar (28Hz dielectric sub-bass), and the PC (silicon timing jitter)"
-          >
-            <Headphones size={9} className="text-cyan-400 animate-pulse" />
-            <span>AMBIENT_EAR</span>
-            <span className="text-[7px] text-[#00ffcc] font-mono bg-cyan-500/20 px-1 py-0.2 rounded border border-cyan-400/30">
-              AIR•JAR•PC
-            </span>
-          </button>
+          <div className="h-4 w-[1px] bg-white/10 mx-0.5 shrink-0" />
 
-          {/* Physical Jar Chamber & Apparatus Shape Viewer Button */}
+          {/* Primary Suite 1: Physical Jar Chamber */}
           <button 
             onClick={() => toggleWindow('jar_chamber')}
-            className="flex items-center gap-1.5 bg-emerald-950/70 hover:bg-emerald-900/90 text-emerald-200 border border-emerald-400/60 hover:border-emerald-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(16,185,129,0.3)] shrink-0"
-            title="Open Physical Jar Chamber & Apparatus Shape Viewer: High-res laboratory photograph and 3D isometric schematic"
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border shrink-0 ${
+              openWindows.includes('jar_chamber')
+                ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+                : 'bg-black/60 text-zinc-400 hover:text-white border-white/10'
+            }`}
+            title="Open Physical Jar Chamber & Apparatus Shape Viewer (Edge of Glass & Telemetry Reconstruction)"
           >
             <Compass size={9} className="text-emerald-400 animate-pulse" />
-            <span>JAR_CHAMBER</span>
-            <span className="text-[7px] text-[#00ffcc] font-mono bg-emerald-500/20 px-1 py-0.2 rounded border border-emerald-400/30">
-              PHOTO•3D
-            </span>
+            <span>JAR CHAMBER</span>
           </button>
 
-          {/* Phase-Out & Memory Stick Dynamics Lab Button */}
+          {/* Primary Suite 2: Ambient Signal Ear */}
+          <button 
+            onClick={() => toggleWindow('ambient_mesh')}
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border shrink-0 ${
+              openWindows.includes('ambient_mesh')
+                ? 'bg-cyan-500/25 text-cyan-300 border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                : 'bg-black/60 text-zinc-400 hover:text-white border-white/10'
+            }`}
+            title="Open Ambient Signal Mesh & External Sensor Ear: Air, Jar, and PC noise nodes"
+          >
+            <Headphones size={9} className="text-cyan-400" />
+            <span>AMBIENT EAR</span>
+          </button>
+
+          {/* Primary Suite 3: Phase Dynamics Lab */}
           <button 
             onClick={() => toggleWindow('phase_lab')}
-            className="flex items-center gap-1.5 bg-emerald-950/50 hover:bg-emerald-900/70 text-emerald-200 border border-emerald-500/50 hover:border-emerald-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(16,185,129,0.2)] shrink-0"
-            title="Open Phase-Out Dynamics & Substrate Memory Stick Laboratory (Original vs Modified B+(t) Physics)"
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border shrink-0 ${
+              openWindows.includes('phase_lab')
+                ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+                : 'bg-black/60 text-zinc-400 hover:text-white border-white/10'
+            }`}
+            title="Open Phase-Out Dynamics & Substrate Memory Stick Laboratory"
           >
             <Waves size={9} className="text-emerald-400" />
-            <span>PHASE_STICK</span>
+            <span>PHASE LAB</span>
           </button>
 
-          {/* Qiskit Quantum Circuit Lab Button */}
+          {/* Primary Suite 4: Qiskit Quantum Lab */}
           <button 
             onClick={() => {
               setQiskitInitialTab('hybrid_runner');
               toggleWindow('qiskit_lab');
             }}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-950/70 to-cyan-950/70 hover:from-amber-900/80 hover:to-cyan-900/80 text-amber-200 border border-amber-400/60 hover:border-amber-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(245,158,11,0.25)] shrink-0"
-            title="Open Qiskit Quantum Circuit Laboratory (Working Hybrid Realization: Jar Voltage → Classical Memory Stick → 3-Qubit Circuit → Measured Phase-Out)"
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border shrink-0 ${
+              openWindows.includes('qiskit_lab')
+                ? 'bg-purple-500/25 text-purple-300 border-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.3)]'
+                : 'bg-black/60 text-zinc-400 hover:text-white border-white/10'
+            }`}
+            title="Open Qiskit Quantum Circuit Laboratory"
           >
-            <Zap size={9} className="text-amber-400 animate-pulse" />
-            <span>QISKIT_HYBRID</span>
-            <span className="text-[7px] text-[#00ffcc] font-mono bg-cyan-500/20 px-1 py-0.2 rounded border border-cyan-400/30">
-              3-QUBIT
-            </span>
+            <Zap size={9} className="text-purple-400" />
+            <span>QISKIT LAB</span>
           </button>
 
-          {/* Addressable Two-Level Qubit Register Button */}
-          <button 
-            onClick={() => {
-              setQiskitInitialTab('addressable_qubits');
-              if (!openWindows.includes('qiskit_lab')) {
-                setOpenWindows(prev => [...prev, 'qiskit_lab']);
-              }
-              setActiveWindow('qiskit_lab');
-            }}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-purple-950/80 to-pink-950/80 hover:from-purple-900/90 hover:to-pink-900/90 text-purple-200 border border-purple-400/60 hover:border-purple-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_12px_rgba(168,85,247,0.3)] shrink-0"
-            title="Open Reliable, Addressable Two-Level Quantum Bits Register (DiVincenzo #1 & #3: Isolated 2-Level Manifold, Calibrated Microwave Addressing d0-d4, T1/T2 Coherence, Rabi/Ramsey Curves)"
-          >
-            <Radio size={9} className="text-purple-400 animate-pulse" />
-            <span>2-LEVEL QUBITS</span>
-            <span className="text-[7px] text-purple-300 font-mono bg-purple-500/20 px-1 py-0.2 rounded border border-purple-400/40">
-              5-QUBIT
-            </span>
-          </button>
+          {/* More Diagnostic Suites Dropdown */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowMoreLabs(prev => !prev)}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border ${
+                showMoreLabs
+                  ? 'bg-white/15 text-white border-white/40'
+                  : 'bg-black/70 text-zinc-400 hover:text-white border-white/10'
+              }`}
+              title="Open additional scientific and cryptographic test suites"
+            >
+              <Layout size={9} />
+              <span>MORE SUITES</span>
+              <ChevronDown size={8} />
+            </button>
 
-          {/* PRC Quantum Lab Button */}
-          <button 
-            onClick={() => toggleWindow('reservoir_lab')}
-            className="flex items-center gap-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/40 hover:border-purple-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(168,85,247,0.2)] shrink-0"
-            title="Open Physical Reservoir Computing Suite (ESN Readout Solver, Hysteresis Loops & Hardware TRNG Oracle)"
-          >
-            <Network size={9} />
-            <span>PRC_LAB</span>
-          </button>
-
-          {/* Quantum & Chaos Cipher Lab Button */}
-          <button 
-            onClick={() => toggleWindow('quantum_cipher')}
-            className="flex items-center gap-1.5 bg-purple-600/30 hover:bg-purple-600/45 text-purple-200 border border-purple-400/50 hover:border-purple-300 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shadow-[0_0_8px_rgba(168,85,247,0.25)] shrink-0"
-            title="Open Quantum & Chaos Cryptographic Laboratory"
-          >
-            <Lock size={9} className="text-[#00ffcc]" />
-            <span>QUANTUM_CIPHER</span>
-          </button>
-
-          {/* Substrate MemTest & Block Mapper Button */}
-          <button 
-            onClick={() => toggleWindow('memtest')}
-            className="flex items-center gap-1.5 bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 border border-teal-500/40 hover:border-teal-400 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shrink-0"
-            title="Open Substrate MemTest86 & Physical Sector Block Mapper"
-          >
-            <Binary size={9} />
-            <span>MEMTEST</span>
-          </button>
-
-          {/* Git Repository Link & Specs Hub */}
-          <button 
-            onClick={() => toggleWindow('git_repo')}
-            className="flex items-center gap-1.5 bg-[#00ffcc]/10 hover:bg-[#00ffcc]/20 text-[#00ffcc] border border-[#00ffcc]/30 hover:border-[#00ffcc]/60 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold shrink-0"
-            title="Open Git Repository Hub & Field Specifications"
-          >
-            <GitBranch size={9} />
-            <span>GIT_SPECS</span>
-          </button>
+            {showMoreLabs && (
+              <div 
+                className="absolute top-7 left-0 w-52 bg-[#0c120f]/95 backdrop-blur-xl border border-white/15 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 z-[250] text-[8.5px]"
+                onMouseLeave={() => setShowMoreLabs(false)}
+              >
+                <button
+                  onClick={() => { toggleWindow('node_mesh'); setShowMoreLabs(false); }}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-cyan-300 cursor-pointer"
+                >
+                  <Radio size={11} className="text-cyan-400" />
+                  <span>Nodal Mesh Attestation</span>
+                </button>
+                <button
+                  onClick={() => { toggleWindow('quantum_cipher'); setShowMoreLabs(false); }}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-purple-300 cursor-pointer"
+                >
+                  <Lock size={11} className="text-purple-400" />
+                  <span>Quantum Cipher Suite</span>
+                </button>
+                <button
+                  onClick={() => { toggleWindow('reservoir_lab'); setShowMoreLabs(false); }}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-emerald-300 cursor-pointer"
+                >
+                  <Network size={11} className="text-emerald-400" />
+                  <span>PRC Reservoir Computing</span>
+                </button>
+                <button
+                  onClick={() => { toggleWindow('memtest'); setShowMoreLabs(false); }}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-teal-300 cursor-pointer"
+                >
+                  <Binary size={11} className="text-teal-400" />
+                  <span>Substrate MemTest86</span>
+                </button>
+                <button
+                  onClick={() => { toggleWindow('ascii_reservoir'); setShowMoreLabs(false); }}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-amber-300 cursor-pointer"
+                >
+                  <Database size={11} className="text-amber-400" />
+                  <span>Physical ASCII Reservoir</span>
+                </button>
+                <button
+                  onClick={() => { toggleWindow('substrate_io'); setShowMoreLabs(false); }}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-blue-300 cursor-pointer"
+                >
+                  <HardDrive size={11} className="text-blue-400" />
+                  <span>Substrate Memory I/O</span>
+                </button>
+                <button
+                  onClick={() => { toggleWindow('git_repo'); setShowMoreLabs(false); }}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-[#00ffcc] cursor-pointer"
+                >
+                  <GitBranch size={11} className="text-[#00ffcc]" />
+                  <span>Git Repository Specs</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: Public Sharing (Bypasses IAM Auth Lock) & Telemetry */}

@@ -519,43 +519,77 @@ export default function QiskitQuantumLab({
     onLog?.(`[HYBRID_SYNC]: Synced hybrid input voltage to Jar V_nodal (${voltage.toFixed(3)} V).`, 'info');
   };
 
+  const feedbackParamsRef = useRef({
+    closedFeedbackEnabled,
+    feedbackGain,
+    feedbackMode,
+    voltage,
+    jitter,
+    shots,
+    driveActive,
+    clockSpeed
+  });
+  useEffect(() => {
+    feedbackParamsRef.current = {
+      closedFeedbackEnabled,
+      feedbackGain,
+      feedbackMode,
+      voltage,
+      jitter,
+      shots,
+      driveActive,
+      clockSpeed
+    };
+  }, [closedFeedbackEnabled, feedbackGain, feedbackMode, voltage, jitter, shots, driveActive, clockSpeed]);
+
   // Main animation / simulation loop with Closed Physical-Quantum Feedback
   useEffect(() => {
     let lastStamp = performance.now();
+    let lastRenderTime = 0;
+    let lastStateUpdateTime = 0;
 
     const loop = (timestamp: number) => {
+      // Throttle canvas draw to ~30 FPS
+      if (timestamp - lastRenderTime < 32) {
+        animRef.current = requestAnimationFrame(loop);
+        return;
+      }
+      lastRenderTime = timestamp;
+
       const dt = (timestamp - lastStamp) / 1000.0;
       lastStamp = timestamp;
 
+      const p = feedbackParamsRef.current;
+
       if (isPlaying) {
-        timeRef.current += dt * clockSpeed;
+        timeRef.current += dt * p.clockSpeed;
 
         // CLOSED PHYSICAL-QUANTUM FEEDBACK:
         // Previous quantum measurement collapse writes back into the Jar's voltage & memory stick
-        const writebackV = closedFeedbackEnabled ? writebackVRef.current : 0.0;
-        const baseV = driveActive ? voltage : 0.05;
+        const writebackV = p.closedFeedbackEnabled ? writebackVRef.current : 0.0;
+        const baseV = p.driveActive ? p.voltage : 0.05;
         const curV = Math.max(0.30, Math.min(1.85, baseV + writebackV));
-        const curJit = driveActive ? jitter : 0.002;
+        const curJit = p.driveActive ? p.jitter : 0.002;
 
         const stepResult = executeQuantumJarStep(
           curV,
           memRef.current,
           timeRef.current,
           curJit,
-          shots
+          p.shots
         );
 
         let dV = 0;
         let dM = 0;
         let isLocked = false;
 
-        if (closedFeedbackEnabled) {
-          const g = feedbackGain;
+        if (p.closedFeedbackEnabled) {
+          const g = p.feedbackGain;
           dV = (stepResult.quantumPhaseOut / 55.0) * 0.12 * g;
           dM = (stepResult.quantumPhaseOut - stepResult.updatedMemory) * 0.18 * g;
-          writebackVRef.current = (feedbackMode === 'dual' || feedbackMode === 'voltage') ? dV : 0.0;
+          writebackVRef.current = (p.feedbackMode === 'dual' || p.feedbackMode === 'voltage') ? dV : 0.0;
 
-          if (feedbackMode === 'dual' || feedbackMode === 'memory') {
+          if (p.feedbackMode === 'dual' || p.feedbackMode === 'memory') {
             let nextM = stepResult.updatedMemory + dM;
             if (nextM < -25.0) {
               nextM += 0.04 * (-15.0 - nextM);
@@ -572,9 +606,13 @@ export default function QiskitQuantumLab({
           memRef.current = stepResult.updatedMemory;
         }
 
-        setLastFeedbackDeltas({ dV, dM, effectiveV: curV, locked: isLocked });
-        setMemoryStick(memRef.current);
-        setCurrentState(stepResult);
+        // Throttle high-cost React component re-renders to ~4 Hz (every 250ms)
+        if (timestamp - lastStateUpdateTime > 250) {
+          lastStateUpdateTime = timestamp;
+          setLastFeedbackDeltas({ dV, dM, effectiveV: curV, locked: isLocked });
+          setMemoryStick(memRef.current);
+          setCurrentState(stepResult);
+        }
 
         // Append to history buffer including writeback trace
         const buf = historyRef.current;
@@ -586,10 +624,10 @@ export default function QiskitQuantumLab({
           memory: memRef.current,
           instant: stepResult.instant,
           oscAngle: stepResult.oscAngle,
-          driveOn: driveActive,
+          driveOn: p.driveActive,
           writebackV: dV,
           writebackM: dM,
-          isClosed: closedFeedbackEnabled
+          isClosed: p.closedFeedbackEnabled
         });
 
         // Limit buffer to 220 samples
@@ -608,7 +646,7 @@ export default function QiskitQuantumLab({
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [isPlaying, driveActive, voltage, jitter, shots, clockSpeed, closedFeedbackEnabled, feedbackGain, feedbackMode]);
+  }, [isPlaying]);
 
   // Draw dual-trace oscilloscope comparing Classical vs Quantum wave collapse
   const drawOscilloscope = () => {

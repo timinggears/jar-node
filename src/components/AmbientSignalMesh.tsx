@@ -360,12 +360,27 @@ export default function AmbientSignalMesh({
     }
   };
 
+  // Ref for stats to prevent tearing down RAF loop on every telemetry tick
+  const statsRef = useRef(stats);
+  useEffect(() => {
+    statsRef.current = stats;
+  }, [stats]);
+
   // --- 3. HARDWARE TICK & EVENT-LOOP JITTER (THE PC) ---
   useEffect(() => {
     let animId: number;
     const micDataArray = new Uint8Array(256);
+    let lastRenderTime = 0;
+    let lastStateUpdateTime = 0;
 
-    const updatePhysicsLoop = () => {
+    const updatePhysicsLoop = (timestamp: number) => {
+      // Throttle spectrum canvas rendering to ~30 FPS
+      if (timestamp - lastRenderTime < 32) {
+        animId = requestAnimationFrame(updatePhysicsLoop);
+        return;
+      }
+      lastRenderTime = timestamp;
+
       const now = performance.now();
       const deltaMs = now - lastLoopTimeRef.current;
       lastLoopTimeRef.current = now;
@@ -378,6 +393,8 @@ export default function AmbientSignalMesh({
         loopJitterHistoryRef.current.shift();
       }
       const meanJitter = loopJitterHistoryRef.current.reduce((a, b) => a + b, 0) / loopJitterHistoryRef.current.length;
+
+      const currentStats = statsRef.current;
 
       // --- Read Air Sensor Data (Real Mic or Synthetic Model) ---
       let airRms = -45.0;
@@ -407,8 +424,8 @@ export default function AmbientSignalMesh({
       }
 
       // --- Read Jar Dielectric Data ---
-      const jarV = stats.vNodal || 1.537;
-      const jarJitter = stats.jitter || 0.015;
+      const jarV = currentStats.vNodal || 1.537;
+      const jarJitter = currentStats.jitter || 0.015;
       const jarWave: number[] = [];
       const tSec = Date.now() / 1000;
       for (let i = 0; i < 64; i++) {
@@ -431,50 +448,53 @@ export default function AmbientSignalMesh({
         cosmicWave.push(w);
       }
 
-      // Update Node States
-      setNodes(prev => prev.map(node => {
-        let wave = node.waveform;
-        let rms = node.rmsPowerDb;
-        let freq = node.frequencyHz;
-        let entropy = node.entropyBits;
+      // Throttle React state update for nodes to ~4 Hz (every 250ms) to completely eliminate choppiness
+      if (timestamp - lastStateUpdateTime > 250) {
+        lastStateUpdateTime = timestamp;
+        setNodes(prev => prev.map(node => {
+          let wave = node.waveform;
+          let rms = node.rmsPowerDb;
+          let freq = node.frequencyHz;
+          let entropy = node.entropyBits;
 
-        if (node.source === 'air') {
-          wave = airWave;
-          rms = parseFloat(airRms.toFixed(1));
-          freq = parseFloat(airFreq.toFixed(1));
-          entropy = parseFloat((7.5 + Math.abs(airRms) / 40.0).toFixed(2));
-        } else if (node.source === 'jar') {
-          wave = jarWave;
-          rms = parseFloat((-15.0 - (jarV * 2.5)).toFixed(1));
-          freq = parseFloat((28000.0 + (jarJitter * 2000.0)).toFixed(1));
-          entropy = parseFloat((8.5 + jarJitter * 10.0).toFixed(2));
-        } else if (node.source === 'pc') {
-          wave = pcWave;
-          rms = parseFloat((-45.0 + Math.min(20, meanJitter * 3)).toFixed(1));
-          freq = parseFloat((1200.0 + meanJitter * 40.0).toFixed(1));
-          entropy = parseFloat((6.8 + (meanJitter / 8.0)).toFixed(2));
-        } else if (node.source === 'cosmic') {
-          wave = cosmicWave;
-          rms = parseFloat((-48.0 + (Math.random() * 2)).toFixed(1));
-          freq = parseFloat((84000.0 + (Math.random() * 400)).toFixed(1));
-          entropy = 9.15;
-        }
+          if (node.source === 'air') {
+            wave = airWave;
+            rms = parseFloat(airRms.toFixed(1));
+            freq = parseFloat(airFreq.toFixed(1));
+            entropy = parseFloat((7.5 + Math.abs(airRms) / 40.0).toFixed(2));
+          } else if (node.source === 'jar') {
+            wave = jarWave;
+            rms = parseFloat((-15.0 - (jarV * 2.5)).toFixed(1));
+            freq = parseFloat((28000.0 + (jarJitter * 2000.0)).toFixed(1));
+            entropy = parseFloat((8.5 + jarJitter * 10.0).toFixed(2));
+          } else if (node.source === 'pc') {
+            wave = pcWave;
+            rms = parseFloat((-45.0 + Math.min(20, meanJitter * 3)).toFixed(1));
+            freq = parseFloat((1200.0 + meanJitter * 40.0).toFixed(1));
+            entropy = parseFloat((6.8 + (meanJitter / 8.0)).toFixed(2));
+          } else if (node.source === 'cosmic') {
+            wave = cosmicWave;
+            rms = parseFloat((-48.0 + (Math.random() * 2)).toFixed(1));
+            freq = parseFloat((84000.0 + (Math.random() * 400)).toFixed(1));
+            entropy = 9.15;
+          }
 
-        // Check if node is in Stochastic Resonance lock
-        const isResonant = Math.abs(stats.phaseOut || 0) >= 8.0 && Math.abs(stats.phaseOut || 0) <= 28.0;
-        const status = isResonant && node.couplingWeight > 0.7 ? 'stochastic_lock' : (node.source === 'jar' ? 'resonant' : 'listening');
+          // Check if node is in Stochastic Resonance lock
+          const isResonant = Math.abs(currentStats.phaseOut || 0) >= 8.0 && Math.abs(currentStats.phaseOut || 0) <= 28.0;
+          const status = isResonant && node.couplingWeight > 0.7 ? 'stochastic_lock' : (node.source === 'jar' ? 'resonant' : 'listening');
 
-        return {
-          ...node,
-          waveform: wave,
-          rmsPowerDb: rms,
-          frequencyHz: freq,
-          entropyBits: entropy,
-          status
-        };
-      }));
+          return {
+            ...node,
+            waveform: wave,
+            rmsPowerDb: rms,
+            frequencyHz: freq,
+            entropyBits: entropy,
+            status
+          };
+        }));
+      }
 
-      // Render Multi-Source Spectrum Canvas
+      // Render Multi-Source Spectrum Canvas directly
       renderSpectrumVisualizer(airWave, jarWave, pcWave, cosmicWave);
 
       animId = requestAnimationFrame(updatePhysicsLoop);
@@ -482,7 +502,7 @@ export default function AmbientSignalMesh({
 
     animId = requestAnimationFrame(updatePhysicsLoop);
     return () => cancelAnimationFrame(animId);
-  }, [isMicEnabled, stats.vNodal, stats.memoryStick, stats.jitter, stats.phaseOut]);
+  }, [isMicEnabled]);
 
   // --- RENDER REAL-TIME COMBINED OSCILLOSCOPE CANVAS ---
   const renderSpectrumVisualizer = (

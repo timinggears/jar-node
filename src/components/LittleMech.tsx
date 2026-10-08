@@ -42,12 +42,12 @@ export default function LittleMech({ miningState, isBoosted, isStatic, bias = 50
         }}
         transition={{
           y: {
-            duration: isOverdrive ? 0.04 / biasScale : (miningState === 'success' ? 0.4 : 3 / Math.max(0.1, biasScale)),
+            duration: isOverdrive ? 0.2 / biasScale : (miningState === 'success' ? 0.4 : 3 / Math.max(0.1, biasScale)),
             repeat: isOverdrive ? Infinity : (miningState === 'success' ? 0 : Infinity),
             ease: isOverdrive ? "linear" : "easeInOut"
           },
           x: {
-            duration: 0.04 / Math.max(0.1, biasScale),
+            duration: 0.25 / Math.max(0.1, biasScale),
             repeat: Infinity,
             ease: "linear"
           },

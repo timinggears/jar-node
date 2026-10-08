@@ -330,7 +330,14 @@ export default function QuantumCipherLab({ stats, carrierBias, onLog }: QuantumC
     if (!ctx) return;
 
     let animId: number;
-    const render = () => {
+    let lastRenderTime = 0;
+    const render = (timestamp: number) => {
+      if (timestamp - lastRenderTime < 32) {
+        animId = requestAnimationFrame(render);
+        return;
+      }
+      lastRenderTime = timestamp;
+
       ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -412,7 +419,7 @@ export default function QuantumCipherLab({ stats, carrierBias, onLog }: QuantumC
       animId = requestAnimationFrame(render);
     };
 
-    render();
+    render(performance.now());
 
     return () => {
       if (animId) cancelAnimationFrame(animId);

@@ -142,9 +142,11 @@ export default function PhysicalAsciiReservoir({
     // Handle high DPI display scales
     const resizeCanvas = () => {
       const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * (window.devicePixelRatio || 1);
-      canvas.height = rect.height * (window.devicePixelRatio || 1);
-      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+      const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
     };
 
     resizeCanvas();
@@ -155,9 +157,9 @@ export default function PhysicalAsciiReservoir({
       resizeObserver.observe(canvas.parentElement);
     }
 
-    // Initialize 35 electron particles flowing along dynamic orbits
+    // Initialize 24 electron particles flowing along dynamic orbits
     if (electronsRef.current.length === 0) {
-      const initialCount = 35;
+      const initialCount = 24;
       for (let i = 0; i < initialCount; i++) {
         electronsRef.current.push({
           x: Math.random() * 500,
@@ -176,8 +178,17 @@ export default function PhysicalAsciiReservoir({
     let lastTime = 0;
     const animate = (timestamp: number) => {
       if (!ctx || !canvas) return;
-      const w = canvas.width / (window.devicePixelRatio || 1);
-      const h = canvas.height / (window.devicePixelRatio || 1);
+
+      // Throttle particle animation to ~30 FPS
+      if (timestamp - lastTime < 32) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      lastTime = timestamp;
+
+      const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+      const w = canvas.width / dpr;
+      const h = canvas.height / dpr;
       if (w === 0 || h === 0) {
         animationFrameRef.current = requestAnimationFrame(animate);
         return;
