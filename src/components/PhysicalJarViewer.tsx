@@ -31,13 +31,19 @@ import {
   Lock,
   Unlock,
   Globe,
-  Sliders
+  Sliders,
+  Video,
+  VideoOff,
+  Smartphone,
+  RotateCcw,
+  Crosshair
 } from 'lucide-react';
 import { SystemStats } from '../types';
 
 interface PhysicalJarViewerProps {
   stats: SystemStats;
   carrierBias?: number;
+  socket?: any;
   onOpenAmbientEar?: () => void;
   onOpenPhaseLab?: () => void;
 }
@@ -45,10 +51,11 @@ interface PhysicalJarViewerProps {
 export default function PhysicalJarViewer({
   stats,
   carrierBias = 50,
+  socket,
   onOpenAmbientEar,
   onOpenPhaseLab
 }: PhysicalJarViewerProps) {
-  const [viewMode, setViewMode] = useState<'tomography' | 'attractor' | 'live_raster' | 'photo'>('tomography');
+  const [viewMode, setViewMode] = useState<'tomography' | 'attractor' | 'live_raster' | 'photo' | 'camera'>('tomography');
   const [tomographySubMode, setTomographySubMode] = useState<'glass_edge' | 'core_detail'>('glass_edge');
   const [photoSubMode, setPhotoSubMode] = useState<'glass_edge' | 'apparatus'>('glass_edge');
   const [selectedCallout, setSelectedCallout] = useState<number | null>(null);
@@ -67,7 +74,20 @@ export default function PhysicalJarViewer({
   const [orientationFrame, setOrientationFrame] = useState<'north_up' | 'lab_relative'>('north_up');
   const [showCompassOverlay, setShowCompassOverlay] = useState<boolean>(true);
   const [isDeviceCompassActive, setIsDeviceCompassActive] = useState<boolean>(false);
+  const [compassTareOffset, setCompassTareOffset] = useState<number>(0);
   const [vectorProjectionMode, setVectorProjectionMode] = useState<boolean>(false);
+
+  // Interactive direct tactile drag-to-rotate state
+  const [isDraggingJar, setIsDraggingJar] = useState<boolean>(false);
+  const [dragCurrentAngle, setDragCurrentAngle] = useState<number | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+
+  // Optical webcam camera alignment state
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const lastRawHeadingRef = useRef<number>(0);
 
   // High-resolution images generated directly from real telemetry (Square glass jar apparatus)
   // 1. Zoomed out wide-angle tomographic scan showing complete SQUARE edge of the glass jar & bench:
@@ -97,26 +117,160 @@ export default function PhysicalJarViewer({
   // Mutual Inductance coupling factor variation with square geometry:
   const mutualCouplingFactor = (0.92 + 0.08 * Math.cos((squareSymmetryDelta / 45) * Math.PI)).toFixed(2);
 
-  // Device Compass synchronization (magnetometer / WebKit compass)
+  const handleRotateJar = (newAngle: number) => {
+    const normalized = ((Math.round(newAngle) % 360) + 360) % 360;
+    if (isCoupled) {
+      const diff = normalized - jarHeading;
+      setCoilHeading(prev => (((prev + diff) % 360) + 360) % 360);
+    }
+    setJarHeading(normalized);
+    if (socket) {
+      socket.emit('hardware:jar_rotation', {
+        jarHeading: normalized,
+        coilHeading: isCoupled ? ((coilHeading + (normalized - jarHeading)) % 360 + 360) % 360 : coilHeading,
+        isCoupled
+      });
+    }
+  };
+
+  const handleRotateCoil = (newAngle: number) => {
+    const normalized = ((Math.round(newAngle) % 360) + 360) % 360;
+    if (isCoupled) {
+      const diff = normalized - coilHeading;
+      setJarHeading(prev => (((prev + diff) % 360) + 360) % 360);
+    }
+    setCoilHeading(normalized);
+    if (socket) {
+      socket.emit('hardware:jar_rotation', {
+        jarHeading: isCoupled ? ((jarHeading + (normalized - coilHeading)) % 360 + 360) % 360 : jarHeading,
+        coilHeading: normalized,
+        isCoupled
+      });
+    }
+  };
+
+  // Device Compass / Gyroscope synchronization (magnetometer / WebKit compass)
   useEffect(() => {
     if (!isDeviceCompassActive) return;
     const handleOrientation = (e: DeviceOrientationEvent) => {
-      let heading = 0;
+      let raw = 0;
       if ((e as any).webkitCompassHeading !== undefined && (e as any).webkitCompassHeading !== null) {
-        heading = (e as any).webkitCompassHeading;
+        raw = (e as any).webkitCompassHeading;
       } else if (e.alpha !== null) {
-        heading = (360 - e.alpha) % 360;
+        raw = (360 - e.alpha) % 360;
       }
-      const rounded = Math.round(heading);
-      setTrueNorthHeading(rounded);
+      const roundedRaw = Math.round(raw);
+      lastRawHeadingRef.current = roundedRaw;
+
+      // Apply tare calibration offset
+      const adjusted = ((roundedRaw - compassTareOffset) % 360 + 360) % 360;
+
+      setTrueNorthHeading(roundedRaw);
+      setJarHeading(adjusted);
       if (isCoupled) {
-        setJarHeading(rounded);
-        setCoilHeading(rounded);
+        setCoilHeading(adjusted);
+      }
+      if (socket) {
+        socket.emit('hardware:jar_rotation', {
+          jarHeading: adjusted,
+          coilHeading: isCoupled ? adjusted : coilHeading,
+          isCoupled
+        });
       }
     };
+
     window.addEventListener('deviceorientation', handleOrientation);
-    return () => window.removeEventListener('deviceorientation', handleOrientation);
-  }, [isDeviceCompassActive, isCoupled]);
+    window.addEventListener('deviceorientationabsolute', handleOrientation as any);
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation);
+      window.removeEventListener('deviceorientationabsolute', handleOrientation as any);
+    };
+  }, [isDeviceCompassActive, isCoupled, compassTareOffset, coilHeading, socket]);
+
+  // Sync orientation from external serial hardware or other connected clients via WebSocket
+  useEffect(() => {
+    if (!socket) return;
+    const onRemoteRotation = (data: { jarHeading?: number; coilHeading?: number; isCoupled?: boolean }) => {
+      if (typeof data?.jarHeading === 'number') {
+        const val = ((Math.round(data.jarHeading) % 360) + 360) % 360;
+        setJarHeading(val);
+      }
+      if (typeof data?.coilHeading === 'number') {
+        const val = ((Math.round(data.coilHeading) % 360) + 360) % 360;
+        setCoilHeading(val);
+      }
+      if (typeof data?.isCoupled === 'boolean') {
+        setIsCoupled(data.isCoupled);
+      }
+    };
+    socket.on('hardware:jar_rotation', onRemoteRotation);
+    return () => {
+      socket.off('hardware:jar_rotation', onRemoteRotation);
+    };
+  }, [socket]);
+
+  // Keyboard controls for tactile bench rotation (Arrow Left/Right, Cardinal N/E/S/W)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const step = e.shiftKey ? 15 : 1;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleRotateJar(jarHeading - step);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleRotateJar(jarHeading + step);
+      } else if (e.key === 'n' || e.key === 'N') {
+        handleRotateJar(0);
+      } else if (e.key === 'e' || e.key === 'E') {
+        handleRotateJar(90);
+      } else if (e.key === 's' || e.key === 'S') {
+        handleRotateJar(180);
+      } else if (e.key === 'w' || e.key === 'W') {
+        handleRotateJar(270);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [jarHeading, isCoupled]);
+
+  // Webcam camera feed lifecycle for optical alignment
+  useEffect(() => {
+    if (viewMode === 'camera') {
+      let active = true;
+      navigator.mediaDevices?.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      })
+      .then(stream => {
+        if (!active) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        setCameraStream(stream);
+        setCameraError(null);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      })
+      .catch(err => {
+        console.warn('[CAMERA_TRACK]', err);
+        setCameraError('Camera access unavailable or permission denied. Please allow camera permissions in your browser to align the physical jar optically.');
+      });
+
+      return () => {
+        active = false;
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(t => t.stop());
+        }
+      };
+    } else {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        setCameraStream(null);
+      }
+    }
+  }, [viewMode]);
 
   const toggleDeviceCompass = async () => {
     if (isDeviceCompassActive) {
@@ -137,22 +291,54 @@ export default function PhysicalJarViewer({
     }
   };
 
-  const handleRotateJar = (newAngle: number) => {
-    const normalized = ((newAngle % 360) + 360) % 360;
-    if (isCoupled) {
-      const diff = normalized - jarHeading;
-      setCoilHeading(prev => (((prev + diff) % 360) + 360) % 360);
-    }
-    setJarHeading(normalized);
+  const handleTareCompass = () => {
+    setCompassTareOffset(lastRawHeadingRef.current);
+    setJarHeading(0);
+    if (isCoupled) setCoilHeading(0);
   };
 
-  const handleRotateCoil = (newAngle: number) => {
-    const normalized = ((newAngle % 360) + 360) % 360;
-    if (isCoupled) {
-      const diff = normalized - coilHeading;
-      setJarHeading(prev => (((prev + diff) % 360) + 360) % 360);
+  // Direct tactile drag calculation
+  const calculateAngleFromPointer = (clientX: number, clientY: number): number | null => {
+    if (!stageRef.current) return null;
+    const rect = stageRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const rad = Math.atan2(clientY - cy, clientX - cx);
+    // 0° points up (True North / Top of Jar)
+    let deg = Math.round((rad * 180 / Math.PI + 90 + 360) % 360);
+    return deg;
+  };
+
+  const handleStagePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    const angle = calculateAngleFromPointer(e.clientX, e.clientY);
+    if (angle !== null) {
+      setIsDraggingJar(true);
+      setDragCurrentAngle(angle);
+      handleRotateJar(angle);
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      } catch {}
     }
-    setCoilHeading(normalized);
+  };
+
+  const handleStagePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingJar) return;
+    const angle = calculateAngleFromPointer(e.clientX, e.clientY);
+    if (angle !== null) {
+      setDragCurrentAngle(angle);
+      handleRotateJar(angle);
+    }
+  };
+
+  const handleStagePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingJar) {
+      setIsDraggingJar(false);
+      setDragCurrentAngle(null);
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+      } catch {}
+    }
   };
 
   // Keep latest parameters in a mutable ref to prevent tearing down RAF loops on every telemetry tick or orientation move
@@ -504,6 +690,29 @@ export default function PhysicalJarViewer({
         const currentVNodal = latestParamsRef.current.vNodal;
         const currentJitter = latestParamsRef.current.jitterVal;
 
+        // Orientation parameters for Live Raster
+        const {
+          jarHeading: curJarHeading,
+          coilHeading: curCoilHeading,
+          trueNorthHeading: curTrueNorthHeading,
+          orientationFrame: curOrientationFrame,
+          showCompassOverlay: curShowCompass
+        } = latestParamsRef.current;
+
+        let jarAngleRad = 0;
+        let coilAngleRad = 0;
+        let trueNorthAngleRad = -Math.PI / 2;
+
+        if (curOrientationFrame === 'north_up') {
+          trueNorthAngleRad = -Math.PI / 2;
+          jarAngleRad = (curJarHeading * Math.PI) / 180;
+          coilAngleRad = (curCoilHeading * Math.PI) / 180;
+        } else {
+          coilAngleRad = 0;
+          jarAngleRad = (((curJarHeading - curCoilHeading) % 360 + 360) * Math.PI) / 180;
+          trueNorthAngleRad = -Math.PI / 2 - (curCoilHeading * Math.PI) / 180;
+        }
+
         // Base radius scaled by zoomLevel
         const innerRadius = Math.min(w, h) * 0.42 * currentZoom;
         const wallThickness = Math.max(8, 14 * currentZoom);
@@ -539,27 +748,32 @@ export default function PhysicalJarViewer({
         const phaseRad = (currentPhase * Math.PI) / 180.0;
         const kCoil = 14.0 + (currentBias / 25.0);
 
-        // Compute only within circle bounding box to avoid wasting cycles on empty canvas
-        const minX = Math.max(0, Math.floor(cx - innerRadius - 2));
-        const maxX = Math.min(w - 2, Math.ceil(cx + innerRadius + 2));
-        const minY = Math.max(0, Math.floor(cy - innerRadius - 2));
-        const maxY = Math.min(h - 2, Math.ceil(cy + innerRadius + 2));
+        // Compute within bounding box around square jar section
+        const boxRadius = innerRadius * 1.35;
+        const minX = Math.max(0, Math.floor(cx - boxRadius));
+        const maxX = Math.min(w - 2, Math.ceil(cx + boxRadius));
+        const minY = Math.max(0, Math.floor(cy - boxRadius));
+        const maxY = Math.min(h - 2, Math.ceil(cy + boxRadius));
 
         for (let y = minY; y <= maxY; y += 2) {
           const dy = (y - cy) / innerRadius;
-          const dySq = dy * dy;
 
           for (let x = minX; x <= maxX; x += 2) {
             const dx = (x - cx) / innerRadius;
-            const rSq = dx * dx + dySq;
 
-            if (rSq > 1.0) continue;
+            // Rotate coordinates into square jar frame
+            const rotDx = dx * Math.cos(-jarAngleRad) - dy * Math.sin(-jarAngleRad);
+            const rotDy = dx * Math.sin(-jarAngleRad) + dy * Math.cos(-jarAngleRad);
+
+            // Bounded to inside the square vessel (with slight corner softening)
+            if (Math.abs(rotDx) > 0.88 || Math.abs(rotDy) > 0.88) continue;
+
+            const rSq = dx * dx + dy * dy;
             const r = Math.sqrt(rSq);
-
             const idx = (y * w + x) * 4;
 
             // Probe electrode wire tip check
-            const distToProbe = Math.sqrt((dx - probeX) ** 2 + (dy - probeY) ** 2);
+            const distToProbe = Math.sqrt((rotDx - probeX) ** 2 + (rotDy - probeY) ** 2);
             if (distToProbe < 0.05) {
               data[idx] = 255;
               data[idx + 1] = 195;
@@ -568,12 +782,12 @@ export default function PhysicalJarViewer({
               continue;
             }
 
-            const theta = Math.atan2(dy, dx);
+            const theta = Math.atan2(rotDy, rotDx);
 
             // Acoustic standing wave from perimeter coil + radiating potential from probe
             const coilWave = Math.cos(kCoil * r - phaseRad + t * 0.7);
             const probeWave = Math.sin(18.0 * distToProbe - t * 1.2);
-            const angularHarmonic = Math.cos(5.0 * theta + phaseRad);
+            const angularHarmonic = Math.cos(4.0 * theta + phaseRad);
             const noise = (Math.random() - 0.5) * currentJitter * 6.0;
 
             // Liquid dielectric equipotential field
@@ -600,29 +814,6 @@ export default function PhysicalJarViewer({
         }
 
         ctx.putImageData(imgData, 0, 0);
-
-        // Orientation parameters for Live Raster
-        const {
-          jarHeading: curJarHeading,
-          coilHeading: curCoilHeading,
-          trueNorthHeading: curTrueNorthHeading,
-          orientationFrame: curOrientationFrame,
-          showCompassOverlay: curShowCompass
-        } = latestParamsRef.current;
-
-        let jarAngleRad = 0;
-        let coilAngleRad = 0;
-        let trueNorthAngleRad = -Math.PI / 2;
-
-        if (curOrientationFrame === 'north_up') {
-          trueNorthAngleRad = -Math.PI / 2;
-          jarAngleRad = (curJarHeading * Math.PI) / 180;
-          coilAngleRad = (curCoilHeading * Math.PI) / 180;
-        } else {
-          coilAngleRad = 0;
-          jarAngleRad = (((curJarHeading - curCoilHeading) % 360 + 360) * Math.PI) / 180;
-          trueNorthAngleRad = -Math.PI / 2 - (curCoilHeading * Math.PI) / 180;
-        }
 
         // Draw Glass Wall, Rim, Coil, and Compass Rose on top
         drawGlassJarBoundary(
@@ -783,16 +974,13 @@ export default function PhysicalJarViewer({
             if (normY > wallBound) normY = wallBound;
             if (normY < -wallBound) normY = -wallBound;
 
-            let px = cx + normX * scale;
-            let py = cy - normY * scale;
-
-            if (curVectorProj) {
-              // Project 2D phase trajectory along the coil's geographic dipole axis
-              const rotX = normX * Math.cos(coilAngleRad) - normY * Math.sin(coilAngleRad);
-              const rotY = normX * Math.sin(coilAngleRad) + normY * Math.cos(coilAngleRad);
-              px = cx + rotX * scale;
-              py = cy + rotY * scale;
-            }
+            // The boxy attractor trajectory is shaped by the square container's physical walls and soft bounds.
+            // When the physical jar rotates by jarAngleRad, the entire boxy trajectory and wall flats rotate in tandem:
+            const trajectoryRotation = curVectorProj ? coilAngleRad : jarAngleRad;
+            const rotX = normX * Math.cos(trajectoryRotation) - normY * Math.sin(trajectoryRotation);
+            const rotY = normX * Math.sin(trajectoryRotation) + normY * Math.cos(trajectoryRotation);
+            const px = cx + rotX * scale;
+            const py = cy - rotY * scale;
 
             if (i === tau) {
               ctx.moveTo(px, py);
@@ -819,15 +1007,11 @@ export default function PhysicalJarViewer({
           if (curY > wallBound) curY = wallBound;
           if (curY < -wallBound) curY = -wallBound;
 
-          let lX = cx + curX * scale;
-          let lY = cy - curY * scale;
-
-          if (curVectorProj) {
-            const rotX = curX * Math.cos(coilAngleRad) - curY * Math.sin(coilAngleRad);
-            const rotY = curX * Math.sin(coilAngleRad) + curY * Math.cos(coilAngleRad);
-            lX = cx + rotX * scale;
-            lY = cy + rotY * scale;
-          }
+          const trajectoryRotation = curVectorProj ? coilAngleRad : jarAngleRad;
+          const rotCurX = curX * Math.cos(trajectoryRotation) - curY * Math.sin(trajectoryRotation);
+          const rotCurY = curX * Math.sin(trajectoryRotation) + curY * Math.cos(trajectoryRotation);
+          const lX = cx + rotCurX * scale;
+          const lY = cy - rotCurY * scale;
 
           ctx.fillStyle = '#ff0055';
           ctx.beginPath();
@@ -1118,6 +1302,18 @@ export default function PhysicalJarViewer({
             <Orbit size={12} />
             <span>PHASE ATTRACTOR (V(t) vs V(t - 4))</span>
           </button>
+
+          <button
+            onClick={() => setViewMode('camera')}
+            className={`px-3 py-1.5 rounded-lg font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+              viewMode === 'camera'
+                ? 'bg-rose-500 text-black shadow-[0_0_15px_rgba(244,63,94,0.5)]'
+                : 'bg-black/60 text-zinc-400 hover:text-white border border-white/10'
+            }`}
+          >
+            <Video size={12} />
+            <span>OPTICAL WEBCAM JAR TRACK</span>
+          </button>
         </div>
 
         {/* Sub-toggle for Tomography mode */}
@@ -1198,11 +1394,22 @@ export default function PhysicalJarViewer({
                   ? 'bg-emerald-500 text-black border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
                   : 'bg-black text-zinc-400 hover:text-white border-white/10'
               }`}
-              title="Sync heading with physical device compass / magnetometer"
+              title="Sync heading continuously with physical device compass / magnetometer / gyro"
             >
-              <Navigation size={10} />
-              <span>{isDeviceCompassActive ? 'DEVICE COMPASS ON' : 'SYNC COMPASS'}</span>
+              <Smartphone size={10} />
+              <span>{isDeviceCompassActive ? 'DEVICE GYRO ON' : 'SYNC COMPASS'}</span>
             </button>
+
+            {isDeviceCompassActive && (
+              <button
+                onClick={handleTareCompass}
+                className="px-2 py-1 rounded border border-cyan-400/50 bg-cyan-500/20 hover:bg-cyan-500/35 text-cyan-200 text-[8px] font-bold uppercase transition-all cursor-pointer flex items-center gap-1 shadow-[0_0_8px_rgba(6,182,212,0.3)]"
+                title="Zero-tare current device position as 0° (Bench Alignment Reference)"
+              >
+                <Crosshair size={10} />
+                <span>TARE (0°)</span>
+              </button>
+            )}
 
             {/* Frame toggle */}
             <button
@@ -1381,15 +1588,32 @@ export default function PhysicalJarViewer({
         </div>
       </div>
 
-      {/* Main Visualizer Stage (Interactive Scroll-Wheel Zoom & Visual Edge Reticle) */}
+      {/* Main Visualizer Stage (Interactive Tactile Drag, Scroll-Wheel Zoom & Visual Edge Reticle) */}
       <div 
+        ref={stageRef}
+        onPointerDown={handleStagePointerDown}
+        onPointerMove={handleStagePointerMove}
+        onPointerUp={handleStagePointerUp}
+        onPointerCancel={handleStagePointerUp}
         onWheel={(e) => {
           e.preventDefault();
           const step = e.deltaY > 0 ? -0.05 : 0.05;
           setZoomLevel(prev => Math.max(0.25, Math.min(1.80, parseFloat((prev + step).toFixed(2)))));
         }}
-        className="relative rounded-2xl overflow-hidden border border-emerald-500/30 bg-[#020603] shadow-2xl flex items-center justify-center min-h-[420px] max-h-[620px] select-none"
+        className={`relative rounded-2xl overflow-hidden border border-emerald-500/30 bg-[#020603] shadow-2xl flex items-center justify-center min-h-[420px] max-h-[620px] select-none touch-none ${
+          isDraggingJar ? 'cursor-grabbing' : 'cursor-grab'
+        }`}
       >
+        {/* Floating Real-time Drag Indicator Pill */}
+        {isDraggingJar && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/90 border border-cyan-400 px-3.5 py-1.5 rounded-full text-[10px] font-mono text-cyan-300 font-black shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center gap-2 pointer-events-none animate-pulse">
+            <RotateCcw size={13} className="animate-spin text-cyan-400" />
+            <span>ORIENTING PHYSICAL JAR: {jarHeading}°</span>
+            <span className="text-zinc-500">|</span>
+            <span className="text-emerald-400">D4 WALL DELTA: {jarHeading % 90}°</span>
+          </div>
+        )}
+
         {/* View Mode 1: Live Standing Wave Canvas */}
         {viewMode === 'live_raster' && (
           <canvas
@@ -1486,6 +1710,54 @@ export default function PhysicalJarViewer({
           </div>
         )}
 
+        {/* View Mode 5: Optical Webcam Camera Alignment Feed */}
+        {viewMode === 'camera' && (
+          <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-2">
+            {cameraError ? (
+              <div className="p-6 text-center text-red-400 font-mono text-[10px] space-y-2 max-w-md bg-black/80 rounded-xl border border-red-500/30">
+                <VideoOff size={28} className="mx-auto text-red-400 opacity-80" />
+                <div className="font-bold uppercase tracking-wider">Webcam Alignment Stream</div>
+                <p className="text-zinc-400 text-[9px]">{cameraError}</p>
+                <div className="text-[8px] text-zinc-500 pt-2">
+                  Tip: You can also use the direct drag ring on the canvas or device gyro without camera permissions.
+                </div>
+              </div>
+            ) : (
+              <div className="relative w-full h-full flex items-center justify-center">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover max-h-[580px] rounded-xl select-none opacity-85 shadow-2xl"
+                />
+                {/* Overlaid Rotated Square Glass Jar Reticle */}
+                <div 
+                  className="absolute pointer-events-none transition-transform duration-100 flex items-center justify-center"
+                  style={{ 
+                    transform: `rotate(${orientationFrame === 'north_up' ? jarHeading : deltaAngle}deg)`,
+                    width: '320px',
+                    height: '320px'
+                  }}
+                >
+                  <div className="w-full h-full border-2 border-cyan-400 rounded-3xl shadow-[0_0_30px_rgba(6,182,212,0.65)] flex items-center justify-center">
+                    <div className="w-[84%] h-[84%] border border-dashed border-cyan-300/80 rounded-2xl flex items-center justify-center">
+                      <div className="text-[9px] font-mono font-black text-cyan-200 bg-black/90 px-3 py-1 rounded-full border border-cyan-400 shadow-lg">
+                        ALIGN PHYSICAL JAR • {jarHeading}°
+                      </div>
+                    </div>
+                  </div>
+                  {/* Cardinal Top Rim Notch */}
+                  <div className="absolute -top-3 w-4 h-4 bg-red-500 rotate-45 border-2 border-white shadow-md" />
+                  <div className="absolute -bottom-3 text-[8px] font-bold text-amber-300 bg-black/80 px-2 py-0.5 rounded border border-amber-400">
+                    COIL: {coilHeading}°
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Ambient Dark Gradient Vignette */}
         <div className="absolute inset-0 bg-radial from-transparent via-transparent to-black/70 pointer-events-none" />
 
@@ -1526,19 +1798,20 @@ export default function PhysicalJarViewer({
         </div>
 
         {/* Bottom Status Bar on Stage */}
-        <div className="absolute bottom-3 left-3 right-3 bg-black/90 backdrop-blur-md border border-white/10 rounded-lg px-3 py-2 flex items-center justify-between text-[8px] font-mono z-10">
-          <div className="flex items-center gap-2 text-zinc-400">
-            <span className="text-emerald-400 font-bold">● BENCH ORIENTATION:</span>
-            <span>Square Jar: {jarHeading}°</span>
+        <div className="absolute bottom-3 left-3 right-3 bg-black/90 backdrop-blur-md border border-white/10 rounded-lg px-3 py-2 flex items-center justify-between text-[8px] font-mono z-10 flex-wrap gap-2">
+          <div className="flex items-center gap-2 text-zinc-400 flex-wrap">
+            <span className="text-emerald-400 font-bold">● BENCH DYNAMICS:</span>
+            <span className="text-cyan-300 font-bold">Square Jar: {jarHeading}°</span>
             <span className="text-zinc-600">•</span>
-            <span>Coil Windings: {coilHeading}°</span>
+            <span className="text-amber-300 font-bold">Coil Windings: {coilHeading}°</span>
             <span className="text-zinc-600">•</span>
-            <span>Free Delta: {deltaAngle}°</span>
+            <span>Free Offset Δ: {deltaAngle}° (D4: {jarHeading % 90}°)</span>
             <span className="text-zinc-600">•</span>
-            <span>Orientation: {orientationFrame === 'north_up' ? 'True North Aligned' : 'Coil-Centric Lab'}</span>
+            <span className="text-emerald-300 font-semibold">{orientationFrame === 'north_up' ? 'True North (0° Geo Up)' : 'Coil-Centric Lab Frame'}</span>
           </div>
-          <div className="text-zinc-400 hidden md:block">
-            USE SLIDERS TO ROTATE JAR / COIL FREELY • SCALAR ATTRACTOR IS ROOM-ROTATION INVARIANT
+          <div className="text-zinc-400 hidden lg:flex items-center gap-1.5 text-[7.5px]">
+            <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-cyan-300 border border-cyan-500/30 font-bold">CLICK &amp; DRAG JAR</span>
+            <span>OR SENSOR GYRO / ARROW KEYS [← / →]</span>
           </div>
         </div>
       </div>

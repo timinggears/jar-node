@@ -21,7 +21,32 @@ except ImportError:
 
 # Default development app link provided by the workspace proxy
 DEFAULT_URL = "https://ais-dev-hltv4y4usao3e5terlhjvj-107549292245.us-west2.run.app"
-LOCAL_URL = os.environ.get("LOCAL_URL", "http://localhost:3001")
+
+def find_active_local_url():
+    """Auto-detects whether the server is on port 3001, 8080, or 3000."""
+    import urllib.request
+    candidates = [
+        os.environ.get("LOCAL_URL"),
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://localhost:8080",
+        "http://localhost:3000",
+    ]
+    for url in candidates:
+        if not url:
+            continue
+        try:
+            req = urllib.request.Request(url, method="HEAD")
+            with urllib.request.urlopen(req, timeout=0.6) as resp:
+                if resp.status in (200, 301, 302, 304, 404):
+                    return url
+        except Exception:
+            pass
+    return os.environ.get("LOCAL_URL", "http://localhost:3001")
+
+LOCAL_URL = find_active_local_url()
 
 def main():
     print("\033[1;34m========================================================\033[0m")

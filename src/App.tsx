@@ -1908,6 +1908,7 @@ export default function App() {
             <PhysicalJarViewerMemo
               stats={stats}
               carrierBias={carrierBias}
+              socket={socketRef.current}
               onOpenAmbientEar={() => {
                 if (!openWindows.includes('ambient_mesh')) {
                   setOpenWindows(prev => [...prev, 'ambient_mesh']);

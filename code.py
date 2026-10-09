@@ -103,6 +103,18 @@ while True:
                 except: pass
             elif buffer.startswith("DUAL:"):
                 use_dual = (buffer.split(":")[1].strip() == "1")
+            elif buffer.startswith("JAR_ROT:") or buffer.startswith("!ORI|"):
+                try:
+                    if buffer.startswith("!ORI|"):
+                        b = buffer.split("|")
+                        j_rot = float(b[1]) if len(b) > 1 else 0.0
+                        c_rot = float(b[2]) if len(b) > 2 else j_rot
+                    else:
+                        parts = buffer.split("JAR_ROT:")[1].split("|")
+                        j_rot = float(parts[0])
+                        c_rot = float(parts[1].split(":")[1]) if len(parts) > 1 else j_rot
+                    sys.stdout.write("!ORI|{:.1f}|{:.1f}\r\n".format(j_rot, c_rot))
+                except: pass
             elif buffer == "SAVE":
                 save_state()
             elif buffer == "LOAD":

@@ -31,6 +31,7 @@ import {
 import type { AddressableTwoLevelQubit } from './src/quantum/qiskitEngine.ts';
 
 // --- GLOBAL SYSTEM STATE (v150: DEEP_MEMORY) ---
+export const PORT = Number(process.env.PORT) || Number(process.env.APP_PORT) || 3000;
 const STATE_FILE = path.join(os.tmpdir(), 'system_state.json');
 let systemState = {
   bias: 50,
@@ -98,8 +99,8 @@ function startPythonBridge() {
   const scriptPath = path.join(process.cwd(), 'local_bridge.py');
   
   try {
-    // Spawn bridge helper in virtual mode
-    pythonBridgeProcess = spawn(pythonCmd, [scriptPath, '--virtual']);
+    // Spawn bridge helper in virtual mode explicitly targeted at our server port
+    pythonBridgeProcess = spawn(pythonCmd, [scriptPath, '--virtual', '--url', `http://127.0.0.1:${PORT}`]);
     pythonBridgeActive = true;
     
     pythonBridgeProcess.on('error', (err: any) => {
@@ -1041,6 +1042,10 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       }
     });
 
+    socket.on('hardware:jar_rotation', (data: { jarHeading?: number, coilHeading?: number, isCoupled?: boolean }) => {
+      io.emit('hardware:jar_rotation', data);
+    });
+
     socket.on('hardware:dual_tone', (data: any) => {
       const freqA = Math.max(1000, Math.min(1000000, Number(data?.freqA) || 32500));
       const freqB = Math.max(1000, Math.min(1000000, Number(data?.freqB) || 33800));
@@ -1149,6 +1154,17 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       if (line && line.startsWith('!S|')) {
         const normalized = normalizeTelemetryLine(line);
         queueTelemetryEmission(normalized);
+      } else if (line && (line.startsWith('!ORI|') || line.startsWith('JAR_ROT:') || line.startsWith('JAR_AZIMUTH:'))) {
+        let jar = 0;
+        let coil = 0;
+        if (line.startsWith('!ORI|')) {
+          const parts = line.split('|');
+          jar = parseFloat(parts[1]) || 0;
+          coil = parseFloat(parts[2]) || 0;
+        } else {
+          jar = parseFloat(line.split(':')[1]) || 0;
+        }
+        io.emit('hardware:jar_rotation', { jarHeading: jar, coilHeading: coil });
       }
     });
 
@@ -1224,9 +1240,8 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     });
   });
 
-  // In AI Studio / Cloud Run, PORT is injected by the platform (port 3000).
-  // For local or external deployment, allow PORT, APP_PORT, or default to 8080.
-  const PORT = Number(process.env.PORT) || Number(process.env.APP_PORT) || 8080;
+  // PORT is configured globally: primary port (3000 in sandbox, or custom env/port).
+  // Cross-port sync ensures 3001, 8080, and 3000 are all connected to this runtime.
   
   // --- MINING IDENTITY ---
   let POOL_URL = systemState.pool_url || "rx.unmineable.com:3333";
@@ -1262,6 +1277,17 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
           if (line.startsWith('!S|')) {
             const normalized = normalizeTelemetryLine(line);
             queueTelemetryEmission(normalized);
+          } else if (line.startsWith('!ORI|') || line.startsWith('JAR_ROT:') || line.startsWith('JAR_AZIMUTH:')) {
+            let jar = 0;
+            let coil = 0;
+            if (line.startsWith('!ORI|')) {
+              const parts = line.split('|');
+              jar = parseFloat(parts[1]) || 0;
+              coil = parseFloat(parts[2]) || 0;
+            } else {
+              jar = parseFloat(line.split(':')[1]) || 0;
+            }
+            io.emit('hardware:jar_rotation', { jarHeading: jar, coilHeading: coil });
           }
         });
 
@@ -2969,7 +2995,12 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
       active: pythonBridgeActive,
       pid: pythonBridgeProcess?.pid || null,
       mode: 'python_proxy',
-      is_virtual: true
+      is_virtual: true,
+      ports: {
+        primary: PORT,
+        bridged: [3001, 8080, 3000].filter(p => p !== PORT),
+        crossPortSync: true
+      }
     });
   });
 
@@ -3174,6 +3205,28 @@ Keep your responses conversational, sleek, under 4-5 sentences, keeping the comm
   const server = httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`[SERVER] PI_RESERVOIR running at http://localhost:${PORT}`);
   });
+
+  // Cross-port sync between 3001 and 8080 (and 3000):
+  // Attach auxiliary HTTP + Socket.IO listeners to alternative ports (3001, 8080)
+  // so external bridges, local Python proxies, and desktop shells connecting to either port
+  // receive the exact same live telemetry everywhere!
+  const ALT_PORTS = [3001, 8080, 3000].filter(p => p !== PORT);
+  const auxServers: any[] = [];
+  for (const altPort of ALT_PORTS) {
+    try {
+      const altHttpServer = createServer(app);
+      io.attach(altHttpServer);
+      altHttpServer.listen(altPort, '0.0.0.0', () => {
+        console.log(`[SERVER_BRIDGE] Cross-port relay active on http://0.0.0.0:${altPort} (Bridged with primary port ${PORT})`);
+      }).on('error', (err: any) => {
+        // If port is occupied or restricted, gracefully log without interrupting primary server
+        console.log(`[SERVER_BRIDGE] Secondary port ${altPort} standby (${err.message}). Primary PORT ${PORT} active.`);
+      });
+      auxServers.push(altHttpServer);
+    } catch (e: any) {
+      console.warn(`[SERVER_BRIDGE] Port ${altPort} setup notice: ${e.message}`);
+    }
+  }
 
   server.on('error', (e: any) => {
     if (e.code === 'EADDRINUSE') {

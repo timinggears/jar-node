@@ -74,6 +74,21 @@ parser.add_argument("--baud", type=int, default=DEFAULT_BAUD_RATE, help="Serial 
 parser.add_argument("--virtual", action="store_true", help="Launch in virtual mock mode without physical USB serial Pico")
 args, unknown = parser.parse_known_args()
 
+# Multi-port candidate list: Bridges ports 3001, 8080, and 3000 dynamically so telemetry flows everywhere
+raw_candidates = [
+    args.url,
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://localhost:8080",
+    "http://localhost:3000"
+]
+PROBE_URLS = []
+for c in raw_candidates:
+    if c and c not in PROBE_URLS:
+        PROBE_URLS.append(c)
+
 SERVER_URL = args.url
 BAUD_RATE = args.baud
 IS_VIRTUAL = args.virtual
@@ -226,12 +241,21 @@ def process_telemetry_packet(voltage, jitter):
                 pass
 
 def connect_to_server():
-    """Establishes Socket.IO connection. For HTTPS/remote URLs, we force 'websocket' transport to bypass cloud proxy polling restrictions."""
-    is_remote = SERVER_URL.startswith("https://") or ("127.0.0.1" not in SERVER_URL and "localhost" not in SERVER_URL)
-    if is_remote:
-        sio.connect(SERVER_URL, transports=['websocket'])
-    else:
-        sio.connect(SERVER_URL, transports=['polling', 'websocket'])
+    """Establishes Socket.IO connection. Auto-probes ports 3001, 8080, and 3000 to bridge all local instances."""
+    global SERVER_URL
+    last_err = None
+    for candidate in PROBE_URLS:
+        try:
+            is_remote = candidate.startswith("https://") or ("127.0.0.1" not in candidate and "localhost" not in candidate)
+            transports = ['websocket'] if is_remote else ['polling', 'websocket']
+            sio.connect(candidate, transports=transports)
+            SERVER_URL = candidate
+            print(f"\033[1;32m[BRIDGE] Connected to sovereign interface wrapper at {SERVER_URL} (Cross-port 3001 <-> 8080 <-> 3000 verified)\033[0m")
+            return
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err or Exception("All candidate ports (3001, 8080, 3000) unreachable")
 
 # Initialize Socket.IO Client
 sio = socketio.Client()
@@ -311,6 +335,19 @@ def on_command(cmd):
             print(f"[BRIDGE -> HW] Generic CLI payload relayed: {cmd}")
         except Exception as e:
             print(f"[BRIDGE -> HW] Command route exception: {e}")
+
+@sio.on("hardware:jar_rotation")
+def on_jar_rotation(data):
+    """Relays physical/virtual jar rotation updates across the socket bridge to the serial Pico."""
+    global ser
+    if ser and ser.is_open and data:
+        try:
+            jar_deg = float(data.get("jarHeading", 0.0))
+            coil_deg = float(data.get("coilHeading", jar_deg))
+            cmd = f"JAR_ROT:{jar_deg:.1f}|COIL_ROT:{coil_deg:.1f}\n"
+            ser.write(cmd.encode("utf-8"))
+        except Exception:
+            pass
 
 def main():
     global ser
@@ -430,6 +467,26 @@ def main():
                                         sio.emit("hardware:telemetry_input", enriched_line)
                                     except Exception:
                                         pass
+                            elif decoded.startswith("!ORI|") or decoded.startswith("JAR_AZIMUTH:") or decoded.startswith("JAR_ROT:"):
+                                try:
+                                    if decoded.startswith("!ORI|"):
+                                        bits = decoded.split('|')
+                                        jar_deg = float(bits[1]) if len(bits) > 1 else 0.0
+                                        coil_deg = float(bits[2]) if len(bits) > 2 else jar_deg
+                                    elif "JAR_AZIMUTH:" in decoded:
+                                        jar_deg = float(decoded.split("JAR_AZIMUTH:")[1].split()[0])
+                                        coil_deg = jar_deg
+                                    else:
+                                        raw_val = decoded.split("JAR_ROT:")[1].split()[0]
+                                        if "|" in raw_val:
+                                            jar_deg = float(raw_val.split("|")[0])
+                                            coil_deg = float(raw_val.split("|")[1].replace("COIL_ROT:", ""))
+                                        else:
+                                            jar_deg = float(raw_val)
+                                            coil_deg = jar_deg
+                                    sio.emit("hardware:jar_rotation", {"jarHeading": jar_deg, "coilHeading": coil_deg})
+                                except Exception:
+                                    pass
                             elif decoded:
                                 # Forward any debug stdout logs
                                 sio.emit("hardware:log_input", f"PICO_HARDWARE: {decoded}")
