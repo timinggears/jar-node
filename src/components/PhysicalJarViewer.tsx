@@ -26,7 +26,12 @@ import {
   Eye,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  Navigation,
+  Lock,
+  Unlock,
+  Globe,
+  Sliders
 } from 'lucide-react';
 import { SystemStats } from '../types';
 
@@ -54,6 +59,16 @@ export default function PhysicalJarViewer({
   // Zoom level: default 0.50x (comfortably zoomed out to reveal the complete outer edge of the glass vessel, rim, and surrounding bench!)
   const [zoomLevel, setZoomLevel] = useState<number>(0.50);
 
+  // SPATIAL ORIENTATION & BENCH TRUE NORTH STATE
+  const [trueNorthHeading, setTrueNorthHeading] = useState<number>(0); // 0° = True North (upward)
+  const [jarHeading, setJarHeading] = useState<number>(0); // 0° to 359° (Square borosilicate vessel angle)
+  const [coilHeading, setCoilHeading] = useState<number>(0); // 0° to 359° (GP14 drive / GP26 sense coil terminals)
+  const [isCoupled, setIsCoupled] = useState<boolean>(false); // false = Free movement (independent), true = Mechanically locked
+  const [orientationFrame, setOrientationFrame] = useState<'north_up' | 'lab_relative'>('north_up');
+  const [showCompassOverlay, setShowCompassOverlay] = useState<boolean>(true);
+  const [isDeviceCompassActive, setIsDeviceCompassActive] = useState<boolean>(false);
+  const [vectorProjectionMode, setVectorProjectionMode] = useState<boolean>(false);
+
   // High-resolution images generated directly from real telemetry (Square glass jar apparatus)
   // 1. Zoomed out wide-angle tomographic scan showing complete SQUARE edge of the glass jar & bench:
   const jarSquareTomographyUrl = "/src/assets/images/jar_square_tomography_1791445476785.jpg";
@@ -76,7 +91,71 @@ export default function PhysicalJarViewer({
   const rawSeed = stats.seedHex || '877BE13E';
   const phaseAngleDeg = stats.phaseOut || 55.0;
 
-  // Keep latest parameters in a mutable ref to prevent tearing down RAF loops on every telemetry tick
+  // Relative differential angle & D4 square symmetry calculations
+  const deltaAngle = ((jarHeading - coilHeading) % 360 + 360) % 360;
+  const squareSymmetryDelta = deltaAngle % 90;
+  // Mutual Inductance coupling factor variation with square geometry:
+  const mutualCouplingFactor = (0.92 + 0.08 * Math.cos((squareSymmetryDelta / 45) * Math.PI)).toFixed(2);
+
+  // Device Compass synchronization (magnetometer / WebKit compass)
+  useEffect(() => {
+    if (!isDeviceCompassActive) return;
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      let heading = 0;
+      if ((e as any).webkitCompassHeading !== undefined && (e as any).webkitCompassHeading !== null) {
+        heading = (e as any).webkitCompassHeading;
+      } else if (e.alpha !== null) {
+        heading = (360 - e.alpha) % 360;
+      }
+      const rounded = Math.round(heading);
+      setTrueNorthHeading(rounded);
+      if (isCoupled) {
+        setJarHeading(rounded);
+        setCoilHeading(rounded);
+      }
+    };
+    window.addEventListener('deviceorientation', handleOrientation);
+    return () => window.removeEventListener('deviceorientation', handleOrientation);
+  }, [isDeviceCompassActive, isCoupled]);
+
+  const toggleDeviceCompass = async () => {
+    if (isDeviceCompassActive) {
+      setIsDeviceCompassActive(false);
+      return;
+    }
+    if (typeof window !== 'undefined' && typeof (DeviceOrientationEvent as any)?.requestPermission === 'function') {
+      try {
+        const resp = await (DeviceOrientationEvent as any).requestPermission();
+        if (resp === 'granted') {
+          setIsDeviceCompassActive(true);
+        }
+      } catch {
+        setIsDeviceCompassActive(true);
+      }
+    } else {
+      setIsDeviceCompassActive(true);
+    }
+  };
+
+  const handleRotateJar = (newAngle: number) => {
+    const normalized = ((newAngle % 360) + 360) % 360;
+    if (isCoupled) {
+      const diff = normalized - jarHeading;
+      setCoilHeading(prev => (((prev + diff) % 360) + 360) % 360);
+    }
+    setJarHeading(normalized);
+  };
+
+  const handleRotateCoil = (newAngle: number) => {
+    const normalized = ((newAngle % 360) + 360) % 360;
+    if (isCoupled) {
+      const diff = normalized - coilHeading;
+      setJarHeading(prev => (((prev + diff) % 360) + 360) % 360);
+    }
+    setCoilHeading(normalized);
+  };
+
+  // Keep latest parameters in a mutable ref to prevent tearing down RAF loops on every telemetry tick or orientation move
   const latestParamsRef = useRef({
     vNodal,
     jitterVal,
@@ -84,7 +163,13 @@ export default function PhysicalJarViewer({
     coherenceVal,
     phaseAngleDeg,
     carrierBias,
-    zoomLevel
+    zoomLevel,
+    trueNorthHeading,
+    jarHeading,
+    coilHeading,
+    orientationFrame,
+    showCompassOverlay,
+    vectorProjectionMode
   });
 
   useEffect(() => {
@@ -95,9 +180,29 @@ export default function PhysicalJarViewer({
       coherenceVal,
       phaseAngleDeg,
       carrierBias,
-      zoomLevel
+      zoomLevel,
+      trueNorthHeading,
+      jarHeading,
+      coilHeading,
+      orientationFrame,
+      showCompassOverlay,
+      vectorProjectionMode
     };
-  }, [vNodal, jitterVal, carrierFreqHz, coherenceVal, phaseAngleDeg, carrierBias, zoomLevel]);
+  }, [
+    vNodal, 
+    jitterVal, 
+    carrierFreqHz, 
+    coherenceVal, 
+    phaseAngleDeg, 
+    carrierBias, 
+    zoomLevel,
+    trueNorthHeading,
+    jarHeading,
+    coilHeading,
+    orientationFrame,
+    showCompassOverlay,
+    vectorProjectionMode
+  ]);
 
   // Track real voltage history for Phase-Space Attractor (Takens' Delay Embedding)
   useEffect(() => {
@@ -107,20 +212,134 @@ export default function PhysicalJarViewer({
     }
   }, [vNodal, jitterVal]);
 
-  // Helper to draw physical SQUARE glass jar boundary & exterior induction coil
+  // Helper to draw physical SQUARE glass jar boundary, exterior induction coil, and True North compass reticle
   const drawGlassJarBoundary = (
     ctx: CanvasRenderingContext2D,
     cx: number,
     cy: number,
     innerHalf: number,
-    wallThickness: number
+    wallThickness: number,
+    jarAngleRad: number = 0,
+    coilAngleRad: number = 0,
+    trueNorthAngleRad: number = -Math.PI / 2,
+    showCompass: boolean = true
   ) => {
     const outerHalf = innerHalf + wallThickness;
     const cornerRadius = 18;
+    const compassRadius = Math.max(outerHalf + 48, innerHalf * 1.38);
 
     ctx.save();
 
-    // 1. Exterior Induction Coil (GP14) - 3 rectangular turns hugging the square vessel
+    // 0. High-Tech True North Azimuth Ring & Compass Rose (if enabled)
+    if (showCompass) {
+      ctx.save();
+      // Outer subtle ring
+      ctx.strokeStyle = 'rgba(0, 255, 204, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, compassRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, compassRadius - 8, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Degree tick marks every 10 degrees and cardinal directions
+      for (let deg = 0; deg < 360; deg += 10) {
+        const rad = ((deg - 90) * Math.PI) / 180 + (trueNorthAngleRad + Math.PI / 2);
+        const isMajor = deg % 30 === 0;
+        const isCardinal = deg % 90 === 0;
+        const tickLen = isCardinal ? 12 : isMajor ? 7 : 3.5;
+
+        const x1 = cx + Math.cos(rad) * (compassRadius - tickLen);
+        const y1 = cy + Math.sin(rad) * (compassRadius - tickLen);
+        const x2 = cx + Math.cos(rad) * compassRadius;
+        const y2 = cy + Math.sin(rad) * compassRadius;
+
+        ctx.strokeStyle = isCardinal ? 'rgba(0, 255, 204, 0.75)' : isMajor ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = isCardinal ? 1.5 : 1;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        if (isCardinal) {
+          const labelDist = compassRadius + 14;
+          const lx = cx + Math.cos(rad) * labelDist;
+          const ly = cy + Math.sin(rad) * labelDist;
+          ctx.font = 'bold 9px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          if (deg === 0) {
+            ctx.fillStyle = '#ef4444'; // Red for TRUE NORTH
+            ctx.fillText('N (TRUE)', lx, ly);
+          } else if (deg === 90) {
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillText('E', lx, ly);
+          } else if (deg === 180) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText('S', lx, ly);
+          } else if (deg === 270) {
+            ctx.fillStyle = '#06b6d4';
+            ctx.fillText('W', lx, ly);
+          }
+        }
+      }
+
+      // True North Indicator Needle pointing to trueNorthAngleRad
+      const needleLen = compassRadius - 10;
+      const nx = cx + Math.cos(trueNorthAngleRad) * needleLen;
+      const ny = cy + Math.sin(trueNorthAngleRad) * needleLen;
+      const perpRad = trueNorthAngleRad + Math.PI / 2;
+      const nBaseX1 = cx + Math.cos(perpRad) * 4.5;
+      const nBaseY1 = cy + Math.sin(perpRad) * 4.5;
+      const nBaseX2 = cx - Math.cos(perpRad) * 4.5;
+      const nBaseY2 = cy - Math.sin(perpRad) * 4.5;
+
+      // North Half Needle (Red)
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineTo(nBaseX1, nBaseY1);
+      ctx.lineTo(cx, cy);
+      ctx.closePath();
+      ctx.fill();
+
+      // North Half Needle Shadow/Highlight (Bright Red)
+      ctx.fillStyle = '#f87171';
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineTo(nBaseX2, nBaseY2);
+      ctx.lineTo(cx, cy);
+      ctx.closePath();
+      ctx.fill();
+
+      // South Counter-Needle (Muted Silver)
+      const sx = cx - Math.cos(trueNorthAngleRad) * (needleLen * 0.45);
+      const sy = cy - Math.sin(trueNorthAngleRad) * (needleLen * 0.45);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(nBaseX1, nBaseY1);
+      ctx.lineTo(nBaseX2, nBaseY2);
+      ctx.closePath();
+      ctx.fill();
+
+      // Compass Center Pivot Gem
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // 1. Exterior Induction Coil (GP14) - Drawn in COIL FRAME (rotated by coilAngleRad)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(coilAngleRad);
+
     for (let c = 0; c < 3; c++) {
       const coilOffset = outerHalf + c * 3.5 + 2;
       ctx.strokeStyle = c === 1 ? '#f59e0b' : '#b45309';
@@ -130,50 +349,14 @@ export default function PhysicalJarViewer({
         ctx.shadowBlur = 8;
       }
       ctx.beginPath();
-      ctx.roundRect(cx - coilOffset, cy - coilOffset, coilOffset * 2, coilOffset * 2, cornerRadius + 4);
+      ctx.roundRect(-coilOffset, -coilOffset, coilOffset * 2, coilOffset * 2, cornerRadius + 4);
       ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
-    // 2. Square Borosilicate Glass Wall Body
-    ctx.beginPath();
-    ctx.roundRect(cx - outerHalf, cy - outerHalf, outerHalf * 2, outerHalf * 2, cornerRadius);
-    ctx.roundRect(cx - innerHalf, cy - innerHalf, innerHalf * 2, innerHalf * 2, cornerRadius - 4);
-    ctx.fillStyle = 'rgba(6, 182, 212, 0.12)';
-    ctx.fill('evenodd');
-
-    // 3. Glass Wall Edges (Outer & Inner square rims)
-    ctx.strokeStyle = 'rgba(0, 255, 204, 0.85)';
-    ctx.lineWidth = 2.0;
-    ctx.beginPath();
-    ctx.roundRect(cx - outerHalf, cy - outerHalf, outerHalf * 2, outerHalf * 2, cornerRadius);
-    ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(0, 255, 204, 0.55)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(cx - innerHalf, cy - innerHalf, innerHalf * 2, innerHalf * 2, cornerRadius - 4);
-    ctx.stroke();
-
-    // Specular highlights on planar glass faces
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 2.0;
-    ctx.beginPath();
-    ctx.moveTo(cx - outerHalf + 25, cy - outerHalf + 2);
-    ctx.lineTo(cx + outerHalf - 25, cy - outerHalf + 2);
-    ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx - outerHalf + 2, cy - outerHalf + 25);
-    ctx.lineTo(cx - outerHalf + 2, cy + outerHalf - 25);
-    ctx.stroke();
-
-    // 4. GP14 Drive & GP26 Loaded Coil Sense Terminal Connections
-    // (Both connect outside to the SAME coil terminals - no probe dipped into fluid!)
-    const termX = cx + outerHalf + 14;
-    const termY = cy;
+    // GP14 Drive & GP26 Loaded Coil Sense Terminal Connections
+    const termX = outerHalf + 14;
+    const termY = 0;
 
     // Coil Lead Terminal Pad
     ctx.fillStyle = '#b45309';
@@ -209,16 +392,81 @@ export default function PhysicalJarViewer({
     ctx.arc(termX, termY + 7, 3.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Annotations
+    // Coil Azimuth Marker & Annotations
     ctx.font = '8px monospace';
-    ctx.fillStyle = '#00ffcc';
-    ctx.fillText('● SQUARE BOROSILICATE CONTAINER (82×82 mm)', cx + outerHalf + 8, cy - 28);
     ctx.fillStyle = '#f59e0b';
-    ctx.fillText('● GP14 PWM COIL DRIVE (28–105 kHz)', cx + outerHalf + 8, cy - 14);
+    ctx.textAlign = 'left';
+    ctx.fillText('GP14/GP26 LEADS', termX + 48, termY + 3);
+
+    ctx.restore();
+
+    // 2. Square Borosilicate Glass Vessel - Drawn in JAR FRAME (rotated by jarAngleRad)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(jarAngleRad);
+
+    // Square Borosilicate Glass Wall Body
+    ctx.beginPath();
+    ctx.roundRect(-outerHalf, -outerHalf, outerHalf * 2, outerHalf * 2, cornerRadius);
+    ctx.roundRect(-innerHalf, -innerHalf, innerHalf * 2, innerHalf * 2, cornerRadius - 4);
+    ctx.fillStyle = 'rgba(6, 182, 212, 0.12)';
+    ctx.fill('evenodd');
+
+    // Glass Wall Edges (Outer & Inner square rims)
+    ctx.strokeStyle = 'rgba(0, 255, 204, 0.85)';
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.roundRect(-outerHalf, -outerHalf, outerHalf * 2, outerHalf * 2, cornerRadius);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(0, 255, 204, 0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-innerHalf, -innerHalf, innerHalf * 2, innerHalf * 2, cornerRadius - 4);
+    ctx.stroke();
+
+    // Specular highlights on planar glass faces
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.moveTo(-outerHalf + 25, -outerHalf + 2);
+    ctx.lineTo(outerHalf - 25, -outerHalf + 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-outerHalf + 2, -outerHalf + 25);
+    ctx.lineTo(-outerHalf + 2, outerHalf - 25);
+    ctx.stroke();
+
+    // Jar Orientation Apex Marker (indicates 0° North axis of the vessel)
+    ctx.fillStyle = '#00ffcc';
+    ctx.beginPath();
+    ctx.moveTo(0, -outerHalf - 1);
+    ctx.lineTo(-5, -outerHalf - 8);
+    ctx.lineTo(5, -outerHalf - 8);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.font = '7.5px monospace';
+    ctx.fillStyle = '#00ffcc';
+    ctx.textAlign = 'center';
+    ctx.fillText('JAR N-AXIS (82mm)', 0, -outerHalf - 12);
+
+    ctx.restore();
+
+    // 3. Fixed Canvas HUD text
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#00ffcc';
+    ctx.fillText('● SQUARE BOROSILICATE CONTAINER (82×82 mm)', 14, cy - 28);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillText('● GP14 PWM COIL DRIVE (28–105 kHz)', 14, cy - 14);
     ctx.fillStyle = '#10b981';
-    ctx.fillText('● GP26 LOADED COIL NODE (DRIVE + BACK-EMF)', cx + outerHalf + 8, cy);
+    ctx.fillText('● GP26 LOADED COIL NODE (DRIVE + BACK-EMF)', 14, cy);
     ctx.fillStyle = '#a78bfa';
-    ctx.fillText('● OIL + CARBON SUSPENSION (NONLINEAR LOAD)', cx + outerHalf + 8, cy + 14);
+    ctx.fillText('● OIL + CARBON SUSPENSION (NONLINEAR LOAD)', 14, cy + 14);
 
     ctx.restore();
   };
@@ -353,8 +601,41 @@ export default function PhysicalJarViewer({
 
         ctx.putImageData(imgData, 0, 0);
 
-        // Draw Glass Wall, Rim, and Coil on top
-        drawGlassJarBoundary(ctx, cx, cy, innerRadius, wallThickness);
+        // Orientation parameters for Live Raster
+        const {
+          jarHeading: curJarHeading,
+          coilHeading: curCoilHeading,
+          trueNorthHeading: curTrueNorthHeading,
+          orientationFrame: curOrientationFrame,
+          showCompassOverlay: curShowCompass
+        } = latestParamsRef.current;
+
+        let jarAngleRad = 0;
+        let coilAngleRad = 0;
+        let trueNorthAngleRad = -Math.PI / 2;
+
+        if (curOrientationFrame === 'north_up') {
+          trueNorthAngleRad = -Math.PI / 2;
+          jarAngleRad = (curJarHeading * Math.PI) / 180;
+          coilAngleRad = (curCoilHeading * Math.PI) / 180;
+        } else {
+          coilAngleRad = 0;
+          jarAngleRad = (((curJarHeading - curCoilHeading) % 360 + 360) * Math.PI) / 180;
+          trueNorthAngleRad = -Math.PI / 2 - (curCoilHeading * Math.PI) / 180;
+        }
+
+        // Draw Glass Wall, Rim, Coil, and Compass Rose on top
+        drawGlassJarBoundary(
+          ctx, 
+          cx, 
+          cy, 
+          innerRadius, 
+          wallThickness, 
+          jarAngleRad, 
+          coilAngleRad, 
+          trueNorthAngleRad, 
+          curShowCompass
+        );
       } catch (err) {
         console.warn('[JAR_RASTER_ERROR]', err);
       }
@@ -391,7 +672,29 @@ export default function PhysicalJarViewer({
         const cx = w / 2;
         const cy = h / 2;
 
-        const currentZoom = latestParamsRef.current.zoomLevel;
+        const {
+          zoomLevel: currentZoom,
+          jarHeading: curJarHeading,
+          coilHeading: curCoilHeading,
+          trueNorthHeading: curTrueNorthHeading,
+          orientationFrame: curOrientationFrame,
+          showCompassOverlay: curShowCompass,
+          vectorProjectionMode: curVectorProj
+        } = latestParamsRef.current;
+
+        let jarAngleRad = 0;
+        let coilAngleRad = 0;
+        let trueNorthAngleRad = -Math.PI / 2;
+
+        if (curOrientationFrame === 'north_up') {
+          trueNorthAngleRad = -Math.PI / 2;
+          jarAngleRad = (curJarHeading * Math.PI) / 180;
+          coilAngleRad = (curCoilHeading * Math.PI) / 180;
+        } else {
+          coilAngleRad = 0;
+          jarAngleRad = (((curJarHeading - curCoilHeading) % 360 + 360) * Math.PI) / 180;
+          trueNorthAngleRad = -Math.PI / 2 - (curCoilHeading * Math.PI) / 180;
+        }
 
         // Base radius scaled by zoomLevel
         const innerRadius = Math.min(w, h) * 0.42 * currentZoom;
@@ -417,22 +720,29 @@ export default function PhysicalJarViewer({
           ctx.stroke();
         }
 
-        // Draw square liquid dielectric chamber background inside square container
+        // Draw square liquid dielectric chamber background rotated with square container
         const innerHalf = innerRadius * 0.90;
         const cornerRad = Math.max(6, 12 * currentZoom);
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(jarAngleRad);
+
         ctx.fillStyle = '#02120a';
         ctx.beginPath();
-        ctx.roundRect(cx - innerHalf, cy - innerHalf, innerHalf * 2, innerHalf * 2, cornerRad);
+        ctx.roundRect(-innerHalf, -innerHalf, innerHalf * 2, innerHalf * 2, cornerRad);
         ctx.fill();
 
         // Square grid calibration lines inside jar
         ctx.strokeStyle = 'rgba(0, 255, 204, 0.10)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.roundRect(cx - innerHalf * 0.75, cy - innerHalf * 0.75, innerHalf * 1.5, innerHalf * 1.5, cornerRad * 0.75);
-        ctx.roundRect(cx - innerHalf * 0.50, cy - innerHalf * 0.50, innerHalf, innerHalf, cornerRad * 0.5);
-        ctx.roundRect(cx - innerHalf * 0.25, cy - innerHalf * 0.25, innerHalf * 0.5, innerHalf * 0.5, cornerRad * 0.25);
+        ctx.roundRect(-innerHalf * 0.75, -innerHalf * 0.75, innerHalf * 1.5, innerHalf * 1.5, cornerRad * 0.75);
+        ctx.roundRect(-innerHalf * 0.50, -innerHalf * 0.50, innerHalf, innerHalf, cornerRad * 0.5);
+        ctx.roundRect(-innerHalf * 0.25, -innerHalf * 0.25, innerHalf * 0.5, innerHalf * 0.5, cornerRad * 0.25);
         ctx.stroke();
+
+        ctx.restore();
 
         const hist = voltageHistoryRef.current;
         const tau = 4; // Delay embedding lag
@@ -473,8 +783,16 @@ export default function PhysicalJarViewer({
             if (normY > wallBound) normY = wallBound;
             if (normY < -wallBound) normY = -wallBound;
 
-            const px = cx + normX * scale;
-            const py = cy - normY * scale;
+            let px = cx + normX * scale;
+            let py = cy - normY * scale;
+
+            if (curVectorProj) {
+              // Project 2D phase trajectory along the coil's geographic dipole axis
+              const rotX = normX * Math.cos(coilAngleRad) - normY * Math.sin(coilAngleRad);
+              const rotY = normX * Math.sin(coilAngleRad) + normY * Math.cos(coilAngleRad);
+              px = cx + rotX * scale;
+              py = cy + rotY * scale;
+            }
 
             if (i === tau) {
               ctx.moveTo(px, py);
@@ -501,8 +819,15 @@ export default function PhysicalJarViewer({
           if (curY > wallBound) curY = wallBound;
           if (curY < -wallBound) curY = -wallBound;
 
-          const lX = cx + curX * scale;
-          const lY = cy - curY * scale;
+          let lX = cx + curX * scale;
+          let lY = cy - curY * scale;
+
+          if (curVectorProj) {
+            const rotX = curX * Math.cos(coilAngleRad) - curY * Math.sin(coilAngleRad);
+            const rotY = curX * Math.sin(coilAngleRad) + curY * Math.cos(coilAngleRad);
+            lX = cx + rotX * scale;
+            lY = cy + rotY * scale;
+          }
 
           ctx.fillStyle = '#ff0055';
           ctx.beginPath();
@@ -516,15 +841,25 @@ export default function PhysicalJarViewer({
           ctx.stroke();
         }
 
-        // Draw Glass Wall, Rim, and Coil on top
-        drawGlassJarBoundary(ctx, cx, cy, innerRadius, wallThickness);
+        // Draw Glass Wall, Rim, Coil, and Compass Rose on top
+        drawGlassJarBoundary(
+          ctx, 
+          cx, 
+          cy, 
+          innerRadius, 
+          wallThickness, 
+          jarAngleRad, 
+          coilAngleRad, 
+          trueNorthAngleRad, 
+          curShowCompass
+        );
 
         // Top HUD labels
         ctx.font = '9px monospace';
         ctx.fillStyle = '#00ffcc';
-        ctx.fillText(`PHASE-SPACE ATTRACTOR: V(t) vs V(t - 4) [BOXY SQUARE ORBIT]`, 14, 20);
+        ctx.fillText(`PHASE ATTRACTOR: V(t) vs V(t - 4) • FRAME: ${curOrientationFrame === 'north_up' ? 'NORTH-UP' : 'COIL FRAME'}`, 14, 20);
         ctx.fillStyle = '#888888';
-        ctx.fillText(`Square Container Boundaries + Memory Clamps • Downward Turns (Zoom: ${Math.round(currentZoom * 100)}%)`, 14, 34);
+        ctx.fillText(`Jar: ${curJarHeading}° • Coil: ${curCoilHeading}° • Delta: ${Math.abs(curJarHeading - curCoilHeading)}° • True North: 000° (Zoom: ${Math.round(currentZoom * 100)}%)`, 14, 34);
       } catch (err) {
         console.warn('[JAR_ATTRACTOR_ERROR]', err);
       }
@@ -832,6 +1167,220 @@ export default function PhysicalJarViewer({
         )}
       </div>
 
+      {/* SPATIAL ORIENTATION & TRUE NORTH BENCH ALIGNMENT DOCK */}
+      <div className="p-3 bg-[#030906] rounded-xl border border-emerald-500/30 space-y-2.5 text-[9px] font-mono shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
+              <Compass size={16} className={isDeviceCompassActive ? "animate-spin" : ""} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black text-white uppercase tracking-wider">
+                  BENCH SPATIAL ORIENTATION &amp; TRUE NORTH ALIGNMENT
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[7.5px] font-bold bg-zinc-800 text-emerald-300 border border-emerald-500/30">
+                  {orientationFrame === 'north_up' ? 'FRAME: NORTH-UP (TRUE NORTH 0°)' : 'FRAME: COIL-CENTRIC (LAB FIXED)'}
+                </span>
+              </div>
+              <div className="text-[8px] text-zinc-400">
+                Jar &amp; excitation coil move freely • GP26 reads scalar load on coil • Container rotation modulates gap clearance
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Presets & Toggles */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={toggleDeviceCompass}
+              className={`px-2 py-1 rounded border text-[8px] font-bold uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                isDeviceCompassActive
+                  ? 'bg-emerald-500 text-black border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                  : 'bg-black text-zinc-400 hover:text-white border-white/10'
+              }`}
+              title="Sync heading with physical device compass / magnetometer"
+            >
+              <Navigation size={10} />
+              <span>{isDeviceCompassActive ? 'DEVICE COMPASS ON' : 'SYNC COMPASS'}</span>
+            </button>
+
+            {/* Frame toggle */}
+            <button
+              onClick={() => setOrientationFrame(prev => prev === 'north_up' ? 'lab_relative' : 'north_up')}
+              className={`px-2 py-1 rounded border text-[8px] font-bold uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                orientationFrame === 'north_up'
+                  ? 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40'
+                  : 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+              }`}
+              title="Toggle between Geographic North-Up and Coil-Centric Lab frames"
+            >
+              <Globe size={10} />
+              <span>{orientationFrame === 'north_up' ? 'NORTH-UP' : 'COIL FRAME'}</span>
+            </button>
+
+            {/* Coupling Mode Toggle: Free vs Locked */}
+            <button
+              onClick={() => setIsCoupled(!isCoupled)}
+              className={`px-2 py-1 rounded border text-[8px] font-bold uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                isCoupled
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+              }`}
+              title="Toggle whether Jar and Coil rotate freely from one another or move locked together"
+            >
+              {isCoupled ? <Lock size={10} /> : <Unlock size={10} />}
+              <span>{isCoupled ? 'LOCKED COUPLING' : 'FREE MOVEMENT'}</span>
+            </button>
+
+            {/* Vector Projection (Attractor mode only) */}
+            {viewMode === 'attractor' && (
+              <button
+                onClick={() => setVectorProjectionMode(!vectorProjectionMode)}
+                className={`px-2 py-1 rounded border text-[8px] font-bold uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                  vectorProjectionMode
+                    ? 'bg-purple-500/20 text-purple-200 border-purple-400/40'
+                    : 'bg-black text-zinc-500 border-white/10'
+                }`}
+                title="Project phase trajectory onto spatial coil dipole vector in bench space"
+              >
+                <Orbit size={10} />
+                <span>VECTOR MAP {vectorProjectionMode ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
+
+            {/* Compass Rose Toggle */}
+            <button
+              onClick={() => setShowCompassOverlay(!showCompassOverlay)}
+              className={`px-2 py-1 rounded border text-[8px] font-bold uppercase transition-all cursor-pointer ${
+                showCompassOverlay
+                  ? 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40'
+                  : 'bg-black text-zinc-500 border-white/10'
+              }`}
+            >
+              COMPASS ROSE {showCompassOverlay ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        </div>
+
+        {/* Rotational Dials & Azimuth Sliders */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+          {/* 1. Jar Azimuth (Square Vessel) */}
+          <div className="p-2 rounded bg-black/60 border border-cyan-500/30 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-cyan-300 font-bold flex items-center gap-1 text-[8.5px]">
+                <span className="w-2 h-2 rounded-xs border border-cyan-400 bg-cyan-500/30" />
+                JAR CHASSIS AZIMUTH:
+              </span>
+              <span className="text-white font-black font-mono">{jarHeading}°</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="359"
+              value={jarHeading}
+              onChange={(e) => handleRotateJar(parseInt(e.target.value, 10))}
+              className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+            />
+            <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
+              <div className="flex gap-1">
+                <button onClick={() => handleRotateJar(jarHeading - 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-15°</button>
+                <button onClick={() => handleRotateJar(jarHeading + 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+15°</button>
+                <button onClick={() => handleRotateJar(jarHeading + 90)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+90° (D4)</button>
+              </div>
+              <button onClick={() => handleRotateJar(0)} className="text-cyan-400 hover:underline cursor-pointer">0° N</button>
+            </div>
+          </div>
+
+          {/* 2. Coil Azimuth (GP14 Drive / GP26 Sense) */}
+          <div className="p-2 rounded bg-black/60 border border-amber-500/30 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-amber-300 font-bold flex items-center gap-1 text-[8.5px]">
+                <span className="w-2 h-2 rounded-full border border-amber-400 bg-amber-500/30" />
+                COIL TERMINALS (GP14/26):
+              </span>
+              <span className="text-white font-black font-mono">{coilHeading}°</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="359"
+              value={coilHeading}
+              onChange={(e) => handleRotateCoil(parseInt(e.target.value, 10))}
+              className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+            />
+            <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
+              <div className="flex gap-1">
+                <button onClick={() => handleRotateCoil(coilHeading - 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-15°</button>
+                <button onClick={() => handleRotateCoil(coilHeading + 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+15°</button>
+                <button onClick={() => handleRotateCoil(jarHeading)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">= JAR</button>
+              </div>
+              <button onClick={() => handleRotateCoil(0)} className="text-amber-400 hover:underline cursor-pointer">0° N</button>
+            </div>
+          </div>
+
+          {/* 3. Differential Angle & Square Symmetry Clearance */}
+          <div className="p-2 rounded bg-black/60 border border-white/10 space-y-1 text-[8px]">
+            <div className="flex justify-between items-center text-zinc-400">
+              <span>RELATIVE DELTA (Δθ):</span>
+              <span className="text-emerald-400 font-bold font-mono">{deltaAngle}°</span>
+            </div>
+            <div className="flex justify-between items-center text-zinc-400">
+              <span>SQUARE D4 PERIOD:</span>
+              <span className="text-cyan-300 font-bold font-mono">{squareSymmetryDelta}° / 90°</span>
+            </div>
+            <div className="flex justify-between items-center text-zinc-400">
+              <span>CORNER CLEARANCE:</span>
+              <span className="text-amber-300 font-bold font-mono">{(3.5 * (1 + 0.35 * Math.sin((squareSymmetryDelta / 90) * Math.PI))).toFixed(1)} mm</span>
+            </div>
+            <div className="flex justify-between items-center text-zinc-400">
+              <span>MUTUAL FLUX RATIO:</span>
+              <span className="text-purple-300 font-bold font-mono">{mutualCouplingFactor}x</span>
+            </div>
+          </div>
+
+          {/* 4. Cardinal Alignment Presets */}
+          <div className="p-2 rounded bg-black/60 border border-white/10 flex flex-col justify-between">
+            <span className="text-zinc-500 text-[8px] uppercase font-bold">CARDINAL BENCH PRESETS:</span>
+            <div className="grid grid-cols-4 gap-1 pt-1">
+              <button
+                onClick={() => { handleRotateJar(0); handleRotateCoil(0); }}
+                className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-red-500/30 text-red-300 font-bold text-center cursor-pointer"
+                title="Align to True North"
+              >
+                N (0°)
+              </button>
+              <button
+                onClick={() => { handleRotateJar(90); handleRotateCoil(90); }}
+                className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-amber-500/30 text-amber-300 font-bold text-center cursor-pointer"
+                title="Align East"
+              >
+                E (90°)
+              </button>
+              <button
+                onClick={() => { handleRotateJar(180); handleRotateCoil(180); }}
+                className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-500/30 text-zinc-300 font-bold text-center cursor-pointer"
+                title="Align South"
+              >
+                S (180°)
+              </button>
+              <button
+                onClick={() => { handleRotateJar(270); handleRotateCoil(270); }}
+                className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-cyan-500/30 text-cyan-300 font-bold text-center cursor-pointer"
+                title="Align West"
+              >
+                W (270°)
+              </button>
+            </div>
+            <div className="flex justify-between items-center pt-1 text-[7.5px] text-zinc-400">
+              <span>COUPLING STATE:</span>
+              <span className="text-emerald-400 font-bold">
+                {deltaAngle === 0 ? 'COAXIAL ALIGNED' : `${deltaAngle}° INDEPENDENT`}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Main Visualizer Stage (Interactive Scroll-Wheel Zoom & Visual Edge Reticle) */}
       <div 
         onWheel={(e) => {
@@ -861,13 +1410,13 @@ export default function PhysicalJarViewer({
           />
         )}
 
-        {/* View Mode 3 & 4: Reconstructed Tomography Image or Real Jar Photo (Zoom-Out Scaling) */}
+        {/* View Mode 3 & 4: Reconstructed Tomography Image or Real Jar Photo (Zoom-Out & Orientation Scaling) */}
         {(viewMode === 'tomography' || viewMode === 'photo') && (
           <div className="w-full h-full flex items-center justify-center overflow-hidden p-4">
             <div 
               className="relative transition-transform duration-200 ease-out flex items-center justify-center max-w-full max-h-full"
               style={{ 
-                transform: `scale(${zoomLevel / 0.50})`, 
+                transform: `scale(${zoomLevel / 0.50}) rotate(${orientationFrame === 'north_up' ? jarHeading : deltaAngle}deg)`, 
                 transformOrigin: 'center center' 
               }}
             >
@@ -895,11 +1444,11 @@ export default function PhysicalJarViewer({
                     
                     {/* Glass Edge Reticle Annotations */}
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black/90 px-2 py-0.5 rounded border border-cyan-500/50 text-[8px] text-cyan-300 font-bold whitespace-nowrap shadow-md">
-                      SQUARE BOROSILICATE RIM (82×82 mm) • WALL: 3.5 mm
+                      SQUARE BOROSILICATE RIM (82×82 mm) • AZIMUTH: {jarHeading}°
                     </div>
 
                     <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-black/90 px-2 py-0.5 rounded border border-amber-500/50 text-[8px] text-amber-300 font-bold whitespace-nowrap shadow-md">
-                      EXTERIOR COIL (GP14) & SENSE NODE (GP26) • NO MEMORY STICK INSIDE
+                      COIL TERMINAL ANGLE: {coilHeading}° • FREE COUPLING Δ: {deltaAngle}°
                     </div>
                   </div>
                 </div>
@@ -940,18 +1489,30 @@ export default function PhysicalJarViewer({
         {/* Ambient Dark Gradient Vignette */}
         <div className="absolute inset-0 bg-radial from-transparent via-transparent to-black/70 pointer-events-none" />
 
-        {/* Top-Right Telemetry Mapping Box */}
+        {/* Top-Right Telemetry & Orientation Mapping Box */}
         <div className="absolute top-3 right-3 bg-black/90 backdrop-blur-md border border-white/10 rounded-lg p-2.5 text-[8.5px] font-mono space-y-1 z-10 hidden sm:block">
           <div className="flex items-center justify-between gap-4 text-zinc-400">
-            <span>EDGE RESOLUTION:</span>
-            <span className="text-emerald-400 font-bold uppercase">OUTER RIM VISIBLE</span>
+            <span>TRUE NORTH:</span>
+            <span className="text-red-400 font-bold font-mono">000° (GEO NORTH)</span>
           </div>
           <div className="flex items-center justify-between gap-4 text-zinc-400">
-            <span>ZOOM LEVEL:</span>
-            <span className="text-cyan-300 font-bold font-mono">{Math.round(zoomLevel * 100)}%</span>
+            <span>JAR AZIMUTH:</span>
+            <span className="text-cyan-300 font-bold font-mono">{jarHeading}°</span>
           </div>
           <div className="flex items-center justify-between gap-4 text-zinc-400">
-            <span>PROBE VOLTAGE (GP26):</span>
+            <span>COIL AZIMUTH:</span>
+            <span className="text-amber-300 font-bold font-mono">{coilHeading}°</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 text-zinc-400">
+            <span>COUPLING (Δθ):</span>
+            <span className="text-emerald-400 font-bold font-mono">{deltaAngle}° ({isCoupled ? 'LOCKED' : 'FREE'})</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 text-zinc-400">
+            <span>MUTUAL FLUX:</span>
+            <span className="text-purple-300 font-bold font-mono">{mutualCouplingFactor}x</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 text-zinc-400 pt-1 border-t border-white/10">
+            <span>LOAD NODE (GP26):</span>
             <span className="text-white font-bold font-mono">{vNodal.toFixed(3)} V</span>
           </div>
           <div className="flex items-center justify-between gap-4 text-zinc-400">
@@ -959,7 +1520,7 @@ export default function PhysicalJarViewer({
             <span className="text-amber-300 font-bold font-mono">{(carrierFreqHz / 1000).toFixed(1)} kHz</span>
           </div>
           <div className="flex items-center justify-between gap-4 text-zinc-400">
-            <span>ANALOG NOISE (JITTER):</span>
+            <span>ANALOG JITTER:</span>
             <span className="text-purple-300 font-bold font-mono">{(jitterVal * 1000).toFixed(1)} mV</span>
           </div>
         </div>
@@ -967,15 +1528,17 @@ export default function PhysicalJarViewer({
         {/* Bottom Status Bar on Stage */}
         <div className="absolute bottom-3 left-3 right-3 bg-black/90 backdrop-blur-md border border-white/10 rounded-lg px-3 py-2 flex items-center justify-between text-[8px] font-mono z-10">
           <div className="flex items-center gap-2 text-zinc-400">
-            <span className="text-emerald-400 font-bold">● VISUAL CHAMBER GEOMETRY:</span>
-            <span>Borosilicate Glass Jar Outer Wall</span>
+            <span className="text-emerald-400 font-bold">● BENCH ORIENTATION:</span>
+            <span>Square Jar: {jarHeading}°</span>
             <span className="text-zinc-600">•</span>
-            <span>GP14 Copper Coil Outer Windings</span>
+            <span>Coil Windings: {coilHeading}°</span>
             <span className="text-zinc-600">•</span>
-            <span>GP26 Dipped Probe Wire</span>
+            <span>Free Delta: {deltaAngle}°</span>
+            <span className="text-zinc-600">•</span>
+            <span>Orientation: {orientationFrame === 'north_up' ? 'True North Aligned' : 'Coil-Centric Lab'}</span>
           </div>
           <div className="text-zinc-400 hidden md:block">
-            USE ZOOM SLIDER OR BUTTONS TO ADJUST VIEW RADIUS
+            USE SLIDERS TO ROTATE JAR / COIL FREELY • SCALAR ATTRACTOR IS ROOM-ROTATION INVARIANT
           </div>
         </div>
       </div>
@@ -1016,7 +1579,7 @@ export default function PhysicalJarViewer({
       )}
 
       {/* Hardware Subsystem Breakdown Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Card 1: Square Borosilicate Container */}
         <div className="p-3.5 bg-zinc-950 rounded-xl border border-white/10 space-y-2">
           <div className="flex items-center gap-2 border-b border-white/10 pb-2">
@@ -1026,7 +1589,7 @@ export default function PhysicalJarViewer({
             </span>
           </div>
           <p className="text-[9px] text-zinc-400 leading-relaxed">
-            The jar is square (82×82 mm). In phase space (V(t) vs V(t-delay)), the orbit looks boxy: the trajectory runs, hits an effective wall (container boundary + electrical clamps), then turns downward.
+            Thick borosilicate glass square vessel (82×82 mm). Possesses 4-fold dihedral ($D_4$) rotational symmetry with 90° periodicity. The container hits effective physical and memory clamps in phase space, shaping the characteristic boxy trajectory.
           </p>
           <div className="p-2 bg-black/60 rounded border border-white/5 text-[8.5px] text-zinc-300 space-y-0.5">
             <div className="flex justify-between">
@@ -1034,54 +1597,93 @@ export default function PhysicalJarViewer({
               <span className="text-cyan-300 font-bold">Square (82×82 mm)</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-zinc-500">Symmetry Group:</span>
+              <span className="text-white font-mono">D4 (Period: 90°)</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-zinc-500">Phase Space:</span>
-              <span className="text-white font-mono">Boxy Attractor Orbit</span>
+              <span className="text-cyan-300 font-mono">Boxy Attractor Orbit</span>
             </div>
           </div>
         </div>
 
-        {/* Card 2: Exterior Excitation Coil (GP14) */}
+        {/* Card 2: Free Mechanical Coupling */}
         <div className="p-3.5 bg-zinc-950 rounded-xl border border-white/10 space-y-2">
           <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-            <Radio className="w-4 h-4 text-amber-400" />
+            <Unlock className="w-4 h-4 text-emerald-400" />
             <span className="text-[10px] font-black text-white uppercase tracking-wider">
-              2. Exterior Excitation Coil (GP14)
+              2. Free Coil-Jar Coupling
             </span>
           </div>
           <p className="text-[9px] text-zinc-400 leading-relaxed">
-            The Pico puts a PWM signal on GP14 into the coil. That oscillating magnetic field couples into the oil + carbon suspension, which acts as a nonlinear, lossy load with drag and delay.
+            The jar and excitation coil move freely from one another without mechanical constraint. Rotating the jar shifts the corner gap distance relative to the windings, modulating mutual inductance load while preserving the electrical circuit.
+          </p>
+          <div className="p-2 bg-black/60 rounded border border-white/5 text-[8.5px] text-zinc-300 space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Coupling Type:</span>
+              <span className="text-emerald-300 font-bold">Unconstrained / Free</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Active Delta:</span>
+              <span className="text-amber-300 font-mono">{deltaAngle}° Offset</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Flux Coupling:</span>
+              <span className="text-white font-mono">{mutualCouplingFactor}x Nominal</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: True North & Bench Orientation */}
+        <div className="p-3.5 bg-zinc-950 rounded-xl border border-white/10 space-y-2">
+          <div className="flex items-center gap-2 border-b border-white/10 pb-2">
+            <Globe className="w-4 h-4 text-red-400" />
+            <span className="text-[10px] font-black text-white uppercase tracking-wider">
+              3. True North Bench Orientation
+            </span>
+          </div>
+          <p className="text-[9px] text-zinc-400 leading-relaxed">
+            Provides geographic True North (000°) reference for bench alignment and magnetometer sync. Rotating the physical jar does NOT rotate the phase space attractor because the trajectory plots 1D scalar volts $V(t)$, not bench room coordinates.
+          </p>
+          <div className="p-2 bg-black/60 rounded border border-white/5 text-[8.5px] text-zinc-300 space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Geographic North:</span>
+              <span className="text-red-400 font-bold font-mono">000° (Up)</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Frame Projection:</span>
+              <span className="text-cyan-300 font-bold">{orientationFrame === 'north_up' ? 'North-Up' : 'Coil-Centric'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Scalar Invariance:</span>
+              <span className="text-white font-mono">1D V(t) Delay Orbit</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Loaded Coil Sense Node (GP26) */}
+        <div className="p-3.5 bg-zinc-950 rounded-xl border border-white/10 space-y-2">
+          <div className="flex items-center gap-2 border-b border-white/10 pb-2">
+            <Cpu className="w-4 h-4 text-amber-400" />
+            <span className="text-[10px] font-black text-white uppercase tracking-wider">
+              4. Loaded Coil Node (GP14/GP26)
+            </span>
+          </div>
+          <p className="text-[9px] text-zinc-400 leading-relaxed">
+            GP14 drives PWM into the outer copper coil, and GP26 reads the SAME loaded node. Reads drive waveform + back-EMF + nonlinear fluid load. Voltage ≈ load, Jitter ≈ irregularity. No separate probe dipped in fluid.
           </p>
           <div className="p-2 bg-black/60 rounded border border-white/5 text-[8.5px] text-zinc-300 space-y-0.5">
             <div className="flex justify-between">
               <span className="text-zinc-500">Drive Pin:</span>
-              <span className="text-amber-300 font-bold font-mono">GP14 PWM</span>
+              <span className="text-amber-300 font-mono">GP14 ({(carrierFreqHz / 1000).toFixed(1)} kHz)</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">Carrier Freq:</span>
-              <span className="text-white font-mono">{(carrierFreqHz / 1000).toFixed(1)} kHz</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Loaded Coil Sense Node (GP26) */}
-        <div className="p-3.5 bg-zinc-950 rounded-xl border border-white/10 space-y-2">
-          <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-            <Cpu className="w-4 h-4 text-emerald-400" />
-            <span className="text-[10px] font-black text-white uppercase tracking-wider">
-              3. Loaded Coil Sense Node (GP26)
-            </span>
-          </div>
-          <p className="text-[9px] text-zinc-400 leading-relaxed">
-            GP26 is on the SAME coil node — not a separate dipped probe! It reads drive waveform + back-EMF + how hard the medium pulls on the field. Voltage ≈ load, Jitter ≈ irregularity.
-          </p>
-          <div className="p-2 bg-black/60 rounded border border-white/5 text-[8.5px] text-zinc-300 space-y-0.5">
-            <div className="flex justify-between">
-              <span className="text-zinc-500">ADC Tapped Node:</span>
-              <span className="text-emerald-300 font-bold font-mono">GP26 (Same Coil)</span>
+              <span className="text-zinc-500">Sense Node:</span>
+              <span className="text-emerald-300 font-mono">GP26 ({vNodal.toFixed(3)} V)</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">Measurement:</span>
-              <span className="text-white font-mono">{vNodal.toFixed(3)} V (Loaded Node)</span>
+              <span className="text-zinc-500">Fluid Load:</span>
+              <span className="text-purple-300 font-mono">Oil + Carbon</span>
             </div>
           </div>
         </div>
