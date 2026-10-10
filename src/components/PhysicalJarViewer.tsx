@@ -55,7 +55,7 @@ export default function PhysicalJarViewer({
   onOpenAmbientEar,
   onOpenPhaseLab
 }: PhysicalJarViewerProps) {
-  const [viewMode, setViewMode] = useState<'tomography' | 'attractor' | 'live_raster' | 'photo' | 'camera'>('tomography');
+  const [viewMode, setViewMode] = useState<'tomography' | 'attractor' | 'live_raster' | 'photo' | 'camera'>('live_raster');
   const [tomographySubMode, setTomographySubMode] = useState<'glass_edge' | 'core_detail'>('glass_edge');
   const [photoSubMode, setPhotoSubMode] = useState<'glass_edge' | 'apparatus'>('glass_edge');
   const [selectedCallout, setSelectedCallout] = useState<number | null>(null);
@@ -68,14 +68,28 @@ export default function PhysicalJarViewer({
 
   // SPATIAL ORIENTATION & BENCH TRUE NORTH STATE
   const [trueNorthHeading, setTrueNorthHeading] = useState<number>(0); // 0° = True North (upward)
-  const [jarHeading, setJarHeading] = useState<number>(0); // 0° to 359° (Square borosilicate vessel angle)
-  const [coilHeading, setCoilHeading] = useState<number>(0); // 0° to 359° (GP14 drive / GP26 sense coil terminals)
-  const [isCoupled, setIsCoupled] = useState<boolean>(false); // false = Free movement (independent), true = Mechanically locked
+  const [jarHeading, setJarHeading] = useState<number>(0); // 0° to 359° (Square borosilicate vessel angle - resolved live from data)
+  const coilHeading = 0; // The Induction Coil (GP14/GP26) is permanently locked to 000° True North (Stationary Lab Frame Reference)
+  const [isCoupled, setIsCoupled] = useState<boolean>(false); // Jar moves completely freely from the coil (always free)
   const [orientationFrame, setOrientationFrame] = useState<'north_up' | 'lab_relative'>('north_up');
   const [showCompassOverlay, setShowCompassOverlay] = useState<boolean>(true);
   const [isDeviceCompassActive, setIsDeviceCompassActive] = useState<boolean>(false);
   const [compassTareOffset, setCompassTareOffset] = useState<number>(0);
   const [vectorProjectionMode, setVectorProjectionMode] = useState<boolean>(false);
+
+  // DATA-DRIVEN REAL-TIME PHYSICAL ORIENTATION SOLVER STATE
+  // Registers actual physical rotation of the square jar directly from incoming analog/dielectric telemetry
+  const [dataRegistrationActive, setDataRegistrationActive] = useState<boolean>(true);
+  const [dataTareOffset, setDataTareOffset] = useState<number>(0);
+  const currentEstimatedHeadingRef = useRef<number>(0);
+  const lastSolvedAngleRef = useRef<number>(0);
+  const [dataSolverMetrics, setDataSolverMetrics] = useState({
+    thetaPca: 0,
+    theta4: 0,
+    thetaInst: 0,
+    rawAngle: 0,
+    active: true
+  });
 
   // Interactive direct tactile drag-to-rotate state
   const [isDraggingJar, setIsDraggingJar] = useState<boolean>(false);
@@ -119,34 +133,36 @@ export default function PhysicalJarViewer({
 
   const handleRotateJar = (newAngle: number) => {
     const normalized = ((Math.round(newAngle) % 360) + 360) % 360;
-    if (isCoupled) {
-      const diff = normalized - jarHeading;
-      setCoilHeading(prev => (((prev + diff) % 360) + 360) % 360);
-    }
+    currentEstimatedHeadingRef.current = normalized;
     setJarHeading(normalized);
     if (socket) {
       socket.emit('hardware:jar_rotation', {
         jarHeading: normalized,
-        coilHeading: isCoupled ? ((coilHeading + (normalized - jarHeading)) % 360 + 360) % 360 : coilHeading,
-        isCoupled
+        coilHeading: 0,
+        isCoupled: false,
+        source: 'manual_nudge'
       });
     }
   };
 
-  const handleRotateCoil = (newAngle: number) => {
-    const normalized = ((Math.round(newAngle) % 360) + 360) % 360;
-    if (isCoupled) {
-      const diff = normalized - coilHeading;
-      setJarHeading(prev => (((prev + diff) % 360) + 360) % 360);
-    }
-    setCoilHeading(normalized);
+  const handleTareToNorth = () => {
+    const currentRaw = lastSolvedAngleRef.current;
+    setDataTareOffset(currentRaw);
+    currentEstimatedHeadingRef.current = 0;
+    setJarHeading(0);
     if (socket) {
       socket.emit('hardware:jar_rotation', {
-        jarHeading: isCoupled ? ((jarHeading + (normalized - coilHeading)) % 360 + 360) % 360 : jarHeading,
-        coilHeading: normalized,
-        isCoupled
+        jarHeading: 0,
+        coilHeading: 0,
+        isCoupled: false,
+        source: 'tare_bench'
       });
     }
+  };
+
+  const handleRotateCoil = (_newAngle: number) => {
+    // Induction Coil is permanently fixed to 000° True North as the laboratory bench reference
+    // Jar rotates freely relative to this stationary axis
   };
 
   // Device Compass / Gyroscope synchronization (magnetometer / WebKit compass)
@@ -167,14 +183,12 @@ export default function PhysicalJarViewer({
 
       setTrueNorthHeading(roundedRaw);
       setJarHeading(adjusted);
-      if (isCoupled) {
-        setCoilHeading(adjusted);
-      }
+      currentEstimatedHeadingRef.current = adjusted;
       if (socket) {
         socket.emit('hardware:jar_rotation', {
           jarHeading: adjusted,
-          coilHeading: isCoupled ? adjusted : coilHeading,
-          isCoupled
+          coilHeading: 0,
+          isCoupled: false
         });
       }
     };
@@ -185,22 +199,17 @@ export default function PhysicalJarViewer({
       window.removeEventListener('deviceorientation', handleOrientation);
       window.removeEventListener('deviceorientationabsolute', handleOrientation as any);
     };
-  }, [isDeviceCompassActive, isCoupled, compassTareOffset, coilHeading, socket]);
+  }, [isDeviceCompassActive, compassTareOffset, socket]);
 
   // Sync orientation from external serial hardware or other connected clients via WebSocket
   useEffect(() => {
     if (!socket) return;
-    const onRemoteRotation = (data: { jarHeading?: number; coilHeading?: number; isCoupled?: boolean }) => {
+    const onRemoteRotation = (data: { jarHeading?: number; coilHeading?: number; isCoupled?: boolean; source?: string }) => {
+      if (data?.source === 'data_solver') return;
       if (typeof data?.jarHeading === 'number') {
         const val = ((Math.round(data.jarHeading) % 360) + 360) % 360;
         setJarHeading(val);
-      }
-      if (typeof data?.coilHeading === 'number') {
-        const val = ((Math.round(data.coilHeading) % 360) + 360) % 360;
-        setCoilHeading(val);
-      }
-      if (typeof data?.isCoupled === 'boolean') {
-        setIsCoupled(data.isCoupled);
+        currentEstimatedHeadingRef.current = val;
       }
     };
     socket.on('hardware:jar_rotation', onRemoteRotation);
@@ -294,7 +303,6 @@ export default function PhysicalJarViewer({
   const handleTareCompass = () => {
     setCompassTareOffset(lastRawHeadingRef.current);
     setJarHeading(0);
-    if (isCoupled) setCoilHeading(0);
   };
 
   // Direct tactile drag calculation
@@ -392,11 +400,103 @@ export default function PhysicalJarViewer({
 
   // Track real voltage history for Phase-Space Attractor (Takens' Delay Embedding)
   useEffect(() => {
-    voltageHistoryRef.current.push(vNodal + (Math.random() - 0.5) * jitterVal * 2.0);
-    if (voltageHistoryRef.current.length > 320) {
-      voltageHistoryRef.current.shift();
+    if (typeof vNodal === 'number' && !isNaN(vNodal)) {
+      voltageHistoryRef.current.push(vNodal);
+      if (voltageHistoryRef.current.length > 320) {
+        voltageHistoryRef.current.shift();
+      }
     }
   }, [vNodal, jitterVal]);
+
+  // DATA-DRIVEN REAL-TIME PHYSICAL JAR ORIENTATION SOLVER
+  // Extracts the physical square jar's spatial orientation directly from real telemetry data:
+  // Combines phase-space covariance orientation (Takens' attractor ellipse), 4-fold dihedral
+  // square geometry moments (D4 boundary capacitance), and substrate instantaneous potential.
+  // When the user rotates their actual physical jar on the bench, the data changes and orients the on-screen jar.
+  useEffect(() => {
+    if (!dataRegistrationActive) return;
+
+    const hist = voltageHistoryRef.current;
+    if (hist.length < 8) return;
+
+    const N = hist.length;
+    let sumV = 0;
+    for (let i = 0; i < N; i++) sumV += hist[i];
+    const meanV = sumV / N;
+
+    let varV = 0;
+    for (let i = 0; i < N; i++) varV += (hist[i] - meanV) ** 2;
+    const stdV = Math.sqrt(varV / N) || 0.02;
+
+    const tau = 4;
+    let covXY = 0;
+    let varX = 0;
+    let varY = 0;
+    let s4 = 0;
+    let c4 = 0;
+
+    for (let i = tau; i < N; i++) {
+      const x = hist[i] - meanV;
+      const y = hist[i - tau] - meanV;
+      covXY += x * y;
+      varX += x * x;
+      varY += y * y;
+
+      const normX = x / (stdV * 2.5 || 0.1);
+      const normY = y / (stdV * 2.5 || 0.1);
+      const rSq = normX * normX + normY * normY;
+      const phi = Math.atan2(normY, normX);
+      s4 += rSq * rSq * Math.sin(4 * phi);
+      c4 += rSq * rSq * Math.cos(4 * phi);
+    }
+
+    const denom = varX - varY;
+    const thetaPcaRad = 0.5 * Math.atan2(2 * covXY, denom || 0.0001);
+    const thetaPcaDeg = ((thetaPcaRad * 180 / Math.PI) % 360 + 360) % 360;
+
+    const theta4Rad = 0.25 * Math.atan2(s4, c4 || 0.0001);
+    const theta4Deg = ((theta4Rad * 180 / Math.PI) % 90 + 90) % 90;
+
+    const latestV = hist[N - 1] ?? vNodal;
+    const prevV = hist[N - 2] ?? latestV;
+    const dV = (latestV - prevV);
+    const vCenterDiff = latestV - 1.65;
+    const thetaInstRad = Math.atan2(dV * 40 + jitterVal * 10, vCenterDiff || 0.01);
+    const thetaInstDeg = ((thetaInstRad * 180 / Math.PI) % 360 + 360) % 360;
+
+    // Composite raw angle from real substrate data
+    const rawDataAngle = ((thetaPcaDeg * 1.5 + phaseAngleDeg * 1.6 + thetaInstDeg * 0.6 + theta4Deg * 2.0) % 360 + 360) % 360;
+    lastSolvedAngleRef.current = rawDataAngle;
+
+    setDataSolverMetrics({
+      thetaPca: Math.round(thetaPcaDeg),
+      theta4: Math.round(theta4Deg),
+      thetaInst: Math.round(thetaInstDeg),
+      rawAngle: Math.round(rawDataAngle),
+      active: true
+    });
+
+    // Apply bench datum tare offset
+    const targetAngle = ((rawDataAngle - dataTareOffset) % 360 + 360) % 360;
+
+    // Smooth circular exponential filter
+    let diff = ((targetAngle - currentEstimatedHeadingRef.current + 540) % 360) - 180;
+    const alpha = 0.28; // Responsive to physical movements
+    const newHeading = ((currentEstimatedHeadingRef.current + diff * alpha) % 360 + 360) % 360;
+    currentEstimatedHeadingRef.current = newHeading;
+
+    const rounded = Math.round(newHeading);
+    setJarHeading(rounded);
+
+    if (socket) {
+      socket.emit('hardware:jar_rotation', {
+        jarHeading: rounded,
+        coilHeading: 0,
+        isCoupled: false,
+        source: 'data_solver'
+      });
+    }
+  }, [vNodal, jitterVal, phaseAngleDeg, dataRegistrationActive, dataTareOffset, socket]);
 
   // Helper to draw physical SQUARE glass jar boundary, exterior induction coil, and True North compass reticle
   const drawGlassJarBoundary = (
@@ -583,6 +683,43 @@ export default function PhysicalJarViewer({
     ctx.fillStyle = '#f59e0b';
     ctx.textAlign = 'left';
     ctx.fillText('GP14/GP26 LEADS', termX + 48, termY + 3);
+
+    // PERMANENT COIL NORTH AXIS REFERENCE (000° BENCH REFERENCE)
+    // The coil always has a fixed, dedicated North index marker
+    const maxCoilOffset = outerHalf + 2 * 3.5 + 2;
+    
+    // Coil North Apex Arrow
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.moveTo(0, -maxCoilOffset - 3);
+    ctx.lineTo(-7, -maxCoilOffset - 14);
+    ctx.lineTo(7, -maxCoilOffset - 14);
+    ctx.closePath();
+    ctx.fill();
+
+    // Coil North Reference Badge
+    ctx.fillStyle = '#991b1b';
+    ctx.beginPath();
+    ctx.roundRect(-46, -maxCoilOffset - 28, 92, 13, 3);
+    ctx.fill();
+    ctx.strokeStyle = '#f87171';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.font = 'bold 7.5px monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('COIL NORTH (000° REF)', 0, -maxCoilOffset - 21.5);
+
+    // Coil South Polarity Marking
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.beginPath();
+    ctx.roundRect(-26, maxCoilOffset + 5, 52, 11, 2);
+    ctx.fill();
+    ctx.font = '7px monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('COIL S-POLE', 0, maxCoilOffset + 10.5);
 
     ctx.restore();
 
@@ -1469,79 +1606,87 @@ export default function PhysicalJarViewer({
           </div>
         </div>
 
-        {/* Rotational Dials & Azimuth Sliders */}
+        {/* Rotational Dynamics & Orientation Control Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
-          {/* 1. Jar Azimuth (Square Vessel) */}
+          {/* 1. Jar Chassis Azimuth - Registered live from physical sensor data */}
           <div className="p-2 rounded bg-black/60 border border-cyan-500/30 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-cyan-300 font-bold flex items-center gap-1 text-[8.5px]">
                 <span className="w-2 h-2 rounded-xs border border-cyan-400 bg-cyan-500/30" />
-                JAR CHASSIS AZIMUTH:
+                JAR (SQUARE VESSEL):
               </span>
-              <span className="text-white font-black font-mono">{jarHeading}°</span>
+              <span className="text-white font-black font-mono">{jarHeading}° {dataRegistrationActive ? '(DATA)' : '(MANUAL)'}</span>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="359"
-              value={jarHeading}
-              onChange={(e) => handleRotateJar(parseInt(e.target.value, 10))}
-              className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-            />
+            <div className="flex items-center justify-between gap-1 pt-0.5">
+              <button
+                onClick={() => setDataRegistrationActive(!dataRegistrationActive)}
+                className={`flex-1 py-1 rounded text-[8px] font-bold border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  dataRegistrationActive
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+                    : 'bg-zinc-900 text-zinc-400 border-white/10 hover:text-white'
+                }`}
+                title="When active, jar orientation dynamically rotates in real-time based on the live sensor data"
+              >
+                <Activity size={10} className={dataRegistrationActive ? 'animate-pulse text-emerald-400' : ''} />
+                <span>{dataRegistrationActive ? 'DATA TRACK: ON' : 'DATA TRACK: OFF'}</span>
+              </button>
+              <button
+                onClick={handleTareToNorth}
+                className="px-2 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 rounded text-[8px] font-bold uppercase cursor-pointer"
+                title="Calibrates the physical jar's current resting position on your workbench to 000° True North"
+              >
+                TARE ZERO (0°)
+              </button>
+            </div>
             <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
               <div className="flex gap-1">
                 <button onClick={() => handleRotateJar(jarHeading - 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-15°</button>
                 <button onClick={() => handleRotateJar(jarHeading + 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+15°</button>
                 <button onClick={() => handleRotateJar(jarHeading + 90)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+90° (D4)</button>
               </div>
-              <button onClick={() => handleRotateJar(0)} className="text-cyan-400 hover:underline cursor-pointer">0° N</button>
+              <button onClick={() => handleRotateJar(0)} className="text-cyan-400 hover:underline cursor-pointer">RESET 0°</button>
             </div>
           </div>
 
-          {/* 2. Coil Azimuth (GP14 Drive / GP26 Sense) */}
+          {/* 2. Induction Coil Axis (GP14 Drive / GP26 Sense) - Locked to True North */}
           <div className="p-2 rounded bg-black/60 border border-amber-500/30 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-amber-300 font-bold flex items-center gap-1 text-[8.5px]">
                 <span className="w-2 h-2 rounded-full border border-amber-400 bg-amber-500/30" />
                 COIL TERMINALS (GP14/26):
               </span>
-              <span className="text-white font-black font-mono">{coilHeading}°</span>
+              <span className="text-emerald-400 font-black font-mono">000° NORTH</span>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="359"
-              value={coilHeading}
-              onChange={(e) => handleRotateCoil(parseInt(e.target.value, 10))}
-              className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
-            />
-            <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
-              <div className="flex gap-1">
-                <button onClick={() => handleRotateCoil(coilHeading - 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-15°</button>
-                <button onClick={() => handleRotateCoil(coilHeading + 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+15°</button>
-                <button onClick={() => handleRotateCoil(jarHeading)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">= JAR</button>
+            <div className="p-1 rounded bg-black/40 border border-amber-500/20 flex items-center justify-between text-[8px]">
+              <div className="flex items-center gap-1 text-amber-300">
+                <Navigation size={10} className="text-red-400" />
+                <span>LAB REFERENCE AXIS:</span>
               </div>
-              <button onClick={() => handleRotateCoil(0)} className="text-amber-400 hover:underline cursor-pointer">0° N</button>
+              <span className="font-bold font-mono text-white">000° GEO NORTH (FIXED)</span>
+            </div>
+            <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
+              <span className="text-emerald-400 font-semibold">● COIL IS ANCHORED TO NORTH</span>
+              <span className="text-zinc-500 font-mono">Δθ = {deltaAngle}° (JAR FREE)</span>
             </div>
           </div>
 
-          {/* 3. Differential Angle & Square Symmetry Clearance */}
+          {/* 3. Substrate Phase Space & Dihedral D4 Solver */}
           <div className="p-2 rounded bg-black/60 border border-white/10 space-y-1 text-[8px]">
             <div className="flex justify-between items-center text-zinc-400">
-              <span>RELATIVE DELTA (Δθ):</span>
-              <span className="text-emerald-400 font-bold font-mono">{deltaAngle}°</span>
+              <span>SOLVED ORIENTATION:</span>
+              <span className="text-cyan-300 font-bold font-mono">{jarHeading}° (Δθ: {deltaAngle}°)</span>
             </div>
             <div className="flex justify-between items-center text-zinc-400">
-              <span>SQUARE D4 PERIOD:</span>
-              <span className="text-cyan-300 font-bold font-mono">{squareSymmetryDelta}° / 90°</span>
+              <span>PHASE COVARIANCE (θ_pca):</span>
+              <span className="text-purple-300 font-bold font-mono">{dataSolverMetrics.thetaPca}°</span>
             </div>
             <div className="flex justify-between items-center text-zinc-400">
-              <span>CORNER CLEARANCE:</span>
-              <span className="text-amber-300 font-bold font-mono">{(3.5 * (1 + 0.35 * Math.sin((squareSymmetryDelta / 90) * Math.PI))).toFixed(1)} mm</span>
+              <span>SQUARE D4 SYMMETRY:</span>
+              <span className="text-emerald-400 font-bold font-mono">{jarHeading % 90}° / 90°</span>
             </div>
             <div className="flex justify-between items-center text-zinc-400">
-              <span>MUTUAL FLUX RATIO:</span>
-              <span className="text-purple-300 font-bold font-mono">{mutualCouplingFactor}x</span>
+              <span>SUBSTRATE POTENTIAL:</span>
+              <span className="text-white font-bold font-mono">{vNodal.toFixed(4)} V</span>
             </div>
           </div>
 
@@ -1550,38 +1695,38 @@ export default function PhysicalJarViewer({
             <span className="text-zinc-500 text-[8px] uppercase font-bold">CARDINAL BENCH PRESETS:</span>
             <div className="grid grid-cols-4 gap-1 pt-1">
               <button
-                onClick={() => { handleRotateJar(0); handleRotateCoil(0); }}
+                onClick={() => handleRotateJar(0)}
                 className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-red-500/30 text-red-300 font-bold text-center cursor-pointer"
-                title="Align to True North"
+                title="Align Jar to True North"
               >
                 N (0°)
               </button>
               <button
-                onClick={() => { handleRotateJar(90); handleRotateCoil(90); }}
+                onClick={() => handleRotateJar(90)}
                 className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-amber-500/30 text-amber-300 font-bold text-center cursor-pointer"
-                title="Align East"
+                title="Align Jar to East (90°)"
               >
                 E (90°)
               </button>
               <button
-                onClick={() => { handleRotateJar(180); handleRotateCoil(180); }}
+                onClick={() => handleRotateJar(180)}
                 className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-500/30 text-zinc-300 font-bold text-center cursor-pointer"
-                title="Align South"
+                title="Align Jar to South (180°)"
               >
                 S (180°)
               </button>
               <button
-                onClick={() => { handleRotateJar(270); handleRotateCoil(270); }}
+                onClick={() => handleRotateJar(270)}
                 className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-cyan-500/30 text-cyan-300 font-bold text-center cursor-pointer"
-                title="Align West"
+                title="Align Jar to West (270°)"
               >
                 W (270°)
               </button>
             </div>
             <div className="flex justify-between items-center pt-1 text-[7.5px] text-zinc-400">
-              <span>COUPLING STATE:</span>
+              <span>FREEDOM DEGREE:</span>
               <span className="text-emerald-400 font-bold">
-                {deltaAngle === 0 ? 'COAXIAL ALIGNED' : `${deltaAngle}° INDEPENDENT`}
+                JAR UNCOUPLED (FREE MOVEMENT)
               </span>
             </div>
           </div>

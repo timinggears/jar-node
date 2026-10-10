@@ -343,7 +343,7 @@ def on_jar_rotation(data):
     if ser and ser.is_open and data:
         try:
             jar_deg = float(data.get("jarHeading", 0.0))
-            coil_deg = float(data.get("coilHeading", jar_deg))
+            coil_deg = float(data.get("coilHeading", 0.0)) # Coil is anchored to North (000°)
             cmd = f"JAR_ROT:{jar_deg:.1f}|COIL_ROT:{coil_deg:.1f}\n"
             ser.write(cmd.encode("utf-8"))
         except Exception:
@@ -472,19 +472,20 @@ def main():
                                     if decoded.startswith("!ORI|"):
                                         bits = decoded.split('|')
                                         jar_deg = float(bits[1]) if len(bits) > 1 else 0.0
-                                        coil_deg = float(bits[2]) if len(bits) > 2 else jar_deg
+                                        coil_deg = float(bits[2]) if len(bits) > 2 else 0.0
                                     elif "JAR_AZIMUTH:" in decoded:
                                         jar_deg = float(decoded.split("JAR_AZIMUTH:")[1].split()[0])
-                                        coil_deg = jar_deg
+                                        coil_deg = 0.0
                                     else:
                                         raw_val = decoded.split("JAR_ROT:")[1].split()[0]
                                         if "|" in raw_val:
                                             jar_deg = float(raw_val.split("|")[0])
-                                            coil_deg = float(raw_val.split("|")[1].replace("COIL_ROT:", ""))
+                                            coil_deg = float(raw_val.split("|")[1].replace("COIL_ROT:", "")) if "COIL_ROT:" in raw_val else 0.0
                                         else:
                                             jar_deg = float(raw_val)
-                                            coil_deg = jar_deg
-                                    sio.emit("hardware:jar_rotation", {"jarHeading": jar_deg, "coilHeading": coil_deg})
+                                            coil_deg = 0.0
+                                    # Coil always has a North (000°); Jar is completely free
+                                    sio.emit("hardware:jar_rotation", {"jarHeading": jar_deg, "coilHeading": 0.0, "isCoupled": False})
                                 except Exception:
                                     pass
                             elif decoded:
