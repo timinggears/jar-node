@@ -36,7 +36,10 @@ import {
   VideoOff,
   Smartphone,
   RotateCcw,
-  Crosshair
+  Crosshair,
+  Radar,
+  Sparkles,
+  Box
 } from 'lucide-react';
 import { SystemStats } from '../types';
 
@@ -55,9 +58,14 @@ export default function PhysicalJarViewer({
   onOpenAmbientEar,
   onOpenPhaseLab
 }: PhysicalJarViewerProps) {
-  const [viewMode, setViewMode] = useState<'tomography' | 'attractor' | 'live_raster' | 'photo' | 'camera'>('live_raster');
+  const [viewMode, setViewMode] = useState<'tomography' | 'attractor' | 'live_raster' | 'photo' | 'camera' | 'radar3d'>('radar3d');
   const [tomographySubMode, setTomographySubMode] = useState<'glass_edge' | 'core_detail'>('glass_edge');
   const [photoSubMode, setPhotoSubMode] = useState<'glass_edge' | 'apparatus'>('glass_edge');
+  const [radarSubMode, setRadarSubMode] = useState<'wireframe_pointcloud' | 'shimmer_density' | 'micro_sonar_slices'>('shimmer_density');
+  const [radarPitch, setRadarPitch] = useState<number>(32); // degrees 3D elevation
+  const [radarYawOffset, setRadarYawOffset] = useState<number>(24); // degrees 3D azimuthal rotation
+  const [radarShimmerGain, setRadarShimmerGain] = useState<number>(1.25); // dielectric echo gain
+  const [isAutoOrbit, setIsAutoOrbit] = useState<boolean>(false); // Stationary view: do NOT move or spin jar automatically
   const [selectedCallout, setSelectedCallout] = useState<number | null>(null);
   const [showHudOverlays, setShowHudOverlays] = useState<boolean>(true);
   const [showEdgeReticle, setShowEdgeReticle] = useState<boolean>(true);
@@ -78,8 +86,9 @@ export default function PhysicalJarViewer({
   const [vectorProjectionMode, setVectorProjectionMode] = useState<boolean>(false);
 
   // DATA-DRIVEN REAL-TIME PHYSICAL ORIENTATION SOLVER STATE
-  // Registers actual physical rotation of the square jar directly from incoming analog/dielectric telemetry
-  const [dataRegistrationActive, setDataRegistrationActive] = useState<boolean>(true);
+  // Disabled by default (manual/steady mode) so the on-screen jar remains rock-steady and doesn't wiggle with sensor noise.
+  // Can be toggled ON anytime via the "DATA TRACK: OFF/ON" button.
+  const [dataRegistrationActive, setDataRegistrationActive] = useState<boolean>(false);
   const [dataTareOffset, setDataTareOffset] = useState<number>(0);
   const currentEstimatedHeadingRef = useRef<number>(0);
   const lastSolvedAngleRef = useRef<number>(0);
@@ -120,6 +129,7 @@ export default function PhysicalJarViewer({
 
   const liveCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const attractorCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const radar3dCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const voltageHistoryRef = useRef<number[]>([]);
 
   // Real data parameters extracted from live telemetry
@@ -370,7 +380,12 @@ export default function PhysicalJarViewer({
     coilHeading,
     orientationFrame,
     showCompassOverlay,
-    vectorProjectionMode
+    vectorProjectionMode,
+    radarSubMode,
+    radarPitch,
+    radarYawOffset,
+    radarShimmerGain,
+    isAutoOrbit
   });
 
   latestParamsRef.current = {
@@ -386,7 +401,12 @@ export default function PhysicalJarViewer({
     coilHeading,
     orientationFrame,
     showCompassOverlay,
-    vectorProjectionMode
+    vectorProjectionMode,
+    radarSubMode,
+    radarPitch,
+    radarYawOffset,
+    radarShimmerGain,
+    isAutoOrbit
   };
 
   // Track real voltage history for Phase-Space Attractor (Takens' Delay Embedding)
@@ -490,20 +510,25 @@ export default function PhysicalJarViewer({
     // Apply bench datum tare offset
     const targetAngle = ((rawDataAngle - dataTareOffset) % 360 + 360) % 360;
 
-    // Smooth circular exponential filter
+    // Smooth circular exponential filter with deadband hysteresis to eliminate wiggling:
+    // Only update heading if intentional angular change exceeds the jitter threshold (> 3.0 degrees)
     let diff = ((targetAngle - currentEstimatedHeadingRef.current + 540) % 360) - 180;
-    const alpha = 0.28; // Responsive to physical movements
+    if (Math.abs(diff) < 3.0) {
+      // Within deadband noise floor - hold heading steady!
+      return;
+    }
+    const alpha = 0.08; // Heavy low-pass damping to prevent twitching/wiggling
     const newHeading = ((currentEstimatedHeadingRef.current + diff * alpha) % 360 + 360) % 360;
     currentEstimatedHeadingRef.current = newHeading;
 
     const rounded = Math.round(newHeading);
-    if (rounded !== jarHeadingRef.current) {
+    if (Math.abs(rounded - jarHeadingRef.current) >= 2) {
       setJarHeading(rounded);
     }
 
     if (
       socket &&
-      (Math.abs(rounded - lastEmittedHeadingRef.current) >= 1 || now - lastSocketEmitTimeRef.current > 1000)
+      (Math.abs(rounded - lastEmittedHeadingRef.current) >= 2 || now - lastSocketEmitTimeRef.current > 1500)
     ) {
       lastEmittedHeadingRef.current = rounded;
       lastSocketEmitTimeRef.current = now;
@@ -639,13 +664,16 @@ export default function PhysicalJarViewer({
       ctx.restore();
     }
 
-    // 1. Exterior Induction Coil (GP14) - Drawn in COIL FRAME (rotated by coilAngleRad)
+    // 1. Exterior Induction Coil (GP14) - ROUND circular solenoid turns surrounding the vessel
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(coilAngleRad);
 
+    // The coil is circular/round (solenoid cylinder with diameter clearing the jar)
+    const baseCoilRadius = outerHalf * Math.SQRT2 + 6;
+
     for (let c = 0; c < 3; c++) {
-      const coilOffset = outerHalf + c * 3.5 + 2;
+      const coilRadius = baseCoilRadius + c * 3.5;
       ctx.strokeStyle = c === 1 ? '#f59e0b' : '#b45309';
       ctx.lineWidth = 2.5;
       if (c === 1) {
@@ -653,13 +681,13 @@ export default function PhysicalJarViewer({
         ctx.shadowBlur = 8;
       }
       ctx.beginPath();
-      ctx.roundRect(-coilOffset, -coilOffset, coilOffset * 2, coilOffset * 2, cornerRadius + 4);
+      ctx.arc(0, 0, coilRadius, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
-    // GP14 Drive & GP26 Loaded Coil Sense Terminal Connections
-    const termX = outerHalf + 14;
+    // GP14 Drive & GP26 Loaded Coil Sense Terminal Connections (tapped to round outer perimeter)
+    const termX = baseCoilRadius + 7;
     const termY = 0;
 
     // Coil Lead Terminal Pad
@@ -700,25 +728,24 @@ export default function PhysicalJarViewer({
     ctx.font = '8px monospace';
     ctx.fillStyle = '#f59e0b';
     ctx.textAlign = 'left';
-    ctx.fillText('GP14/GP26 LEADS', termX + 48, termY + 3);
+    ctx.fillText('GP14/GP26 LEADS (ROUND COIL)', termX + 48, termY + 3);
 
     // PERMANENT COIL NORTH AXIS REFERENCE (000° BENCH REFERENCE)
-    // The coil always has a fixed, dedicated North index marker
-    const maxCoilOffset = outerHalf + 2 * 3.5 + 2;
+    const maxCoilRadius = baseCoilRadius + 2 * 3.5;
     
     // Coil North Apex Arrow
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
-    ctx.moveTo(0, -maxCoilOffset - 3);
-    ctx.lineTo(-7, -maxCoilOffset - 14);
-    ctx.lineTo(7, -maxCoilOffset - 14);
+    ctx.moveTo(0, -maxCoilRadius - 3);
+    ctx.lineTo(-7, -maxCoilRadius - 14);
+    ctx.lineTo(7, -maxCoilRadius - 14);
     ctx.closePath();
     ctx.fill();
 
     // Coil North Reference Badge
     ctx.fillStyle = '#991b1b';
     ctx.beginPath();
-    ctx.roundRect(-46, -maxCoilOffset - 28, 92, 13, 3);
+    ctx.roundRect(-46, -maxCoilRadius - 28, 92, 13, 3);
     ctx.fill();
     ctx.strokeStyle = '#f87171';
     ctx.lineWidth = 1;
@@ -728,16 +755,16 @@ export default function PhysicalJarViewer({
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('COIL NORTH (000° REF)', 0, -maxCoilOffset - 21.5);
+    ctx.fillText('ROUND COIL NORTH (000°)', 0, -maxCoilRadius - 21.5);
 
     // Coil South Polarity Marking
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.beginPath();
-    ctx.roundRect(-26, maxCoilOffset + 5, 52, 11, 2);
+    ctx.roundRect(-26, maxCoilRadius + 5, 52, 11, 2);
     ctx.fill();
     ctx.font = '7px monospace';
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('COIL S-POLE', 0, maxCoilOffset + 10.5);
+    ctx.fillText('COIL S-POLE', 0, maxCoilRadius + 10.5);
 
     ctx.restore();
 
@@ -1210,6 +1237,400 @@ export default function PhysicalJarViewer({
     return () => cancelAnimationFrame(animId);
   }, [viewMode]);
 
+  // 3. 3D MICRO-RADAR DIELECTRIC SHIMMER & VESSEL GEOMETRY RECONSTRUCTION
+  // Reconstructs the physical square container's 3D boundary, circular coil elevation,
+  // probe dipping depth, and liquid carbon dielectric echoes like an acoustic/RF radar.
+  useEffect(() => {
+    if (viewMode !== 'radar3d') return;
+    const canvas = radar3dCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animId: number;
+    let sweepAngle = 0;
+    let orbitAngle = 0;
+    let lastRenderTime = 0;
+
+    const renderRadar3D = (timestamp: number) => {
+      if (timestamp - lastRenderTime < 30) {
+        animId = requestAnimationFrame(renderRadar3D);
+        return;
+      }
+      lastRenderTime = timestamp;
+
+      try {
+        const w = canvas.width;
+        const h = canvas.height;
+        const cx = w / 2;
+        const cy = h / 2 + 18;
+
+        const {
+          zoomLevel: curZoom,
+          carrierBias: curBias,
+          phaseAngleDeg: curPhase,
+          vNodal: curVNodal,
+          jitterVal: curJitter,
+          carrierFreqHz: curFreq,
+          coherenceVal: curCoherence,
+          jarHeading: curJarHeading,
+          coilHeading: curCoilHeading,
+          radarSubMode: curSubMode,
+          radarPitch: curPitch,
+          radarYawOffset: curYawOffset,
+          radarShimmerGain: curGain,
+          isAutoOrbit: curAutoOrbit
+        } = latestParamsRef.current;
+
+        // Advance radar sweep beam and subtle 3D rotational perspective
+        sweepAngle = (sweepAngle + 0.055) % (Math.PI * 2);
+        if (curAutoOrbit) {
+          orbitAngle = (orbitAngle + 0.006) % (Math.PI * 2);
+        }
+
+        // Camera projection matrix angles
+        const pitchRad = (curPitch * Math.PI) / 180; // Elevation angle
+        const baseYawRad = (curYawOffset * Math.PI) / 180 + orbitAngle; // 3D Camera Azimuth
+        const jarYawRad = (curJarHeading * Math.PI) / 180; // Jar rotation in bench frame
+
+        // 3D Isometric / Weak perspective projection helper
+        const cosP = Math.cos(pitchRad);
+        const sinP = Math.sin(pitchRad);
+        const cosY = Math.cos(baseYawRad);
+        const sinY = Math.sin(baseYawRad);
+
+        const project3D = (x: number, y: number, z: number): [number, number, number] => {
+          // World coordinate: X = bench east/west, Y = bench north/south, Z = vertical height
+          const xRot = x * cosY - y * sinY;
+          const yRot = x * sinY + y * cosY;
+          const zRot = z;
+
+          // Pitch tilt
+          const yTilt = yRot * sinP - zRot * cosP;
+          const zTilt = yRot * cosP + zRot * sinP;
+
+          // Perspective depth scaling
+          const fov = 750;
+          const depth = fov / (fov + zTilt * 0.45);
+          const screenX = cx + xRot * depth * curZoom;
+          const screenY = cy + yTilt * depth * curZoom;
+          return [screenX, screenY, zTilt];
+        };
+
+        // Dark radar chamber background
+        ctx.fillStyle = '#020604';
+        ctx.fillRect(0, 0, w, h);
+
+        // 3D Bench Grid Plane (Z = 0)
+        const gridRadius = 240;
+        const gridSteps = 12;
+        const stepSize = (gridRadius * 2) / gridSteps;
+        ctx.strokeStyle = 'rgba(0, 255, 204, 0.06)';
+        ctx.lineWidth = 1;
+
+        for (let gx = -gridRadius; gx <= gridRadius; gx += stepSize) {
+          const [sx1, sy1] = project3D(gx, -gridRadius, -110);
+          const [sx2, sy2] = project3D(gx, gridRadius, -110);
+          ctx.beginPath();
+          ctx.moveTo(sx1, sy1);
+          ctx.lineTo(sx2, sy2);
+          ctx.stroke();
+        }
+        for (let gy = -gridRadius; gy <= gridRadius; gy += stepSize) {
+          const [sx1, sy1] = project3D(-gridRadius, gy, -110);
+          const [sx2, sy2] = project3D(gridRadius, gy, -110);
+          ctx.beginPath();
+          ctx.moveTo(sx1, sy1);
+          ctx.lineTo(sx2, sy2);
+          ctx.stroke();
+        }
+
+        // Concentric Range Finder Circles on Floor (Radar Range Rings)
+        for (let r = 60; r <= 220; r += 50) {
+          ctx.strokeStyle = r === 160 ? 'rgba(0, 255, 204, 0.18)' : 'rgba(0, 255, 204, 0.08)';
+          ctx.beginPath();
+          for (let a = 0; a <= Math.PI * 2 + 0.1; a += 0.2) {
+            const rx = Math.cos(a) * r;
+            const ry = Math.sin(a) * r;
+            const [px, py] = project3D(rx, ry, -110);
+            if (a === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+        }
+
+        // Dimensions of the Physical Square Jar & Round Coil in 3D Space
+        const halfW = 88; // 82-88 mm square glass jar outer face
+        const jarH = 175; // jar height
+        const zBase = -90;
+        const zTop = zBase + jarH;
+        const coilR = 126; // Round circular induction coil outer solenoid turns
+        const coilZ = -15; // Centered vertically around the jar core
+
+        // Helper to rotate point in jar yaw
+        const rotJar = (jx: number, jy: number): [number, number] => {
+          const cosJ = Math.cos(jarYawRad);
+          const sinJ = Math.sin(jarYawRad);
+          return [jx * cosJ - jy * sinJ, jx * sinJ + jy * cosJ];
+        };
+
+        // 1. DRAW 3D ROUND INDUCTION COIL (Circular Solenoid outside the vessel)
+        for (let c = 0; c < 3; c++) {
+          const rCoil = coilR + c * 4;
+          const zCoilTurn = coilZ + (c - 1) * 8;
+          ctx.strokeStyle = c === 1 ? '#f59e0b' : '#b45309';
+          ctx.lineWidth = c === 1 ? 2.5 : 1.5;
+          ctx.beginPath();
+          for (let a = 0; a <= Math.PI * 2 + 0.08; a += 0.12) {
+            const wx = Math.cos(a) * rCoil;
+            const wy = Math.sin(a) * rCoil;
+            const [sx, sy] = project3D(wx, wy, zCoilTurn);
+            if (a === 0) ctx.moveTo(sx, sy);
+            else ctx.lineTo(sx, sy);
+          }
+          ctx.stroke();
+        }
+
+        // Coil North Azimuth Lead Marker
+        const [coilNx, coilNy] = project3D(0, -coilR - 6, coilZ);
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(coilNx, coilNy, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. DRAW 3D SQUARE BOROSILICATE GLASS VESSEL WIREFRAME (Rotated by jarYawRad)
+        const corners2D = [
+          [-halfW, -halfW],
+          [halfW, -halfW],
+          [halfW, halfW],
+          [-halfW, halfW]
+        ];
+
+        // Bottom Square Base Rim
+        ctx.strokeStyle = 'rgba(0, 255, 204, 0.45)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const [jx, jy] = corners2D[i];
+          const [wx, wy] = rotJar(jx, jy);
+          const [sx, sy] = project3D(wx, wy, zBase);
+          if (i === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // Top Square Opening Rim
+        ctx.strokeStyle = 'rgba(0, 255, 204, 0.85)';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const [jx, jy] = corners2D[i];
+          const [wx, wy] = rotJar(jx, jy);
+          const [sx, sy] = project3D(wx, wy, zTop);
+          if (i === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // 4 Vertical Planar Wall Glass Edges
+        ctx.strokeStyle = 'rgba(0, 255, 204, 0.5)';
+        ctx.lineWidth = 1.6;
+        for (let i = 0; i < 4; i++) {
+          const [jx, jy] = corners2D[i];
+          const [wx, wy] = rotJar(jx, jy);
+          const [bx, by] = project3D(wx, wy, zBase);
+          const [tx, ty] = project3D(wx, wy, zTop);
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(tx, ty);
+          ctx.stroke();
+        }
+
+        // Faint Substrate Fluid Meniscus Level in Jar (Liquid height: 75% full)
+        const fluidZ = zBase + jarH * 0.72;
+        ctx.strokeStyle = 'rgba(6, 182, 212, 0.35)';
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const [jx, jy] = corners2D[i];
+          const [wx, wy] = rotJar(jx, jy);
+          const [sx, sy] = project3D(wx, wy, fluidZ);
+          if (i === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // Dipped Sense Probe (GP26) descending into fluid core
+        const [prx, pry] = rotJar(halfW * 0.42, -halfW * 0.35);
+        const [ptTopX, ptTopY] = project3D(prx, pry, zTop + 24);
+        const [ptTipX, ptTipY] = project3D(prx, pry, zBase + 28);
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(ptTopX, ptTopY);
+        ctx.lineTo(ptTipX, ptTipY);
+        ctx.stroke();
+        // Probe tip glowing gem
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.arc(ptTipX, ptTipY, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 3. TINY 3D RADAR SHIMMER BOUNDARY MAPPING (Acoustic / Dielectric Echoes on Jar Boundaries)
+        // Maps the square jar boundary walls and volume using dielectric radar shimmer.
+        // When the user moves the physical jar, the shimmer boundary rotates in lockstep with the vessel walls!
+        const hist = voltageHistoryRef.current;
+        const histLen = hist.length || 1;
+        const nowMs = Date.now() * 0.003;
+
+        // Number of active 3D radar shimmer voxels
+        const numVoxels = curSubMode === 'shimmer_density' ? 360 : 210;
+
+        for (let v = 0; v < numVoxels; v++) {
+          const histVal = hist[v % histLen] || curVNodal;
+          const vOffset = (histVal - 1.65); // deviation from midpoint
+          const seedPhase = (v * 137.5 + (curPhase * Math.PI) / 180) % (Math.PI * 2);
+
+          let jx = 0;
+          let jy = 0;
+          let jz = 0;
+          let isBoundaryPoint = false;
+
+          // 70% of points are assigned directly to the 4 planar square glass walls to outline the jar shape:
+          if (v < numVoxels * 0.70) {
+            isBoundaryPoint = true;
+            const wallIndex = v % 4; // 0: North wall (+Y), 1: East wall (+X), 2: South wall (-Y), 3: West wall (-X)
+            const alongWall = ((Math.sin(v * 4.3 + nowMs * 0.2) + 1.0) / 2.0) * 1.8 - 0.9; // -0.9 to +0.9
+            const wallZFraction = ((v * 7.1) % 100) / 100; // 0 to 1 along vertical height
+            const wallClampedZ = zBase + wallZFraction * (jarH * 0.85);
+
+            // Micro dielectric displacement perturbation from live sensor noise
+            const wallJitter = (Math.sin(nowMs * 3.5 + v) * 0.04) * (curJitter * 20.0);
+
+            if (wallIndex === 0) {
+              jx = alongWall * halfW;
+              jy = halfW * (1.0 + wallJitter);
+            } else if (wallIndex === 1) {
+              jx = halfW * (1.0 + wallJitter);
+              jy = alongWall * halfW;
+            } else if (wallIndex === 2) {
+              jx = alongWall * halfW;
+              jy = -halfW * (1.0 + wallJitter);
+            } else {
+              jx = -halfW * (1.0 + wallJitter);
+              jy = alongWall * halfW;
+            }
+            jz = wallClampedZ;
+          } else {
+            // Remaining 30% are internal volume echoes within the oil + carbon suspension
+            const rawBoxX = Math.sin(seedPhase * 3.0 + nowMs * 0.8 + v * 0.2) * 0.78;
+            const rawBoxY = Math.cos(seedPhase * 2.0 - nowMs * 0.6 + v * 0.3) * 0.78;
+            const rawBoxZ = ((v / numVoxels) * 1.6 - 0.8) + (vOffset * 0.3);
+
+            jx = Math.max(-0.78, Math.min(0.78, rawBoxX)) * halfW;
+            jy = Math.max(-0.78, Math.min(0.78, rawBoxY)) * halfW;
+            jz = zBase + (Math.max(-0.85, Math.min(0.85, rawBoxZ)) + 1.0) * 0.5 * (jarH * 0.72);
+          }
+
+          // ROTATE SHIMMER BOUNDARY WITH JAR ORIENTATION:
+          // The shimmer explicitly moves with the physical jar angle!
+          const [wx, wy] = rotJar(jx, jy);
+
+          // Radar shimmer echo intensity calculation
+          const distToWall = Math.min(halfW - Math.abs(jx), halfW - Math.abs(jy));
+          const wallProximityGain = isBoundaryPoint ? 1.0 : Math.exp(-distToWall / 22.0);
+
+          // Radar sweep beam interaction: flash points as sweepAngle passes over them
+          const pointAzimuth = (Math.atan2(wy, wx) + Math.PI * 2) % (Math.PI * 2);
+          const sweepDiff = Math.abs(((pointAzimuth - sweepAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+          const beamIntensity = Math.exp(-sweepDiff * 4.2);
+
+          // Shimmer wave oscillation from carrier frequency and live jitter
+          const shimmerWave = Math.sin(nowMs * 4.0 + (curFreq / 8000) * (v % 12) + curPhase);
+          const shimmer = Math.max(0.15, 0.45 + 0.35 * shimmerWave + (curJitter * 15.0) * curGain);
+
+          const totalEcho = Math.min(1.0, (shimmer * 0.55 + wallProximityGain * 0.65 + beamIntensity * 0.6) * curGain);
+
+          // Project to screen
+          const [px, py, pDepth] = project3D(wx, wy, jz);
+
+          // Shimmer color: Bright electric cyan on the square jar boundaries, gold on sweep flash
+          let col = `rgba(0, 255, 204, ${totalEcho * 0.85})`;
+          if (isBoundaryPoint) {
+            col = `rgba(6, 182, 212, ${Math.min(1, 0.4 + totalEcho * 0.6)})`; // Glass wall shimmer
+          }
+          if (beamIntensity > 0.5) {
+            col = `rgba(255, 220, 100, ${Math.min(1, beamIntensity * 1.3)})`; // Golden radar beam flash
+          }
+
+          const pointRadius = (isBoundaryPoint ? 2.0 : 1.4 + totalEcho * 2.2) * (700 / (700 + pDepth * 0.4));
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.arc(px, py, Math.max(0.8, pointRadius), 0, Math.PI * 2);
+          ctx.fill();
+
+          // Connect boundary shimmer points along square edges if in wireframe mode
+          if (curSubMode === 'wireframe_pointcloud' && v % 3 === 0 && v < numVoxels - 3) {
+            const nextV = v + 1;
+            const [nwx, nwy] = rotJar(jx * 0.96, jy * 0.96);
+            const [npx, npy] = project3D(nwx, nwy, jz);
+            ctx.strokeStyle = `rgba(0, 255, 204, ${totalEcho * 0.35})`;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(npx, npy);
+            ctx.stroke();
+          }
+        }
+
+        // 4. RADAR ROTATING SWEEP BEAM (Sweeps across bench like a miniature sonar/radar)
+        const sweepLen = 170;
+        const [swHeadX, swHeadY] = project3D(Math.cos(sweepAngle) * sweepLen, Math.sin(sweepAngle) * sweepLen, -100);
+        const [swOriginX, swOriginY] = project3D(0, 0, -100);
+
+        // Beam vector
+        const sweepGrad = ctx.createLinearGradient(swOriginX, swOriginY, swHeadX, swHeadY);
+        sweepGrad.addColorStop(0, 'rgba(0, 255, 204, 0.4)');
+        sweepGrad.addColorStop(0.7, 'rgba(0, 255, 204, 0.15)');
+        sweepGrad.addColorStop(1, 'rgba(0, 255, 204, 0.0)');
+        ctx.strokeStyle = sweepGrad;
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(swOriginX, swOriginY);
+        ctx.lineTo(swHeadX, swHeadY);
+        ctx.stroke();
+
+        // 5. RADAR RETICLE HUD & ELEVATION ANNOTATIONS
+        ctx.font = 'bold 8.5px monospace';
+        ctx.fillStyle = '#00ffcc';
+        ctx.textAlign = 'left';
+        ctx.fillText('● 3D MICRO-RADAR DIELECTRIC SHIMMER SCAN', 16, 22);
+
+        ctx.font = '7.5px monospace';
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(`CONTAINER: SQUARE (82×82 mm) • AZIMUTH: ${curJarHeading}° • COIL: 000° (ROUND SOLENOID)`, 16, 36);
+        ctx.fillText(`ECHO GAIN: ${curGain.toFixed(2)}x • SHIMMER FREQ: ${(curFreq / 1000).toFixed(1)} kHz • V_NODAL: ${curVNodal.toFixed(4)}V`, 16, 48);
+
+        // Compass orientation badge on floor
+        const [nPtX, nPtY] = project3D(0, -gridRadius - 16, -110);
+        ctx.fillStyle = '#ef4444';
+        ctx.textAlign = 'center';
+        ctx.fillText('▲ BENCH NORTH (000°)', nPtX, nPtY);
+
+      } catch (err) {
+        console.warn('[RADAR_3D_ERROR]', err);
+      }
+
+      animId = requestAnimationFrame(renderRadar3D);
+    };
+
+    animId = requestAnimationFrame(renderRadar3D);
+    return () => cancelAnimationFrame(animId);
+  }, [viewMode]);
+
   const handleExportImage = () => {
     setIsExporting(true);
     const link = document.createElement('a');
@@ -1217,6 +1638,13 @@ export default function PhysicalJarViewer({
     if (viewMode === 'photo') {
       targetUrl = photoSubMode === 'glass_edge' ? jarSquarePhotoUrl : jarApparatusPhotoUrl;
       link.download = `jar_physical_photo_square_${Date.now()}.jpg`;
+    } else if (viewMode === 'radar3d' && radar3dCanvasRef.current) {
+      try {
+        targetUrl = radar3dCanvasRef.current.toDataURL('image/png');
+        link.download = `jar_3d_radar_shimmer_${Date.now()}.png`;
+      } catch {
+        targetUrl = jarSquareTomographyUrl;
+      }
     } else {
       targetUrl = tomographySubMode === 'glass_edge' ? jarSquareTomographyUrl : jarCoreTomographyUrl;
       link.download = `jar_telemetry_tomography_square_${Date.now()}.jpg`;
@@ -1289,7 +1717,7 @@ export default function PhysicalJarViewer({
             </span>
           </div>
           <p className="text-[10px] text-zinc-400 mt-1 max-w-2xl leading-relaxed">
-            Zoomed-out optical reconstruction displaying the <strong className="text-white">full circular edge of the glass jar</strong>, outer copper excitation coil (GP14), and dipped probe (GP26) from real telemetry.
+            Telemetry spatial reconstruction: Maps the <strong className="text-white">square glass vessel boundaries (82×82 mm)</strong>, outer round induction coil (GP14), dipped probe (GP26), and dielectric shimmer echoes in real-time like a <strong className="text-cyan-300">tiny 3D radar</strong>.
           </p>
         </div>
 
@@ -1447,6 +1875,18 @@ export default function PhysicalJarViewer({
           </button>
 
           <button
+            onClick={() => setViewMode('radar3d')}
+            className={`px-3 py-1.5 rounded-lg font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+              viewMode === 'radar3d'
+                ? 'bg-cyan-400 text-black shadow-[0_0_15px_rgba(6,182,212,0.6)]'
+                : 'bg-black/60 text-zinc-400 hover:text-white border border-white/10'
+            }`}
+          >
+            <Radar size={12} className={viewMode === 'radar3d' ? 'animate-spin' : ''} />
+            <span>3D MICRO-RADAR (SHIMMER MAP)</span>
+          </button>
+
+          <button
             onClick={() => setViewMode('attractor')}
             className={`px-3 py-1.5 rounded-lg font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
               viewMode === 'attractor'
@@ -1470,6 +1910,84 @@ export default function PhysicalJarViewer({
             <span>OPTICAL WEBCAM JAR TRACK</span>
           </button>
         </div>
+
+        {/* Sub-toggle for 3D Micro-Radar Mode */}
+        {viewMode === 'radar3d' && (
+          <div className="flex items-center gap-2 flex-wrap bg-black/90 px-2 py-1 rounded-lg border border-cyan-500/40 text-[8px]">
+            <span className="text-cyan-300 font-bold flex items-center gap-1">
+              <Radar size={11} className="text-cyan-400" />
+              RADAR ECHO:
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setRadarSubMode('shimmer_density')}
+                className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-all ${
+                  radarSubMode === 'shimmer_density'
+                    ? 'bg-cyan-400 text-black shadow-[0_0_8px_rgba(6,182,212,0.5)]'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                SHIMMER VOXELS (3D)
+              </button>
+              <button
+                onClick={() => setRadarSubMode('wireframe_pointcloud')}
+                className={`px-1.5 py-0.5 rounded font-bold cursor-pointer transition-all ${
+                  radarSubMode === 'wireframe_pointcloud'
+                    ? 'bg-cyan-400 text-black shadow-[0_0_8px_rgba(6,182,212,0.5)]'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                MESH + WIREFRAME
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1 border-l border-white/10 pl-2">
+              <span className="text-zinc-400">GAIN:</span>
+              <button
+                onClick={() => setRadarShimmerGain(prev => Math.max(0.5, parseFloat((prev - 0.25).toFixed(2))))}
+                className="px-1 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded text-cyan-300 cursor-pointer"
+              >
+                -
+              </button>
+              <span className="text-cyan-300 font-mono font-bold w-7 text-center">{radarShimmerGain.toFixed(1)}x</span>
+              <button
+                onClick={() => setRadarShimmerGain(prev => Math.min(3.0, parseFloat((prev + 0.25).toFixed(2))))}
+                className="px-1 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded text-cyan-300 cursor-pointer"
+              >
+                +
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1 border-l border-white/10 pl-2">
+              <span className="text-zinc-400">PITCH:</span>
+              <button
+                onClick={() => setRadarPitch(prev => Math.max(10, prev - 10))}
+                className="px-1 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded text-zinc-300 cursor-pointer"
+              >
+                ↓
+              </button>
+              <span className="text-zinc-300 font-mono w-6 text-center">{radarPitch}°</span>
+              <button
+                onClick={() => setRadarPitch(prev => Math.min(80, prev + 10))}
+                className="px-1 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded text-zinc-300 cursor-pointer"
+              >
+                ↑
+              </button>
+            </div>
+
+            <button
+              onClick={() => setIsAutoOrbit(!isAutoOrbit)}
+              className={`px-1.5 py-0.5 rounded font-bold border transition-all cursor-pointer ${
+                isAutoOrbit
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                  : 'bg-zinc-900 text-zinc-500 border-white/10'
+              }`}
+              title="Continuous 3D azimuthal radar rotation sweep"
+            >
+              ORBIT: {isAutoOrbit ? 'AUTO' : 'MANUAL'}
+            </button>
+          </div>
+        )}
 
         {/* Sub-toggle for Tomography mode */}
         {viewMode === 'tomography' && (
@@ -1671,7 +2189,7 @@ export default function PhysicalJarViewer({
             <div className="flex items-center justify-between">
               <span className="text-amber-300 font-bold flex items-center gap-1 text-[8.5px]">
                 <span className="w-2 h-2 rounded-full border border-amber-400 bg-amber-500/30" />
-                COIL TERMINALS (GP14/26):
+                ROUND COIL (GP14/26):
               </span>
               <span className="text-emerald-400 font-black font-mono">000° NORTH</span>
             </div>
@@ -1680,10 +2198,10 @@ export default function PhysicalJarViewer({
                 <Navigation size={10} className="text-red-400" />
                 <span>LAB REFERENCE AXIS:</span>
               </div>
-              <span className="font-bold font-mono text-white">000° GEO NORTH (FIXED)</span>
+              <span className="font-bold font-mono text-white">000° GEO NORTH (CIRCULAR)</span>
             </div>
             <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
-              <span className="text-emerald-400 font-semibold">● COIL IS ANCHORED TO NORTH</span>
+              <span className="text-emerald-400 font-semibold">● ROUND COIL ANCHORED NORTH</span>
               <span className="text-zinc-500 font-mono">Δθ = {deltaAngle}° (JAR FREE)</span>
             </div>
           </div>
@@ -1774,6 +2292,46 @@ export default function PhysicalJarViewer({
             <span>ORIENTING PHYSICAL JAR: {jarHeading}°</span>
             <span className="text-zinc-500">|</span>
             <span className="text-emerald-400">D4 WALL DELTA: {jarHeading % 90}°</span>
+          </div>
+        )}
+
+        {/* View Mode 0: 3D Micro-Radar Shimmer & Vessel Geometry Canvas */}
+        {viewMode === 'radar3d' && (
+          <div className="relative w-full h-full flex items-center justify-center">
+            <canvas
+              ref={radar3dCanvasRef}
+              width={640}
+              height={640}
+              className="w-full h-full object-contain max-h-[620px] select-none"
+            />
+            {/* Interactive 3D Orbit & Pitch Controls Overlay */}
+            <div className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-cyan-500/40 text-[8.5px] font-mono pointer-events-auto">
+              <span className="text-cyan-400 font-bold flex items-center gap-1">
+                <Box size={11} />
+                3D ROTATE:
+              </span>
+              <button
+                onClick={() => setRadarYawOffset(prev => (prev - 15 + 360) % 360)}
+                className="px-1.5 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded text-cyan-200 cursor-pointer"
+                title="Rotate 3D radar view azimuth left"
+              >
+                ⟲ YAW -15°
+              </button>
+              <button
+                onClick={() => setRadarYawOffset(prev => (prev + 15) % 360)}
+                className="px-1.5 py-0.5 bg-zinc-800 hover:bg-zinc-700 rounded text-cyan-200 cursor-pointer"
+                title="Rotate 3D radar view azimuth right"
+              >
+                ⟳ YAW +15°
+              </button>
+              <button
+                onClick={() => setRadarPitch(prev => Math.min(80, Math.max(10, prev === 30 ? 65 : 30)))}
+                className="px-1.5 py-0.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/30 rounded cursor-pointer"
+                title="Toggle top-down vs oblique isometric elevation"
+              >
+                {radarPitch > 45 ? 'ISOMETRIC (30°)' : 'TOP-DOWN (65°)'}
+              </button>
+            </div>
           </div>
         )}
 
