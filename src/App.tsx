@@ -1387,6 +1387,16 @@ export default function App() {
     addLog('[WORKSPACE]: Background windows cleared. Peak framerate and clean workspace restored.', 'success');
   }, [activeWindow, addLog]);
 
+  const handleOpenAmbientEar = useCallback(() => {
+    setOpenWindows(prev => prev.includes('ambient_mesh') ? prev : [...prev, 'ambient_mesh']);
+    setActiveWindow('ambient_mesh');
+  }, []);
+
+  const handleOpenPhaseLab = useCallback(() => {
+    setOpenWindows(prev => prev.includes('phase_lab') ? prev : [...prev, 'phase_lab']);
+    setActiveWindow('phase_lab');
+  }, []);
+
   return (
     <div className={`h-screen text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black transition-colors duration-700 relative ${isOverdrive ? 'bg-[#0a0000]' : 'bg-[#050505]'}`}>
       
@@ -1909,18 +1919,8 @@ export default function App() {
               stats={stats}
               carrierBias={carrierBias}
               socket={socketRef.current}
-              onOpenAmbientEar={() => {
-                if (!openWindows.includes('ambient_mesh')) {
-                  setOpenWindows(prev => [...prev, 'ambient_mesh']);
-                }
-                setActiveWindow('ambient_mesh');
-              }}
-              onOpenPhaseLab={() => {
-                if (!openWindows.includes('phase_lab')) {
-                  setOpenWindows(prev => [...prev, 'phase_lab']);
-                }
-                setActiveWindow('phase_lab');
-              }}
+              onOpenAmbientEar={handleOpenAmbientEar}
+              onOpenPhaseLab={handleOpenPhaseLab}
             />
           </DesktopWindow>
         )}

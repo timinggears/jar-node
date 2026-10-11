@@ -336,14 +336,17 @@ def on_command(cmd):
         except Exception as e:
             print(f"[BRIDGE -> HW] Command route exception: {e}")
 
+last_bridge_sent_jar = -999.0
+
 @sio.on("hardware:jar_rotation")
 def on_jar_rotation(data):
     """Relays physical/virtual jar rotation updates across the socket bridge to the serial Pico."""
-    global ser
+    global ser, last_bridge_sent_jar
     if ser and ser.is_open and data:
         try:
             jar_deg = float(data.get("jarHeading", 0.0))
             coil_deg = float(data.get("coilHeading", 0.0)) # Coil is anchored to North (000°)
+            last_bridge_sent_jar = jar_deg
             cmd = f"JAR_ROT:{jar_deg:.1f}|COIL_ROT:{coil_deg:.1f}\n"
             ser.write(cmd.encode("utf-8"))
         except Exception:
@@ -485,7 +488,14 @@ def main():
                                             jar_deg = float(raw_val)
                                             coil_deg = 0.0
                                     # Coil always has a North (000°); Jar is completely free
-                                    sio.emit("hardware:jar_rotation", {"jarHeading": jar_deg, "coilHeading": 0.0, "isCoupled": False})
+                                    # Avoid re-emitting serial echo of software rotation command
+                                    if abs(jar_deg - last_bridge_sent_jar) >= 0.5:
+                                        sio.emit("hardware:jar_rotation", {
+                                            "jarHeading": jar_deg, 
+                                            "coilHeading": 0.0, 
+                                            "isCoupled": False,
+                                            "source": "hardware_serial"
+                                        })
                                 except Exception:
                                     pass
                             elif decoded:

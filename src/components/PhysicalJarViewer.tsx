@@ -102,6 +102,11 @@ export default function PhysicalJarViewer({
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   const lastRawHeadingRef = useRef<number>(0);
+  const jarHeadingRef = useRef<number>(jarHeading);
+  jarHeadingRef.current = jarHeading;
+  const lastEmittedHeadingRef = useRef<number>(-999);
+  const lastSocketEmitTimeRef = useRef<number>(0);
+  const lastSolverRunTimeRef = useRef<number>(0);
 
   // High-resolution images generated directly from real telemetry (Square glass jar apparatus)
   // 1. Zoomed out wide-angle tomographic scan showing complete SQUARE edge of the glass jar & bench:
@@ -208,8 +213,10 @@ export default function PhysicalJarViewer({
       if (data?.source === 'data_solver') return;
       if (typeof data?.jarHeading === 'number') {
         const val = ((Math.round(data.jarHeading) % 360) + 360) % 360;
-        setJarHeading(val);
-        currentEstimatedHeadingRef.current = val;
+        if (val !== jarHeadingRef.current) {
+          setJarHeading(val);
+          currentEstimatedHeadingRef.current = val;
+        }
       }
     };
     socket.on('hardware:jar_rotation', onRemoteRotation);
@@ -366,29 +373,13 @@ export default function PhysicalJarViewer({
     vectorProjectionMode
   });
 
-  useEffect(() => {
-    latestParamsRef.current = {
-      vNodal,
-      jitterVal,
-      carrierFreqHz,
-      coherenceVal,
-      phaseAngleDeg,
-      carrierBias,
-      zoomLevel,
-      trueNorthHeading,
-      jarHeading,
-      coilHeading,
-      orientationFrame,
-      showCompassOverlay,
-      vectorProjectionMode
-    };
-  }, [
-    vNodal, 
-    jitterVal, 
-    carrierFreqHz, 
-    coherenceVal, 
-    phaseAngleDeg, 
-    carrierBias, 
+  latestParamsRef.current = {
+    vNodal,
+    jitterVal,
+    carrierFreqHz,
+    coherenceVal,
+    phaseAngleDeg,
+    carrierBias,
     zoomLevel,
     trueNorthHeading,
     jarHeading,
@@ -396,7 +387,7 @@ export default function PhysicalJarViewer({
     orientationFrame,
     showCompassOverlay,
     vectorProjectionMode
-  ]);
+  };
 
   // Track real voltage history for Phase-Space Attractor (Takens' Delay Embedding)
   useEffect(() => {
@@ -415,6 +406,10 @@ export default function PhysicalJarViewer({
   // When the user rotates their actual physical jar on the bench, the data changes and orients the on-screen jar.
   useEffect(() => {
     if (!dataRegistrationActive) return;
+
+    const now = Date.now();
+    if (now - lastSolverRunTimeRef.current < 45) return;
+    lastSolverRunTimeRef.current = now;
 
     const hist = voltageHistoryRef.current;
     if (hist.length < 8) return;
@@ -468,12 +463,28 @@ export default function PhysicalJarViewer({
     const rawDataAngle = ((thetaPcaDeg * 1.5 + phaseAngleDeg * 1.6 + thetaInstDeg * 0.6 + theta4Deg * 2.0) % 360 + 360) % 360;
     lastSolvedAngleRef.current = rawDataAngle;
 
-    setDataSolverMetrics({
-      thetaPca: Math.round(thetaPcaDeg),
-      theta4: Math.round(theta4Deg),
-      thetaInst: Math.round(thetaInstDeg),
-      rawAngle: Math.round(rawDataAngle),
-      active: true
+    const newPca = Math.round(thetaPcaDeg);
+    const newT4 = Math.round(theta4Deg);
+    const newInst = Math.round(thetaInstDeg);
+    const newRaw = Math.round(rawDataAngle);
+
+    setDataSolverMetrics(prev => {
+      if (
+        prev.thetaPca === newPca &&
+        prev.theta4 === newT4 &&
+        prev.thetaInst === newInst &&
+        prev.rawAngle === newRaw &&
+        prev.active === true
+      ) {
+        return prev;
+      }
+      return {
+        thetaPca: newPca,
+        theta4: newT4,
+        thetaInst: newInst,
+        rawAngle: newRaw,
+        active: true
+      };
     });
 
     // Apply bench datum tare offset
@@ -486,9 +497,16 @@ export default function PhysicalJarViewer({
     currentEstimatedHeadingRef.current = newHeading;
 
     const rounded = Math.round(newHeading);
-    setJarHeading(rounded);
+    if (rounded !== jarHeadingRef.current) {
+      setJarHeading(rounded);
+    }
 
-    if (socket) {
+    if (
+      socket &&
+      (Math.abs(rounded - lastEmittedHeadingRef.current) >= 1 || now - lastSocketEmitTimeRef.current > 1000)
+    ) {
+      lastEmittedHeadingRef.current = rounded;
+      lastSocketEmitTimeRef.current = now;
       socket.emit('hardware:jar_rotation', {
         jarHeading: rounded,
         coilHeading: 0,

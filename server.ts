@@ -1043,7 +1043,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     });
 
     socket.on('hardware:jar_rotation', (data: { jarHeading?: number, coilHeading?: number, isCoupled?: boolean }) => {
-      io.emit('hardware:jar_rotation', data);
+      socket.broadcast.emit('hardware:jar_rotation', data);
     });
 
     socket.on('hardware:dual_tone', (data: any) => {
