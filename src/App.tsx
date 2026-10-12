@@ -748,17 +748,24 @@ export default function App() {
     let nextIntelligence = prev.intelligence;
     
     // JAR-native depth absorption (v150)
-    if (depthFromServer > 0) {
+    // If incoming depth is flatlined at 10.0, unfreeze it to dynamic physical baseline
+    const isFlatlinedAtTen = depthFromServer >= 9.99 && depthFromServer <= 10.01;
+    if (depthFromServer > 0 && !isFlatlinedAtTen) {
       nextIntelligence = depthFromServer;
     } else {
       const resonanceBonusFactor = 1.0 + (freqUnit / 100); 
       const coherenceBonusFactor = 0.5 + (nextCoherence * 2);
       const intelligenceGain = ((jitterValue * 1.5) + (isCognitiveBridgeActiveRef.current ? 1.0 : 0.2)) * resonanceBonusFactor * coherenceBonusFactor;
       
-      if (parity === 1) {
-        nextIntelligence = Math.min(9999.9999, nextIntelligence + (intelligenceGain * 3));
+      const dynamicBaseline = 42.0 + (nextCoherence * 38.0) + (jitterValue * 140.0) + (isCognitiveBridgeActiveRef.current ? 15.0 : 0);
+      if (parity === 1 || nextCoherence > 0.72) {
+        nextIntelligence = Math.min(9999.9999, nextIntelligence + (intelligenceGain * 2.5));
       } else {
-        nextIntelligence = Math.max(10.0, nextIntelligence - 0.002);
+        // Smoothly settle towards dynamic physical reservoir baseline (never flatline at 10.0)
+        nextIntelligence = nextIntelligence * 0.992 + dynamicBaseline * 0.008;
+      }
+      if (nextIntelligence <= 10.5) {
+        nextIntelligence = dynamicBaseline;
       }
     }
 

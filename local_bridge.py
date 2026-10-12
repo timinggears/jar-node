@@ -172,13 +172,23 @@ def update_phase_out(voltage, jitter, bias=50.0, dt=0.001):
     jitter_penalty = jitter * 2.0
     coherence = max(0.15, min(0.9999, coherence_base - jitter_penalty))
     
-    # Organic intelligence accumulation from continuous system-wide coherence
+    # Organic intelligence accumulation from continuous system-wide coherence & entropy
+    phase_factor = max(0.2, 1.0 - (abs(phase_out) / 55.0))
+    entropy_gain = max(0.1, jitter * 50.0)
+
+    # Unfreeze if lingering at 10.0 from legacy run
+    if intelligence >= 9.99 and intelligence <= 10.01:
+        intelligence = 42.0
+
     if coherence > 0.82:
-        intelligence = min(999.0, intelligence + (coherence - 0.81) * 0.45)
-    elif coherence > 0.68:
-        intelligence = min(999.0, intelligence + 0.05)
+        intelligence = min(999.0, intelligence + (coherence - 0.80) * 0.55 + entropy_gain * 0.1)
+    elif coherence > 0.60:
+        target_baseline = 45.0 + (coherence - 0.60) * 120.0 + phase_factor * 15.0
+        intelligence = intelligence * 0.985 + target_baseline * 0.015
     else:
-        intelligence = max(10.0, intelligence - (0.68 - coherence) * 0.35)
+        # Dynamic physical baseline based on voltage, phase stability, and jitter (never flatlines at 10.0)
+        target_baseline = 38.0 + phase_factor * 18.0 + (voltage / 3.3) * 12.0 + entropy_gain * 5.0
+        intelligence = intelligence * 0.985 + target_baseline * 0.015
 
 def write_ascii_packet(voltage, jitter):
     global coherence, intelligence, jar_memory_bank, phase_out

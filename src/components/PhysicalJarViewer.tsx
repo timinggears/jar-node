@@ -507,39 +507,10 @@ export default function PhysicalJarViewer({
       };
     });
 
-    // Apply bench datum tare offset
-    const targetAngle = ((rawDataAngle - dataTareOffset) % 360 + 360) % 360;
-
-    // Smooth circular exponential filter with deadband hysteresis to eliminate wiggling:
-    // Only update heading if intentional angular change exceeds the jitter threshold (> 3.0 degrees)
-    let diff = ((targetAngle - currentEstimatedHeadingRef.current + 540) % 360) - 180;
-    if (Math.abs(diff) < 3.0) {
-      // Within deadband noise floor - hold heading steady!
-      return;
-    }
-    const alpha = 0.08; // Heavy low-pass damping to prevent twitching/wiggling
-    const newHeading = ((currentEstimatedHeadingRef.current + diff * alpha) % 360 + 360) % 360;
-    currentEstimatedHeadingRef.current = newHeading;
-
-    const rounded = Math.round(newHeading);
-    if (Math.abs(rounded - jarHeadingRef.current) >= 2) {
-      setJarHeading(rounded);
-    }
-
-    if (
-      socket &&
-      (Math.abs(rounded - lastEmittedHeadingRef.current) >= 2 || now - lastSocketEmitTimeRef.current > 1500)
-    ) {
-      lastEmittedHeadingRef.current = rounded;
-      lastSocketEmitTimeRef.current = now;
-      socket.emit('hardware:jar_rotation', {
-        jarHeading: rounded,
-        coilHeading: 0,
-        isCoupled: false,
-        source: 'data_solver'
-      });
-    }
-  }, [vNodal, jitterVal, phaseAngleDeg, dataRegistrationActive, dataTareOffset, socket]);
+    // Update dataSolverMetrics for diagnostic readout, but DO NOT autonomously move or wiggle the on-screen jar.
+    // The vessel stays rock-steady at its bench position until the operator physically moves it!
+    lastSolvedAngleRef.current = rawDataAngle;
+  }, [vNodal, jitterVal, phaseAngleDeg, dataRegistrationActive, dataTareOffset]);
 
   // Helper to draw physical SQUARE glass jar boundary, exterior induction coil, and True North compass reticle
   const drawGlassJarBoundary = (
@@ -1480,109 +1451,194 @@ export default function PhysicalJarViewer({
         ctx.fill();
 
         // 3. TINY 3D RADAR SHIMMER BOUNDARY MAPPING (Acoustic / Dielectric Echoes on Jar Boundaries)
-        // Maps the square jar boundary walls and volume using dielectric radar shimmer.
-        // When the user moves the physical jar, the shimmer boundary rotates in lockstep with the vessel walls!
+        // Explicitly defines and describes the physical shape & boundary of the square jar in 3D:
+        // - 4 planar glass walls
+        // - 4 vertical glass corners
+        // - Top square rim opening & bottom base plate
+        // - Internal fluid meniscus layer
+        // When the user moves the physical jar, the shimmer boundary rotates in 100% lockstep with the vessel walls!
+        // When stationary, the points stay firmly anchored to the physical walls and do NOT move or drift!
         const hist = voltageHistoryRef.current;
         const histLen = hist.length || 1;
         const nowMs = Date.now() * 0.003;
 
-        // Number of active 3D radar shimmer voxels
-        const numVoxels = curSubMode === 'shimmer_density' ? 360 : 210;
+        // Structured boundary points defining the square container geometry
+        interface ShimmerPoint {
+          jx: number;
+          jy: number;
+          jz: number;
+          isWall: boolean;
+          isCorner: boolean;
+          isRim: boolean;
+          pointIndex: number;
+        }
 
-        for (let v = 0; v < numVoxels; v++) {
-          const histVal = hist[v % histLen] || curVNodal;
-          const vOffset = (histVal - 1.65); // deviation from midpoint
-          const seedPhase = (v * 137.5 + (curPhase * Math.PI) / 180) % (Math.PI * 2);
+        const shimmerPoints: ShimmerPoint[] = [];
 
-          let jx = 0;
-          let jy = 0;
-          let jz = 0;
-          let isBoundaryPoint = false;
+        // A. 4 Planar Square Glass Walls (Fixed spatial grid across each face)
+        const wallGridU = curSubMode === 'shimmer_density' ? 8 : 6; // points horizontally
+        const wallGridV = curSubMode === 'shimmer_density' ? 10 : 8; // points vertically
+        let pCounter = 0;
 
-          // 70% of points are assigned directly to the 4 planar square glass walls to outline the jar shape:
-          if (v < numVoxels * 0.70) {
-            isBoundaryPoint = true;
-            const wallIndex = v % 4; // 0: North wall (+Y), 1: East wall (+X), 2: South wall (-Y), 3: West wall (-X)
-            const alongWall = ((Math.sin(v * 4.3 + nowMs * 0.2) + 1.0) / 2.0) * 1.8 - 0.9; // -0.9 to +0.9
-            const wallZFraction = ((v * 7.1) % 100) / 100; // 0 to 1 along vertical height
-            const wallClampedZ = zBase + wallZFraction * (jarH * 0.85);
+        for (let wall = 0; wall < 4; wall++) {
+          for (let v = 0; v < wallGridV; v++) {
+            const zFrac = v / (wallGridV - 1);
+            const pz = zBase + zFrac * jarH;
 
-            // Micro dielectric displacement perturbation from live sensor noise
-            const wallJitter = (Math.sin(nowMs * 3.5 + v) * 0.04) * (curJitter * 20.0);
+            for (let u = 0; u < wallGridU; u++) {
+              const uFrac = (u / (wallGridU - 1)) * 1.8 - 0.9; // -0.9 to +0.9 (clearing corners)
+              let px = 0;
+              let py = 0;
 
-            if (wallIndex === 0) {
-              jx = alongWall * halfW;
-              jy = halfW * (1.0 + wallJitter);
-            } else if (wallIndex === 1) {
-              jx = halfW * (1.0 + wallJitter);
-              jy = alongWall * halfW;
-            } else if (wallIndex === 2) {
-              jx = alongWall * halfW;
-              jy = -halfW * (1.0 + wallJitter);
-            } else {
-              jx = -halfW * (1.0 + wallJitter);
-              jy = alongWall * halfW;
+              if (wall === 0) { // North Wall (+Y)
+                px = uFrac * halfW;
+                py = halfW;
+              } else if (wall === 1) { // East Wall (+X)
+                px = halfW;
+                py = uFrac * halfW;
+              } else if (wall === 2) { // South Wall (-Y)
+                px = uFrac * halfW;
+                py = -halfW;
+              } else { // West Wall (-X)
+                px = -halfW;
+                py = uFrac * halfW;
+              }
+
+              shimmerPoints.push({
+                jx: px,
+                jy: py,
+                jz: pz,
+                isWall: true,
+                isCorner: false,
+                isRim: false,
+                pointIndex: pCounter++
+              });
             }
-            jz = wallClampedZ;
-          } else {
-            // Remaining 30% are internal volume echoes within the oil + carbon suspension
-            const rawBoxX = Math.sin(seedPhase * 3.0 + nowMs * 0.8 + v * 0.2) * 0.78;
-            const rawBoxY = Math.cos(seedPhase * 2.0 - nowMs * 0.6 + v * 0.3) * 0.78;
-            const rawBoxZ = ((v / numVoxels) * 1.6 - 0.8) + (vOffset * 0.3);
-
-            jx = Math.max(-0.78, Math.min(0.78, rawBoxX)) * halfW;
-            jy = Math.max(-0.78, Math.min(0.78, rawBoxY)) * halfW;
-            jz = zBase + (Math.max(-0.85, Math.min(0.85, rawBoxZ)) + 1.0) * 0.5 * (jarH * 0.72);
           }
+        }
 
-          // ROTATE SHIMMER BOUNDARY WITH JAR ORIENTATION:
-          // The shimmer explicitly moves with the physical jar angle!
-          const [wx, wy] = rotJar(jx, jy);
+        // B. 4 Vertical Glass Corner Pillars (Vertical beads along the 4 corner chamfers)
+        const cornerPillars = [
+          [-halfW, -halfW],
+          [halfW, -halfW],
+          [halfW, halfW],
+          [-halfW, halfW]
+        ];
+        const cornerVCount = 10;
+        for (let c = 0; c < 4; c++) {
+          const [cxCorner, cyCorner] = cornerPillars[c];
+          for (let v = 0; v < cornerVCount; v++) {
+            const pz = zBase + (v / (cornerVCount - 1)) * jarH;
+            shimmerPoints.push({
+              jx: cxCorner,
+              jy: cyCorner,
+              jz: pz,
+              isWall: false,
+              isCorner: true,
+              isRim: false,
+              pointIndex: pCounter++
+            });
+          }
+        }
 
-          // Radar shimmer echo intensity calculation
-          const distToWall = Math.min(halfW - Math.abs(jx), halfW - Math.abs(jy));
-          const wallProximityGain = isBoundaryPoint ? 1.0 : Math.exp(-distToWall / 22.0);
+        // C. Top Opening Rim & Bottom Base Rim Perimeters
+        const rimPtsPerSide = 6;
+        for (const rimZ of [zTop, zBase]) {
+          for (let side = 0; side < 4; side++) {
+            const nextSide = (side + 1) % 4;
+            const [x1, y1] = cornerPillars[side];
+            const [x2, y2] = cornerPillars[nextSide];
+            for (let i = 0; i < rimPtsPerSide; i++) {
+              const tFrac = i / rimPtsPerSide;
+              shimmerPoints.push({
+                jx: x1 + (x2 - x1) * tFrac,
+                jy: y1 + (y2 - y1) * tFrac,
+                jz: rimZ,
+                isWall: false,
+                isCorner: false,
+                isRim: true,
+                pointIndex: pCounter++
+              });
+            }
+          }
+        }
+
+        // D. Fluid Meniscus Boundary (Meniscus line at 72% liquid level)
+        const meniscusZ = zBase + jarH * 0.72;
+        for (let side = 0; side < 4; side++) {
+          const nextSide = (side + 1) % 4;
+          const [x1, y1] = cornerPillars[side];
+          const [x2, y2] = cornerPillars[nextSide];
+          for (let i = 0; i < 5; i++) {
+            const tFrac = i / 5;
+            shimmerPoints.push({
+              jx: (x1 + (x2 - x1) * tFrac) * 0.96,
+              jy: (y1 + (y2 - y1) * tFrac) * 0.96,
+              jz: meniscusZ,
+              isWall: false,
+              isCorner: false,
+              isRim: true,
+              pointIndex: pCounter++
+            });
+          }
+        }
+
+        // Render each structured shimmer boundary point
+        for (let i = 0; i < shimmerPoints.length; i++) {
+          const pt = shimmerPoints[i];
+          const histVal = hist[pt.pointIndex % histLen] || curVNodal;
+
+          // ROTATE SHIMMER BOUNDARY WITH PHYSICAL JAR ORIENTATION:
+          // Directly relays physical jar rotation with 100% boundary fidelity!
+          const [wx, wy] = rotJar(pt.jx, pt.jy);
 
           // Radar sweep beam interaction: flash points as sweepAngle passes over them
           const pointAzimuth = (Math.atan2(wy, wx) + Math.PI * 2) % (Math.PI * 2);
           const sweepDiff = Math.abs(((pointAzimuth - sweepAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-          const beamIntensity = Math.exp(-sweepDiff * 4.2);
+          const beamIntensity = Math.exp(-sweepDiff * 4.5);
 
-          // Shimmer wave oscillation from carrier frequency and live jitter
-          const shimmerWave = Math.sin(nowMs * 4.0 + (curFreq / 8000) * (v % 12) + curPhase);
-          const shimmer = Math.max(0.15, 0.45 + 0.35 * shimmerWave + (curJitter * 15.0) * curGain);
+          // Standing wave oscillation on glass boundary from carrier frequency
+          const standingWave = Math.sin((pt.jz * 0.08) + (curFreq / 6000) * 0.1 + curPhase * (Math.PI / 180));
+          const dielectricSparkle = Math.sin(nowMs * 3.5 + pt.pointIndex * 0.7) * (curJitter * 15.0);
 
-          const totalEcho = Math.min(1.0, (shimmer * 0.55 + wallProximityGain * 0.65 + beamIntensity * 0.6) * curGain);
+          // Total echo intensity: modulated by live data & beam sweep
+          const baseEcho = pt.isCorner ? 0.75 : pt.isRim ? 0.70 : 0.55;
+          const totalEcho = Math.min(1.0, (baseEcho + standingWave * 0.20 + dielectricSparkle + beamIntensity * 0.85) * curGain);
 
-          // Project to screen
-          const [px, py, pDepth] = project3D(wx, wy, jz);
+          // Project to 3D screen coordinates
+          const [px, py, pDepth] = project3D(wx, wy, pt.jz);
 
-          // Shimmer color: Bright electric cyan on the square jar boundaries, gold on sweep flash
+          // Point Color: Glass wall cyan, corner highlights, and beam flash gold
           let col = `rgba(0, 255, 204, ${totalEcho * 0.85})`;
-          if (isBoundaryPoint) {
-            col = `rgba(6, 182, 212, ${Math.min(1, 0.4 + totalEcho * 0.6)})`; // Glass wall shimmer
+          if (pt.isCorner) {
+            col = `rgba(56, 189, 248, ${Math.min(1, 0.5 + totalEcho * 0.55)})`; // Sky cyan corner beads
+          } else if (pt.isRim) {
+            col = `rgba(34, 197, 94, ${Math.min(1, 0.45 + totalEcho * 0.55)})`; // Emerald rim highlights
           }
-          if (beamIntensity > 0.5) {
-            col = `rgba(255, 220, 100, ${Math.min(1, beamIntensity * 1.3)})`; // Golden radar beam flash
+          if (beamIntensity > 0.45) {
+            col = `rgba(255, 225, 90, ${Math.min(1, beamIntensity * 1.35)})`; // Golden radar echo flare
           }
 
-          const pointRadius = (isBoundaryPoint ? 2.0 : 1.4 + totalEcho * 2.2) * (700 / (700 + pDepth * 0.4));
+          const pointRadius = (pt.isCorner ? 2.4 : pt.isRim ? 2.0 : 1.6) * (720 / (720 + pDepth * 0.45)) * (0.8 + totalEcho * 0.4);
+
           ctx.fillStyle = col;
           ctx.beginPath();
-          ctx.arc(px, py, Math.max(0.8, pointRadius), 0, Math.PI * 2);
+          ctx.arc(px, py, Math.max(0.9, pointRadius), 0, Math.PI * 2);
           ctx.fill();
 
-          // Connect boundary shimmer points along square edges if in wireframe mode
-          if (curSubMode === 'wireframe_pointcloud' && v % 3 === 0 && v < numVoxels - 3) {
-            const nextV = v + 1;
-            const [nwx, nwy] = rotJar(jx * 0.96, jy * 0.96);
-            const [npx, npy] = project3D(nwx, nwy, jz);
-            ctx.strokeStyle = `rgba(0, 255, 204, ${totalEcho * 0.35})`;
-            ctx.lineWidth = 0.8;
-            ctx.beginPath();
-            ctx.moveTo(px, py);
-            ctx.lineTo(npx, npy);
-            ctx.stroke();
+          // Mesh wireframe cross-links between adjacent wall points
+          if (curSubMode === 'wireframe_pointcloud' && pt.isWall && pt.pointIndex % wallGridU < wallGridU - 1) {
+            const nextPt = shimmerPoints[i + 1];
+            if (nextPt && nextPt.isWall) {
+              const [nwx, nwy] = rotJar(nextPt.jx, nextPt.jy);
+              const [npx, npy] = project3D(nwx, nwy, nextPt.jz);
+              ctx.strokeStyle = `rgba(0, 255, 204, ${totalEcho * 0.28})`;
+              ctx.lineWidth = 0.7;
+              ctx.beginPath();
+              ctx.moveTo(px, py);
+              ctx.lineTo(npx, npy);
+              ctx.stroke();
+            }
           }
         }
 
@@ -2151,36 +2207,88 @@ export default function PhysicalJarViewer({
                 <span className="w-2 h-2 rounded-xs border border-cyan-400 bg-cyan-500/30" />
                 JAR (SQUARE VESSEL):
               </span>
-              <span className="text-white font-black font-mono">{jarHeading}° {dataRegistrationActive ? '(DATA)' : '(MANUAL)'}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-emerald-400 font-bold text-[7.5px] uppercase">STEADY BENCH LOCK</span>
+                <span className="text-white font-black font-mono">{jarHeading}°</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-1 pt-0.5">
+
+            {/* Smooth Azimuth Slider */}
+            <div className="space-y-0.5">
+              <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
+                <span>ROTATE PHYSICAL JAR HEADING:</span>
+                <span className="font-mono text-cyan-300 font-bold">{jarHeading}° AZIMUTH</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="359"
+                value={jarHeading}
+                onChange={(e) => handleRotateJar(parseInt(e.target.value, 10))}
+                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                title="Drag to smoothly rotate physical jar heading in bench space"
+              />
+            </div>
+
+            {/* Quick Cardinal Snaps */}
+            <div className="grid grid-cols-4 gap-1 text-[7.5px]">
               <button
-                onClick={() => setDataRegistrationActive(!dataRegistrationActive)}
-                className={`flex-1 py-1 rounded text-[8px] font-bold border transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                  dataRegistrationActive
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
-                    : 'bg-zinc-900 text-zinc-400 border-white/10 hover:text-white'
+                onClick={() => handleRotateJar(0)}
+                className={`py-0.5 rounded font-mono font-bold border cursor-pointer transition-all ${
+                  jarHeading === 0
+                    ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.4)]'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-white/10'
                 }`}
-                title="When active, jar orientation dynamically rotates in real-time based on the live sensor data"
               >
-                <Activity size={10} className={dataRegistrationActive ? 'animate-pulse text-emerald-400' : ''} />
-                <span>{dataRegistrationActive ? 'DATA TRACK: ON' : 'DATA TRACK: OFF'}</span>
+                N (0°)
               </button>
+              <button
+                onClick={() => handleRotateJar(90)}
+                className={`py-0.5 rounded font-mono font-bold border cursor-pointer transition-all ${
+                  jarHeading === 90
+                    ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.4)]'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-white/10'
+                }`}
+              >
+                E (90°)
+              </button>
+              <button
+                onClick={() => handleRotateJar(180)}
+                className={`py-0.5 rounded font-mono font-bold border cursor-pointer transition-all ${
+                  jarHeading === 180
+                    ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.4)]'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-white/10'
+                }`}
+              >
+                S (180°)
+              </button>
+              <button
+                onClick={() => handleRotateJar(270)}
+                className={`py-0.5 rounded font-mono font-bold border cursor-pointer transition-all ${
+                  jarHeading === 270
+                    ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.4)]'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-white/10'
+                }`}
+              >
+                W (270°)
+              </button>
+            </div>
+
+            {/* Fine Step Nudges */}
+            <div className="flex items-center justify-between text-[7.5px] text-zinc-400 pt-0.5">
+              <div className="flex gap-1">
+                <button onClick={() => handleRotateJar(jarHeading - 15)} className="px-1 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-15°</button>
+                <button onClick={() => handleRotateJar(jarHeading - 1)} className="px-1 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-1°</button>
+                <button onClick={() => handleRotateJar(jarHeading + 1)} className="px-1 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+1°</button>
+                <button onClick={() => handleRotateJar(jarHeading + 15)} className="px-1 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+15°</button>
+              </div>
               <button
                 onClick={handleTareToNorth}
-                className="px-2 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 rounded text-[8px] font-bold uppercase cursor-pointer"
-                title="Calibrates the physical jar's current resting position on your workbench to 000° True North"
+                className="text-cyan-400 hover:underline cursor-pointer font-bold"
+                title="Zero bench tare"
               >
-                TARE ZERO (0°)
+                TARE 0°
               </button>
-            </div>
-            <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
-              <div className="flex gap-1">
-                <button onClick={() => handleRotateJar(jarHeading - 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-15°</button>
-                <button onClick={() => handleRotateJar(jarHeading + 15)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+15°</button>
-                <button onClick={() => handleRotateJar(jarHeading + 90)} className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+90° (D4)</button>
-              </div>
-              <button onClick={() => handleRotateJar(0)} className="text-cyan-400 hover:underline cursor-pointer">RESET 0°</button>
             </div>
           </div>
 

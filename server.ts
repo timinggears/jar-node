@@ -805,17 +805,27 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
 
     // Depth / Intelligence (index 8)
     let depth = parseFloat(parts[8]);
-    // Intercept if missing, <= 0, or if it matches the legacy static Pico formula
+    // Intercept if missing, <= 0, matching legacy static formula, or flatlined at 10.0
     const staticPicoDepth = (systemState.bias * coherence * (systemState.overdrive ? 5.5 : 1.0)) / 10.0;
     const isPicoStaticDepth = Math.abs(depth - staticPicoDepth) < 0.01;
-    if (isNaN(depth) || depth <= 0 || isPicoStaticDepth) {
+    const isFlatlinedAtTen = depth >= 9.99 && depth <= 10.01;
+    if (isNaN(depth) || depth <= 0 || isPicoStaticDepth || isFlatlinedAtTen) {
       let currentIntel = systemState.intelligence;
+      // If previously stuck at 10.0, unfreeze to dynamic reservoir baseline
+      if (currentIntel >= 9.99 && currentIntel <= 10.01) {
+        currentIntel = 42.0 + Math.random() * 5.0;
+      }
+      const jitterEntropy = Math.min(30.0, jitter * 450.0);
+      const dynamicBaseline = 42.0 + (coherence * 38.0) + jitterEntropy + (systemState.bias * 12.0);
+
       if (coherence > 0.82) {
-        currentIntel = Math.min(999.0, currentIntel + (coherence - 0.81) * 0.45);
-      } else if (coherence > 0.68) {
-        currentIntel = Math.min(999.0, currentIntel + 0.05);
+        currentIntel = Math.min(999.0, currentIntel + (coherence - 0.80) * 0.65 + jitterEntropy * 0.05);
+      } else if (coherence > 0.60) {
+        currentIntel = currentIntel * 0.985 + dynamicBaseline * 0.015;
       } else {
-        currentIntel = Math.max(10.0, currentIntel - (0.68 - coherence) * 0.35);
+        // Living physical baseline based on voltage, entropy, and baseline resistance
+        const restingBaseline = 36.0 + (vNodal / 3.3) * 14.0 + jitterEntropy;
+        currentIntel = currentIntel * 0.985 + restingBaseline * 0.015;
       }
       systemState.intelligence = currentIntel;
       depth = currentIntel;
