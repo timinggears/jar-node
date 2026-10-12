@@ -507,10 +507,34 @@ export default function PhysicalJarViewer({
       };
     });
 
-    // Update dataSolverMetrics for diagnostic readout, but DO NOT autonomously move or wiggle the on-screen jar.
-    // The vessel stays rock-steady at its bench position until the operator physically moves it!
-    lastSolvedAngleRef.current = rawDataAngle;
-  }, [vNodal, jitterVal, phaseAngleDeg, dataRegistrationActive, dataTareOffset]);
+    // When DATA TRACK is ON:
+    // Detect genuine intentional physical movement vs ambient resting noise.
+    // When the jar is sitting still on the bench, ambient micro-fluctuations are latched steady (zero wiggling).
+    // When you actually turn/rotate the physical jar, the dielectric shift exceeds 10° and smoothly rotates the on-screen jar & shimmer boundary!
+    const targetAngle = ((rawDataAngle - dataTareOffset) % 360 + 360) % 360;
+    let diff = ((targetAngle - currentEstimatedHeadingRef.current + 540) % 360) - 180;
+
+    if (Math.abs(diff) >= 10.0) {
+      // Deliberate physical motion detected: smoothly follow to new physical azimuth
+      const alpha = 0.14;
+      const newHeading = ((currentEstimatedHeadingRef.current + diff * alpha) % 360 + 360) % 360;
+      currentEstimatedHeadingRef.current = newHeading;
+      const rounded = Math.round(newHeading);
+
+      if (Math.abs(rounded - jarHeadingRef.current) >= 2) {
+        setJarHeading(rounded);
+        if (socket && now - lastSocketEmitTimeRef.current > 1200) {
+          lastSocketEmitTimeRef.current = now;
+          socket.emit('hardware:jar_rotation', {
+            jarHeading: rounded,
+            coilHeading: 0,
+            isCoupled: false,
+            source: 'data_solver'
+          });
+        }
+      }
+    }
+  }, [vNodal, jitterVal, phaseAngleDeg, dataRegistrationActive, dataTareOffset, socket]);
 
   // Helper to draw physical SQUARE glass jar boundary, exterior induction coil, and True North compass reticle
   const drawGlassJarBoundary = (
@@ -2274,21 +2298,38 @@ export default function PhysicalJarViewer({
               </button>
             </div>
 
+            {/* Live Data Sync Toggle & Tare */}
+            <div className="flex items-center gap-1 pt-0.5">
+              <button
+                onClick={() => setDataRegistrationActive(!dataRegistrationActive)}
+                className={`flex-1 py-1 rounded text-[8px] font-bold border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  dataRegistrationActive
+                    ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                    : 'bg-zinc-900 text-zinc-400 border-white/10 hover:text-white'
+                }`}
+                title="When ON, physically rotating the actual jar on your bench will change the on-screen position and shimmer boundary via dielectric sensing!"
+              >
+                <Activity size={10} className={dataRegistrationActive ? 'animate-pulse text-emerald-400' : ''} />
+                <span>{dataRegistrationActive ? 'DATA TRACK: LIVE ON' : 'DATA TRACK: OFF'}</span>
+              </button>
+              <button
+                onClick={handleTareToNorth}
+                className="px-2 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 rounded text-[8px] font-bold uppercase cursor-pointer"
+                title="Zero bench tare"
+              >
+                TARE 0°
+              </button>
+            </div>
+
             {/* Fine Step Nudges */}
-            <div className="flex items-center justify-between text-[7.5px] text-zinc-400 pt-0.5">
+            <div className="flex items-center justify-between text-[7.5px] text-zinc-400">
               <div className="flex gap-1">
                 <button onClick={() => handleRotateJar(jarHeading - 15)} className="px-1 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-15°</button>
                 <button onClick={() => handleRotateJar(jarHeading - 1)} className="px-1 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">-1°</button>
                 <button onClick={() => handleRotateJar(jarHeading + 1)} className="px-1 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+1°</button>
                 <button onClick={() => handleRotateJar(jarHeading + 15)} className="px-1 py-0.5 bg-zinc-900 hover:bg-zinc-800 rounded border border-white/10 cursor-pointer">+15°</button>
               </div>
-              <button
-                onClick={handleTareToNorth}
-                className="text-cyan-400 hover:underline cursor-pointer font-bold"
-                title="Zero bench tare"
-              >
-                TARE 0°
-              </button>
+              <button onClick={() => handleRotateJar(0)} className="text-cyan-400 hover:underline cursor-pointer">RESET 0°</button>
             </div>
           </div>
 
