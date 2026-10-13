@@ -350,11 +350,11 @@ export default function GitRepositoryHub({ onAddLog }: GitRepositoryHubProps) {
               </p>
 
               <div className="p-3 bg-black border border-white/10 rounded-lg space-y-1.5 font-mono text-[10px]">
-                <span className="text-zinc-500"># Launch the Python hardware daemon:</span>
+                <span className="text-zinc-500"># Launch the Python hardware daemon (strictly calibrated 8.0°–28.0° Phase-Out):</span>
                 <div className="flex items-center justify-between text-emerald-400">
-                  <code>python3 bridge/pico_bridge.py --port /dev/ttyACM0 --baud 115200</code>
+                  <code>python3 local_bridge.py</code>
                   <button
-                    onClick={() => handleCopy('python3 bridge/pico_bridge.py --port /dev/ttyACM0 --baud 115200', 'pybridge')}
+                    onClick={() => handleCopy('python3 local_bridge.py', 'pybridge')}
                     className="p-1 text-zinc-400 hover:text-white cursor-pointer"
                   >
                     {copiedKey === 'pybridge' ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}

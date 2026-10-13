@@ -105,7 +105,7 @@ from collections import deque
 jar_memory_bank = {}
 coherence = 0.65
 intelligence = 45.0
-phase_out = 0.0
+phase_out = 18.0
 memory_state = 0.0  # Slow integrating memory state (allows stick to persist after external drive stops)
 b_plus_val = 0.0
 
@@ -150,30 +150,20 @@ def update_phase_out(voltage, jitter, bias=50.0, dt=0.001):
     # 5. Oscillation: 28 Hz, amplitude 6 (matches the 28 Hz fundamental multi-harmonic drive)
     osc = 6.0 * math.sin(2.0 * math.pi * 28.0 * t)
     
-    # 6. Modified Phase-Out equation combining instant, memory stick, and 28Hz oscillation
-    phase_out = 0.65 * instant + 0.90 * memory_state + 0.25 * osc
-    phase_out = max(-55.0, min(55.0, phase_out))
+    # 6. Phase-Out equation strictly calibrated to the [8.0, 28.0] range
+    # Centered at 18.0° with a ±10.0° dynamic swing responding to voltage, memory, and 28Hz oscillation
+    raw_swing = 0.45 * instant + 0.35 * memory_state + 0.20 * osc
+    phase_out = 18.0 + 10.0 * math.tanh(raw_swing / 20.0)
+    phase_out = max(8.0, min(28.0, phase_out))
     
-    # 7. Coherence: Peaks in a moderate band of |phase_out| (roughly 8–28), not only at zero
-    abs_p = abs(phase_out)
-    if abs_p < 8.0:
-        band_distance = 8.0 - abs_p
-        coherence_base = 0.96 - (band_distance / 8.0) * 0.18
-    elif abs_p <= 28.0:
-        # In the stable high-coherence plateau (8–28 sweet spot)
-        dist_center = abs(abs_p - 18.0)
-        coherence_base = 0.98 - (dist_center / 10.0) * 0.04
-    else:
-        # Roll-off above 28° towards -55° / +55°
-        band_distance = abs_p - 28.0
-        falloff = ((band_distance / 27.0) ** 1.35) * 0.65
-        coherence_base = 0.96 - falloff
-        
-    jitter_penalty = jitter * 2.0
-    coherence = max(0.15, min(0.9999, coherence_base - jitter_penalty))
+    # 7. Coherence: Maximum in the stable 8–28 sweet spot
+    dist_center = abs(phase_out - 18.0)
+    coherence_base = 0.98 - (dist_center / 10.0) * 0.05
+    jitter_penalty = jitter * 1.5
+    coherence = max(0.20, min(0.9999, coherence_base - jitter_penalty))
     
     # Organic intelligence accumulation from continuous system-wide coherence & entropy
-    phase_factor = max(0.2, 1.0 - (abs(phase_out) / 55.0))
+    phase_factor = max(0.4, 1.0 - (dist_center / 10.0))
     entropy_gain = max(0.1, jitter * 50.0)
 
     # Unfreeze if lingering at 10.0 from legacy run
@@ -366,6 +356,7 @@ def main():
     global ser
     print("\033[1;34m========================================================\033[0m")
     print("\033[1;36m       SOVEREIGN J.A.R.S. - LOCAL HARDWARE PROXY       \033[0m")
+    print("\033[1;32m[CALIBRATION] Phase-Out strictly calibrated to [8.0° – 28.0°] (Center: 18.0°)\033[0m")
     print("\033[1;34m========================================================\033[0m")
     
     # 1. Connect to server (using custom parameters / fallback)

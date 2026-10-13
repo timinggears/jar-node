@@ -585,7 +585,7 @@ export default function QiskitQuantumLab({
 
         if (p.closedFeedbackEnabled) {
           const g = p.feedbackGain;
-          dV = (stepResult.quantumPhaseOut / 55.0) * 0.12 * g;
+          dV = ((stepResult.quantumPhaseOut - 18.0) / 10.0) * 0.12 * g;
           dM = (stepResult.quantumPhaseOut - stepResult.updatedMemory) * 0.18 * g;
           writebackVRef.current = (p.feedbackMode === 'dual' || p.feedbackMode === 'voltage') ? dV : 0.0;
 
@@ -904,7 +904,7 @@ export default function QiskitQuantumLab({
             {currentState.quantumPhaseOut > 0 ? `+${currentState.quantumPhaseOut.toFixed(2)}°` : `${currentState.quantumPhaseOut.toFixed(2)}°`}
           </div>
           <span className="text-[8px] text-zinc-500">
-            Remapped: (P(1) × 110) - 55
+            Remapped: 8.0° + (P(1) × 20.0°)
           </span>
         </div>
 

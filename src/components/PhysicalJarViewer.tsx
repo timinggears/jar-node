@@ -138,7 +138,7 @@ export default function PhysicalJarViewer({
   const carrierFreqHz = stats.frequency || 81376.0;
   const coherenceVal = stats.coherence || 0.95;
   const rawSeed = stats.seedHex || '877BE13E';
-  const phaseAngleDeg = stats.phaseOut || 55.0;
+  const phaseAngleDeg = stats.phaseOut || 18.0;
 
   // Relative differential angle & D4 square symmetry calculations
   const deltaAngle = ((jarHeading - coilHeading) % 360 + 360) % 360;

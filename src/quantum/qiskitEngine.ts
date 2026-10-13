@@ -359,8 +359,8 @@ export function executeQuantumJarStep(
   updatedMemory = Math.max(-32.0, Math.min(38.0, updatedMemory));
 
   const oscAngle = 6.0 * Math.sin(2.0 * Math.PI * 28.0 * currentTime);
-  const classicalRaw = 0.65 * instant + 0.90 * updatedMemory + 0.25 * oscAngle;
-  const classicalPhaseOut = Math.max(-55.0, Math.min(55.0, classicalRaw));
+  const classicalRaw = 0.45 * instant + 0.35 * updatedMemory + 0.20 * oscAngle;
+  const classicalPhaseOut = Math.max(8.0, Math.min(28.0, 18.0 + 10.0 * Math.tanh(classicalRaw / 20.0)));
 
   // 2. Quantum side (memory & voltage -> 3-qubit circuit)
   const { theta0, theta1, theta2 } = cedarCircuitAngles(voltage, updatedMemory, oscAngle);
@@ -416,8 +416,8 @@ export function executeQuantumJarStep(
     prob1Sampled = prob1Exact;
   }
 
-  // 5. Reconstruct Quantum Phase-Out Green Wave:
-  const quantumPhaseOut = (prob1Sampled * 110.0) - 55.0;
+  // 5. Reconstruct Quantum Phase-Out Green Wave (strictly calibrated [8.0°, 28.0°] centered at 18.0°):
+  const quantumPhaseOut = Math.max(8.0, Math.min(28.0, 8.0 + prob1Sampled * 20.0));
   const memoryAngleDeg = (theta1 * 180.0) / Math.PI;
 
   // 6. Bloch Sphere Vectors:

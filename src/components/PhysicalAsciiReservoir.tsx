@@ -829,9 +829,10 @@ export default function PhysicalAsciiReservoir({
             {phaseOut >= 0 ? '+' : ''}{phaseOut.toFixed(1)}°
           </div>
           <div className="w-full bg-zinc-800 h-1 rounded overflow-hidden relative">
+            <div className="absolute top-0 bottom-0 w-0.5 bg-zinc-600 left-1/2 z-0" title="18° center nominal" />
             <div 
-              className="absolute top-0 bottom-0 bg-[#00ccff] w-1" 
-              style={{ left: `${50 + (phaseOut / 200) * 50}%` }} 
+              className="absolute top-0 bottom-0 bg-[#00ccff] w-1.5 rounded-full z-10" 
+              style={{ left: `${Math.max(0, Math.min(100, ((phaseOut - 8.0) / 20.0) * 100))}%` }} 
             />
           </div>
         </div>
@@ -1456,7 +1457,7 @@ export default function PhysicalAsciiReservoir({
                   Phase-Out Dynamics &amp; Memory Stick Analysis
                 </span>
                 <span className="text-[8px] bg-emerald-500/20 text-[#00ffcc] px-1.5 py-0.5 rounded font-mono border border-emerald-500/30">
-                  {Math.abs(phaseOut) >= 8 && Math.abs(phaseOut) <= 28 ? 'SWEET SPOT (8°–28°)' : 'STABLE FIELD'}
+                  {phaseOut >= 8.0 && phaseOut <= 28.0 ? 'SWEET SPOT (8.0°–28.0°)' : 'STABLE FIELD'}
                 </span>
               </div>
               {onOpenPhaseLab && (
@@ -1477,7 +1478,7 @@ export default function PhysicalAsciiReservoir({
                 <div className="text-xl font-black text-[#00ccff] font-mono my-1">
                   {phaseOut >= 0 ? '+' : ''}{phaseOut.toFixed(2)}°
                 </div>
-                <span className="text-[7.5px] text-zinc-400">Current clamp: [-55°, +55°]</span>
+                <span className="text-[7.5px] text-[#00ffcc] font-bold">Strict Resonance: [8.0° – 28.0°]</span>
               </div>
 
               <div className="p-3 bg-black/40 border border-pink-500/20 rounded">

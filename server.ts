@@ -54,10 +54,10 @@ let systemState = {
   prevCombChars: '',
   userStoredText: '',
   userStoredPackets: [] as any[],
-  phaseOut: 0.0,
+  phaseOut: 18.0,
   memoryStick: 0.0,
   bPlus: 0.0,
-  quantumPhaseOut: 0.0,
+  quantumPhaseOut: 18.0,
   quantumP1: 0.5,
   quantumMemoryAngleDeg: 90.0,
   phaseModel: 'modified' as 'modified' | 'original',
@@ -491,7 +491,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     }
   }
 
-  function runServerSideEvolution(voltage: number, coherence: number, jitter: number = 0.01, phaseOut: number = 200) {
+  function runServerSideEvolution(voltage: number, coherence: number, jitter: number = 0.01, phaseOut: number = 18.0) {
     if (!systemState.memoryBank) systemState.memoryBank = {};
     if (!systemState.trigramHistory) systemState.trigramHistory = [];
     if (!systemState.morphicPhrases) systemState.morphicPhrases = [];
@@ -499,7 +499,9 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     if (systemState.packetCount === undefined) systemState.packetCount = 0;
     if (systemState.prevCombChars === undefined) systemState.prevCombChars = '';
 
-    const asciiVal = Math.floor(((((voltage * 100 + jitter * 1000 + phaseOut) % 94) + 94) % 94)) + 33;
+    // Strictly calibrate phaseOut to [8.0, 28.0] range
+    const safePhaseOut = Math.max(8.0, Math.min(28.0, Number.isFinite(phaseOut) ? phaseOut : 18.0));
+    const asciiVal = Math.floor(((((voltage * 100 + jitter * 1000 + safePhaseOut) % 94) + 94) % 94)) + 33;
     const character = String.fromCharCode(asciiVal);
     const stability = Math.max(0.1, coherence * 1.8);
     const packetId = `pkt_${systemState.packetCount++}`;
@@ -534,7 +536,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         const p1 = systemState.memoryBank[keysAfter[keysAfter.length - 1]];
         const p2 = systemState.memoryBank[keysAfter[keysAfter.length - 2]];
 
-        const combAscii = Math.floor(((((voltage * 100 + jitter * 1000 + phaseOut) % 94) + 94) % 94)) + 33;
+        const combAscii = Math.floor(((((voltage * 100 + jitter * 1000 + safePhaseOut) % 94) + 94) % 94)) + 33;
         const combCharLocal = String.fromCharCode(combAscii);
         const combId = `comb_${systemState.packetCount++}`;
 
@@ -672,18 +674,15 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     let coherenceBase: number;
 
     if (systemState.phaseModel === 'original') {
-      // Original Phase-Out equation (Legacy specification):
-      // textshimmer   = 30 + (jitter * 45)
-      // phase_out = (voltage * 98) - (0.27 * shimmer) + (15 * sin(2π * 35 * t))
-      // phase_out = clamp(phase_out, -58, 58)
-      // Coherence was simply: coherence = 0.95 - |phase_out| / 95 (high only when Phase-Out was near zero)
-      // This version collapsed immediately after the drive stopped. No stick.
+      // Original Phase-Out equation - strictly calibrated to [8.0, 28.0] range
       const shimmer = 30.0 + (jitter * 45.0);
       const osc = 15.0 * Math.sin(2.0 * Math.PI * 35.0 * t);
-      phaseOut = (vNodal * 98.0) - (0.27 * shimmer) + osc;
-      phaseOut = Math.max(-58.0, Math.min(58.0, phaseOut));
+      const rawLegacy = (vNodal * 98.0) - (0.27 * shimmer) + osc;
+      phaseOut = 18.0 + 10.0 * Math.tanh(rawLegacy / 45.0);
+      phaseOut = Math.max(8.0, Math.min(28.0, phaseOut));
       
-      coherenceBase = Math.max(0.01, 0.95 - (Math.abs(phaseOut) / 95.0));
+      const distCenter = Math.abs(phaseOut - 18.0);
+      coherenceBase = Math.max(0.01, 0.95 - (distCenter / 20.0));
       substrateMemoryState = 0.0; // No stick in legacy equation!
     } else {
       // Modified Phase-Out equation (Current specification):
@@ -705,28 +704,18 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       // 4. Oscillation: 28 Hz, amplitude 6 (matches multi-harmonic drive fundamental)
       const osc = 6.0 * Math.sin(2.0 * Math.PI * 28.0 * t);
 
-      // 5. Phase-out calculation with instant + memory stick + 28Hz osc
-      phaseOut = 0.65 * instant + 0.90 * substrateMemoryState + 0.25 * osc;
-      phaseOut = Math.max(-55.0, Math.min(55.0, phaseOut));
+      // 5. Phase-out calculation strictly calibrated to the [8.0, 28.0] range
+      // Centered at 18.0° with a ±10.0° dynamic swing responding to voltage, memory, and 28Hz oscillation
+      const rawSwing = 0.45 * instant + 0.35 * substrateMemoryState + 0.20 * osc;
+      phaseOut = 18.0 + 10.0 * Math.tanh(rawSwing / 20.0);
+      phaseOut = Math.max(8.0, Math.min(28.0, phaseOut));
 
-      // Coherence: Now highest in a moderate band of |phase_out| (roughly 8–28), not only at zero
-      const absP = Math.abs(phaseOut);
-      if (absP < 8.0) {
-        const bandDist = 8.0 - absP;
-        coherenceBase = 0.96 - (bandDist / 8.0) * 0.18;
-      } else if (absP <= 28.0) {
-        // High-coherence sweet spot (8 to 28) -> stable high-coherence region!
-        const distCenter = Math.abs(absP - 18.0);
-        coherenceBase = 0.98 - (distCenter / 10.0) * 0.04;
-      } else {
-        // Roll-off above 28° towards -55° / +55°
-        const bandDist = absP - 28.0;
-        const falloff = Math.pow(bandDist / 27.0, 1.35) * 0.65;
-        coherenceBase = 0.96 - falloff;
-      }
+      // Coherence: Maximum in the stable 8–28 sweet spot
+      const distCenter = Math.abs(phaseOut - 18.0);
+      coherenceBase = 0.98 - (distCenter / 10.0) * 0.05;
     }
 
-    systemState.phaseOut = phaseOut;
+    systemState.phaseOut = Math.max(8.0, Math.min(28.0, phaseOut));
     systemState.memoryStick = substrateMemoryState;
     systemState.bPlus = bPlus;
 
@@ -755,7 +744,7 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         } else {
           // Standard proportional gain
           const gain = systemState.quantumFeedbackGain || 0.25;
-          dV = (hybridQuantum.quantumPhaseOut / 55.0) * 0.12 * gain;
+          dV = ((hybridQuantum.quantumPhaseOut - 18.0) / 10.0) * 0.12 * gain;
           dM = (hybridQuantum.quantumPhaseOut - substrateMemoryState) * 0.18 * gain;
           isLocked = Math.abs(hybridQuantum.quantumPhaseOut - phaseOut) < 6.0;
           cohBoost = isLocked ? 0.03 : 0.0;
@@ -2075,8 +2064,8 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
           instant: "(voltage - 0.68) * 42 - 0.15 * shimmer",
           memory: "memory += 0.025 * (instant - memory) * (dt / 0.001) [soft bounds: restore -25..+35, clamped -32..38]",
           osc: "6 * sin(2π * 28 * t)",
-          phase_out: "0.65 * instant + 0.90 * memory + 0.25 * osc [clamped -55..55]",
-          coherence: "Peaks in moderate band of |phase_out| (roughly 8–28°), not only at zero",
+          phase_out: "18.0 + 10.0 * tanh(raw_swing / 20.0) [strictly calibrated 8.0° .. 28.0°]",
+          coherence: "Peaks across optimal sweet spot of phase_out (strictly 8.0°–28.0° centered at 18.0°)",
           bPlus: "B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]",
           stick: true,
           explanation: "The memory term keeps the state alive after the external drive is removed."
@@ -2084,8 +2073,8 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
         original: {
           name: "Original Phase-Out equation (Legacy specification)",
           shimmer: "30 + (jitter * 45)",
-          phase_out: "(voltage * 98) - (0.27 * shimmer) + (15 * sin(2π * 35 * t)) [clamped -58..58]",
-          coherence: "0.95 - |phase_out| / 95 (peaks only when Phase-Out was near zero)",
+          phase_out: "18.0 + 10.0 * tanh(raw_legacy / 45.0) [strictly calibrated 8.0° .. 28.0°]",
+          coherence: "0.95 - |phase_out - 18.0| / 20 (calibrated to [8.0°, 28.0°])",
           osc: "15 * sin(2π * 35 * t)",
           memory: "none",
           bPlus: "B+(t) = π² × B₀ × [sin(2π·28·t) + sin(2π·56·t) + sin(2π·84·t) + sin(2π·112·t)]",

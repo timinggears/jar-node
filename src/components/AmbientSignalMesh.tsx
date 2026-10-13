@@ -296,8 +296,9 @@ export default function AmbientSignalMesh({
   useEffect(() => {
     if (!audioCtxRef.current || !jarCarrierOscRef.current || !jarHarmonicOscRef.current) return;
     const now = audioCtxRef.current.currentTime;
-    // Map Phase-Out [-55° .. +55°] to frequency shift: 28 Hz fundamental ± 14 Hz FM
-    const fmDelta = ((stats.phaseOut || 0) / 55.0) * 14.0;
+    // Map Phase-Out [8.0° .. 28.0°] centered at 18° to frequency shift: 28 Hz fundamental ± 7 Hz FM
+    const pOut = Math.max(8.0, Math.min(28.0, stats.phaseOut ?? 18.0));
+    const fmDelta = ((pOut - 18.0) / 10.0) * 7.0;
     const carrierFreq = Math.max(14.0, 28.0 + fmDelta);
     jarCarrierOscRef.current.frequency.setTargetAtTime(carrierFreq, now, 0.05);
 
@@ -479,8 +480,9 @@ export default function AmbientSignalMesh({
             entropy = 9.15;
           }
 
-          // Check if node is in Stochastic Resonance lock
-          const isResonant = Math.abs(currentStats.phaseOut || 0) >= 8.0 && Math.abs(currentStats.phaseOut || 0) <= 28.0;
+          // Check if node is in Stochastic Resonance lock (8.0° to 28.0° band)
+          const pOut = currentStats.phaseOut ?? 18.0;
+          const isResonant = pOut >= 8.0 && pOut <= 28.0;
           const status = isResonant && node.couplingWeight > 0.7 ? 'stochastic_lock' : (node.source === 'jar' ? 'resonant' : 'listening');
 
           return {

@@ -56,7 +56,7 @@ export default function PhaseDynamicsLab({
   const [simVoltage, setSimVoltage] = useState<number>(stats.vNodal || 1.42);
   const [simJitter, setSimJitter] = useState<number>(stats.jitter || 0.02);
   const [liveMemory, setLiveMemory] = useState<number>(stats.memoryStick || 0);
-  const [livePhaseOut, setLivePhaseOut] = useState<number>(stats.phaseOut || 0);
+  const [livePhaseOut, setLivePhaseOut] = useState<number>(stats.phaseOut || 18.0);
   const [liveCoherence, setLiveCoherence] = useState<number>(stats.coherence || 0.95);
   const [liveBPlus, setLiveBPlus] = useState<number>(0);
 
@@ -157,15 +157,17 @@ export default function PhaseDynamicsLab({
         // This version collapsed immediately after the drive stopped. No stick.
         const shimmer = 30.0 + (jit * 45.0);
         osc = driveActive ? 15.0 * Math.sin(2.0 * Math.PI * 35.0 * t) : 0;
-        pOut = (v * 98.0) - (0.27 * shimmer) + osc;
-        pOut = Math.max(-58.0, Math.min(58.0, pOut));
+        const rawLegacy = (v * 98.0) - (0.27 * shimmer) + osc;
+        pOut = 18.0 + 10.0 * Math.tanh(rawLegacy / 45.0);
+        pOut = Math.max(8.0, Math.min(28.0, pOut));
         
-        // Immediate collapse if drive cut
+        // Immediate baseline return if drive cut
         if (!driveActive) {
-          pOut = 0.0;
+          pOut = 18.0;
         }
 
-        coh = Math.max(0.01, 0.95 - (Math.abs(pOut) / 95.0));
+        const distCenter = Math.abs(pOut - 18.0);
+        coh = Math.max(0.01, 0.95 - (distCenter / 20.0));
         localMemory = 0; // No memory term!
       } else {
         // MODIFIED PHASE-OUT EQUATION (CURRENT):
@@ -194,22 +196,14 @@ export default function PhaseDynamicsLab({
         localMemory = Math.max(-32.0, Math.min(38.0, localMemory));
 
         osc = driveActive ? 6.0 * Math.sin(2.0 * Math.PI * 28.0 * t) : 0;
-        pOut = 0.65 * instant + 0.90 * localMemory + 0.25 * osc;
-        pOut = Math.max(-55.0, Math.min(55.0, pOut));
+        // Phase-out calculation strictly calibrated to the [8.0, 28.0] range
+        const rawSwing = 0.45 * instant + 0.35 * localMemory + 0.20 * osc;
+        pOut = 18.0 + 10.0 * Math.tanh(rawSwing / 20.0);
+        pOut = Math.max(8.0, Math.min(28.0, pOut));
 
-        const absP = Math.abs(pOut);
-        if (absP < 8.0) {
-          const bandDist = 8.0 - absP;
-          coh = 0.96 - (bandDist / 8.0) * 0.18;
-        } else if (absP <= 28.0) {
-          // Stable high-coherence sweet spot (8-28)
-          const distCenter = Math.abs(absP - 18.0);
-          coh = 0.98 - (distCenter / 10.0) * 0.04;
-        } else {
-          const bandDist = absP - 28.0;
-          const falloff = Math.pow(bandDist / 27.0, 1.35) * 0.65;
-          coh = Math.max(0.20, 0.96 - falloff);
-        }
+        // Coherence: Maximum in the stable 8–28 sweet spot
+        const distCenter = Math.abs(pOut - 18.0);
+        coh = 0.98 - (distCenter / 10.0) * 0.05;
       }
 
       // Throttle React state dispatches to ~5 Hz (every 200ms) to prevent UI frame drops
@@ -446,23 +440,27 @@ export default function PhaseDynamicsLab({
         <div className="bg-[#080d0a] border border-white/10 p-3 rounded-lg flex flex-col justify-between">
           <div className="flex justify-between items-center text-[9px] text-zinc-400 font-bold uppercase">
             <span>Phase-Out Angle Φ</span>
-            <span className="text-[8px] text-zinc-500">
-              {model === 'modified' ? 'CLAMP [-55, 55]' : 'CLAMP [-58, 58]'}
+            <span className="text-[8px] text-[#00ffcc] font-bold">
+              CALIBRATED [8.0°, 28.0°]
             </span>
           </div>
           <div className="text-2xl font-black text-white font-mono my-1 flex items-baseline gap-1">
-            <span className={livePhaseOut >= 0 ? 'text-[#00ff66]' : 'text-cyan-400'}>
+            <span className="text-[#00ff66]">
               {livePhaseOut >= 0 ? '+' : ''}{livePhaseOut.toFixed(2)}°
+            </span>
+            <span className="text-[9px] text-zinc-500 font-normal">
+              (18° Center)
             </span>
           </div>
           <div className="w-full bg-zinc-900 h-1.5 rounded relative overflow-hidden">
+            <div className="absolute top-0 bottom-0 w-0.5 bg-zinc-700 left-1/2 z-0" title="18.0° center nominal" />
             <div 
-              className={`absolute top-0 bottom-0 w-2 rounded-full transition-all ${
-                model === 'modified' && Math.abs(livePhaseOut) >= 8 && Math.abs(livePhaseOut) <= 28
+              className={`absolute top-0 bottom-0 w-2 rounded-full transition-all z-10 ${
+                livePhaseOut >= 8 && livePhaseOut <= 28
                   ? 'bg-[#00ffcc] shadow-[0_0_8px_#00ffcc]'
-                  : 'bg-zinc-400'
+                  : 'bg-amber-400'
               }`}
-              style={{ left: `${Math.max(0, Math.min(100, 50 + (livePhaseOut / 110) * 50))}%` }}
+              style={{ left: `${Math.max(0, Math.min(100, ((livePhaseOut - 8.0) / 20.0) * 100))}%` }}
             />
           </div>
         </div>
