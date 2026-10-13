@@ -1263,6 +1263,16 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
   
   async function findAndOpenPort() {
     try {
+      // If external Python bridge or socket client is actively piping hardware telemetry, yield serial port
+      if (lastHardwareTelemetryTime && (Date.now() - lastHardwareTelemetryTime < 8000)) {
+        if (hardwarePort) {
+          try { hardwarePort.close(); } catch (e) {}
+          hardwarePort = null;
+        }
+        setTimeout(findAndOpenPort, 4000);
+        return;
+      }
+
       const ports = await SerialPort.list().catch(err => {
         if (err.message.includes('ENOENT') || err.message.includes('udevadm')) {
           return [];

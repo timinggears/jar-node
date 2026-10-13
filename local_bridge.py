@@ -430,7 +430,17 @@ def main():
                 
             print(f"\n\033[1;32m[BRIDGE] Substrate hardware channel detected at: {port}\033[0m")
             try:
-                ser = serial.Serial(port, BAUD_RATE, timeout=1)
+                try:
+                    ser = serial.Serial(port, BAUD_RATE, timeout=0.2, write_timeout=0.5, exclusive=True)
+                except (TypeError, ValueError):
+                    ser = serial.Serial(port, BAUD_RATE, timeout=0.2, write_timeout=0.5)
+
+                try:
+                    ser.dtr = True
+                    ser.rts = True
+                except Exception:
+                    pass
+
                 # Flush existing buffers
                 ser.reset_input_buffer()
                 ser.reset_output_buffer()
@@ -442,7 +452,22 @@ def main():
                     if not sio.connected:
                         break
                         
-                    line = ser.readline()
+                    line = None
+                    try:
+                        # Non-blocking buffer check: only call readline when bytes are waiting
+                        # This eliminates the Linux CDC-ACM zero-byte select() anomaly entirely!
+                        if hasattr(ser, 'in_waiting') and ser.in_waiting > 0:
+                            line = ser.readline()
+                        else:
+                            time.sleep(0.005)
+                            continue
+                    except serial.SerialException as se:
+                        err_str = str(se).lower()
+                        if "device reports readiness to read but returned no data" in err_str or "returned no data" in err_str:
+                            time.sleep(0.01)
+                            continue
+                        raise
+
                     if line:
                         try:
                             decoded = line.decode("utf-8", errors="ignore").strip()
