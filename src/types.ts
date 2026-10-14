@@ -22,6 +22,9 @@ export interface SystemStats {
   zpeLevel: number;
   phaseOut: number;
   phaseModel?: 'modified' | 'original';
+  jarHeading?: number;
+  jarMotion?: boolean;
+  jarMotionIntensity?: number;
   memoryStick?: number;
   bPlus?: number;
   quantumPhaseOut?: number;

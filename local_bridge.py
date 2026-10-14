@@ -222,8 +222,36 @@ def combine_packets(voltage, jitter):
     }
     return chr(new_ascii)
 
+last_bridge_v = 1.65
+last_bridge_motion_time = 0.0
+bridge_voltage_window = []
+
+def detect_physical_jar_motion(voltage, jitter):
+    global last_bridge_v, last_bridge_motion_time, bridge_voltage_window
+    bridge_voltage_window.append(voltage)
+    if len(bridge_voltage_window) > 25:
+        bridge_voltage_window.pop(0)
+    
+    dv = abs(voltage - last_bridge_v)
+    last_bridge_v = voltage
+    now = time.time()
+    
+    # Detect physical bench movement: voltage derivative or mechanical vibration jitter spike
+    if dv > 0.006 or jitter > 0.020:
+        intensity = min(1.0, dv * 45.0 + max(0.0, jitter - 0.012) * 25.0)
+        last_bridge_motion_time = now
+        try:
+            sio.emit("hardware:jar_motion", {
+                "intensity": intensity,
+                "dV": dv,
+                "source": "hardware_serial"
+            })
+        except Exception:
+            pass
+
 def process_telemetry_packet(voltage, jitter):
     """Processes physical voltage metrics and computes ASCII memory states"""
+    detect_physical_jar_motion(voltage, jitter)
     update_phase_out(voltage, jitter, virtual_bias)
     ascii_val = write_ascii_packet(voltage, jitter)
     char = chr(ascii_val)

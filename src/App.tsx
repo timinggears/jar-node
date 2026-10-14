@@ -1061,6 +1061,29 @@ export default function App() {
         setStats(prev => ({ ...prev, phaseModel: d.phaseModel }));
       }
     }).catch(() => {});
+    const onJarRotation = (data: any) => {
+      if (typeof data?.jarHeading === 'number') {
+        const val = ((Math.round(data.jarHeading) % 360) + 360) % 360;
+        setStats(prev => ({
+          ...prev,
+          jarHeading: val,
+          jarMotion: true,
+          jarMotionIntensity: 0.85
+        }));
+      }
+    };
+
+    const onJarMotion = (data: any) => {
+      setStats(prev => ({
+        ...prev,
+        jarMotion: true,
+        jarMotionIntensity: Number(data?.intensity) || 0.75
+      }));
+    };
+
+    socket.on('hardware:jar_rotation', onJarRotation);
+    socket.on('hardware:jar_motion', onJarMotion);
+
     socket.on('disconnect', () => {
       const now = Date.now();
       if (now - lastDisconnectLogTimeRef.current > 5000) {
@@ -1073,6 +1096,8 @@ export default function App() {
 
     return () => {
       clearInterval(bridgeInterval);
+      socket.off('hardware:jar_rotation', onJarRotation);
+      socket.off('hardware:jar_motion', onJarMotion);
       socket.disconnect();
     };
   }, [addLog, fetchBridgeStatus]);

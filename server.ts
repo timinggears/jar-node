@@ -66,7 +66,11 @@ let systemState = {
   quantumFeedbackMode: 'dual' as 'dual' | 'memory' | 'voltage',
   quantumFeedbackDeltaV: 0.0,
   quantumFeedbackDeltaM: 0.0,
-  closedLoopLocked: false
+  closedLoopLocked: false,
+  jarHeading: 0,
+  jarMotionActive: false,
+  jarMotionIntensity: 0.0,
+  lastJarMotionTime: 0
 };
 
 // Load state if exists
@@ -1041,8 +1045,24 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       }
     });
 
-    socket.on('hardware:jar_rotation', (data: { jarHeading?: number, coilHeading?: number, isCoupled?: boolean }) => {
+    socket.on('hardware:jar_rotation', (data: { jarHeading?: number, coilHeading?: number, isCoupled?: boolean, source?: string }) => {
+      const heading = typeof data?.jarHeading === 'number' ? ((Math.round(data.jarHeading) % 360) + 360) % 360 : 0;
+      systemState.jarHeading = heading;
+      systemState.lastJarMotionTime = Date.now();
+      systemState.jarMotionActive = true;
+      systemState.jarMotionIntensity = 0.85;
+
+      if (hardwarePort && hardwarePort.isOpen) {
+        hardwarePort.write(`JAR_ROT:${heading.toFixed(1)}|COIL_ROT:0.0\n`);
+      }
       socket.broadcast.emit('hardware:jar_rotation', data);
+    });
+
+    socket.on('hardware:jar_motion', (data: { intensity?: number, dV?: number, dTheta?: number, source?: string }) => {
+      systemState.lastJarMotionTime = Date.now();
+      systemState.jarMotionActive = true;
+      systemState.jarMotionIntensity = Math.min(1.0, Math.max(0.1, Number(data?.intensity) || 0.7));
+      socket.broadcast.emit('hardware:jar_motion', data);
     });
 
     socket.on('hardware:dual_tone', (data: any) => {
@@ -1163,7 +1183,10 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
         } else {
           jar = parseFloat(line.split(':')[1]) || 0;
         }
-        io.emit('hardware:jar_rotation', { jarHeading: jar, coilHeading: coil });
+        systemState.jarHeading = jar;
+        systemState.lastJarMotionTime = Date.now();
+        systemState.jarMotionActive = true;
+        io.emit('hardware:jar_rotation', { jarHeading: jar, coilHeading: coil, source: 'hardware_serial' });
       }
     });
 
@@ -1240,7 +1263,6 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
   });
 
   // PORT is configured globally: primary port (3000 in sandbox, or custom env/port).
-  // Cross-port sync ensures 3001, 8080, and 3000 are all connected to this runtime.
   
   // --- MINING IDENTITY ---
   let POOL_URL = systemState.pool_url || "rx.unmineable.com:3333";
@@ -1296,7 +1318,10 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
             } else {
               jar = parseFloat(line.split(':')[1]) || 0;
             }
-            io.emit('hardware:jar_rotation', { jarHeading: jar, coilHeading: coil });
+            systemState.jarHeading = jar;
+            systemState.lastJarMotionTime = Date.now();
+            systemState.jarMotionActive = true;
+            io.emit('hardware:jar_rotation', { jarHeading: jar, coilHeading: coil, source: 'hardware_serial' });
           }
         });
 
@@ -1329,9 +1354,21 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       // v148: Experimental Simulation Layer
       // Replicates the chaotic nodal fluctuations of the liquid substrate
       const t = Date.now() / 1000;
-      const jitterVal = 0.015 + (Math.random() * 0.01);
+      const nowMs = Date.now();
+      const isMotionTransient = (nowMs - (systemState.lastJarMotionTime || 0)) < 2400;
+      const motionIntensity = isMotionTransient 
+        ? Math.max(0, 1 - (nowMs - (systemState.lastJarMotionTime || 0)) / 2400) * (systemState.jarMotionIntensity || 0.8)
+        : 0;
+      
+      const heading = systemState.jarHeading || 0;
+      const d4Delta = heading % 90;
+      const geomCoupling = 0.92 + 0.08 * Math.cos(((d4Delta / 45) * Math.PI));
+      const motionJitter = isMotionTransient ? (motionIntensity * 0.032) : 0;
+      const motionVFlux = isMotionTransient ? ((Math.sin(t * 18.0) * 0.14) * motionIntensity) : 0;
+
+      const jitterVal = 0.015 + (Math.random() * 0.01) + motionJitter;
       const feedbackV = systemState.closedQuantumFeedback ? systemState.quantumFeedbackDeltaV : 0.0;
-      const v_nodal = Math.max(0.35, Math.min(1.95, 1.65 + (Math.sin(t * 1.55) * 0.28) + ((Math.random() - 0.5) * jitterVal * 8) + feedbackV));
+      const v_nodal = Math.max(0.35, Math.min(1.95, (1.65 * geomCoupling) + (Math.sin(t * 1.55) * 0.28) + ((Math.random() - 0.5) * jitterVal * 8) + feedbackV + motionVFlux));
       
       // Resonance Calculations matching code.py v148
       const overdrive_factor = systemState.overdrive ? 7.5 : 1.0;
@@ -3006,9 +3043,7 @@ ABSOLUTELY QUANTUM-RESISTANT. The analog dielectric hysteresis noise perturbatio
       mode: 'python_proxy',
       is_virtual: true,
       ports: {
-        primary: PORT,
-        bridged: [3001, 8080, 3000].filter(p => p !== PORT),
-        crossPortSync: true
+        primary: PORT
       }
     });
   });
@@ -3215,27 +3250,6 @@ Keep your responses conversational, sleek, under 4-5 sentences, keeping the comm
     console.log(`[SERVER] PI_RESERVOIR running at http://localhost:${PORT}`);
   });
 
-  // Cross-port sync between 3001 and 8080 (and 3000):
-  // Attach auxiliary HTTP + Socket.IO listeners to alternative ports (3001, 8080)
-  // so external bridges, local Python proxies, and desktop shells connecting to either port
-  // receive the exact same live telemetry everywhere!
-  const ALT_PORTS = [3001, 8080, 3000].filter(p => p !== PORT);
-  const auxServers: any[] = [];
-  for (const altPort of ALT_PORTS) {
-    try {
-      const altHttpServer = createServer(app);
-      io.attach(altHttpServer);
-      altHttpServer.listen(altPort, '0.0.0.0', () => {
-        console.log(`[SERVER_BRIDGE] Cross-port relay active on http://0.0.0.0:${altPort} (Bridged with primary port ${PORT})`);
-      }).on('error', (err: any) => {
-        // If port is occupied or restricted, gracefully log without interrupting primary server
-        console.log(`[SERVER_BRIDGE] Secondary port ${altPort} standby (${err.message}). Primary PORT ${PORT} active.`);
-      });
-      auxServers.push(altHttpServer);
-    } catch (e: any) {
-      console.warn(`[SERVER_BRIDGE] Port ${altPort} setup notice: ${e.message}`);
-    }
-  }
 
   server.on('error', (e: any) => {
     if (e.code === 'EADDRINUSE') {

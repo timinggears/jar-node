@@ -86,12 +86,15 @@ export default function PhysicalJarViewer({
   const [vectorProjectionMode, setVectorProjectionMode] = useState<boolean>(false);
 
   // DATA-DRIVEN REAL-TIME PHYSICAL ORIENTATION SOLVER STATE
-  // Disabled by default (manual/steady mode) so the on-screen jar remains rock-steady and doesn't wiggle with sensor noise.
-  // Can be toggled ON anytime via the "DATA TRACK: OFF/ON" button.
-  const [dataRegistrationActive, setDataRegistrationActive] = useState<boolean>(false);
+  // Enabled by default so that moving the physical jar on the bench or in software immediately senses and responds!
+  const [dataRegistrationActive, setDataRegistrationActive] = useState<boolean>(true);
   const [dataTareOffset, setDataTareOffset] = useState<number>(0);
   const currentEstimatedHeadingRef = useRef<number>(0);
   const lastSolvedAngleRef = useRef<number>(0);
+  const [isMotionSensed, setIsMotionSensed] = useState<boolean>(false);
+  const [motionIntensity, setMotionIntensity] = useState<number>(0); // 0 to 1
+  const [motionSensitivity, setMotionSensitivity] = useState<'ultra' | 'balanced' | 'steady'>('balanced');
+  const lastMotionTimeRef = useRef<number>(0);
   const [dataSolverMetrics, setDataSolverMetrics] = useState({
     thetaPca: 0,
     theta4: 0,
@@ -150,11 +153,19 @@ export default function PhysicalJarViewer({
     const normalized = ((Math.round(newAngle) % 360) + 360) % 360;
     currentEstimatedHeadingRef.current = normalized;
     setJarHeading(normalized);
+    setIsMotionSensed(true);
+    setMotionIntensity(0.85);
+    lastMotionTimeRef.current = Date.now();
     if (socket) {
       socket.emit('hardware:jar_rotation', {
         jarHeading: normalized,
         coilHeading: 0,
         isCoupled: false,
+        source: 'manual_nudge'
+      });
+      socket.emit('hardware:jar_motion', {
+        intensity: 0.85,
+        dTheta: normalized,
         source: 'manual_nudge'
       });
     }
@@ -216,7 +227,7 @@ export default function PhysicalJarViewer({
     };
   }, [isDeviceCompassActive, compassTareOffset, socket]);
 
-  // Sync orientation from external serial hardware or other connected clients via WebSocket
+  // Sync orientation and motion from external serial hardware or other connected clients via WebSocket
   useEffect(() => {
     if (!socket) return;
     const onRemoteRotation = (data: { jarHeading?: number; coilHeading?: number; isCoupled?: boolean; source?: string }) => {
@@ -226,12 +237,24 @@ export default function PhysicalJarViewer({
         if (val !== jarHeadingRef.current) {
           setJarHeading(val);
           currentEstimatedHeadingRef.current = val;
+          setIsMotionSensed(true);
+          setMotionIntensity(0.8);
+          lastMotionTimeRef.current = Date.now();
         }
       }
     };
+
+    const onRemoteMotion = (data: { intensity?: number; dV?: number; dTheta?: number; source?: string }) => {
+      setIsMotionSensed(true);
+      setMotionIntensity(Math.min(1.0, Math.max(0.2, Number(data?.intensity) || 0.75)));
+      lastMotionTimeRef.current = Date.now();
+    };
+
     socket.on('hardware:jar_rotation', onRemoteRotation);
+    socket.on('hardware:jar_motion', onRemoteMotion);
     return () => {
       socket.off('hardware:jar_rotation', onRemoteRotation);
+      socket.off('hardware:jar_motion', onRemoteMotion);
     };
   }, [socket]);
 
@@ -385,7 +408,9 @@ export default function PhysicalJarViewer({
     radarPitch,
     radarYawOffset,
     radarShimmerGain,
-    isAutoOrbit
+    isAutoOrbit,
+    isMotionSensed,
+    motionIntensity
   });
 
   latestParamsRef.current = {
@@ -406,7 +431,9 @@ export default function PhysicalJarViewer({
     radarPitch,
     radarYawOffset,
     radarShimmerGain,
-    isAutoOrbit
+    isAutoOrbit,
+    isMotionSensed,
+    motionIntensity
   };
 
   // Track real voltage history for Phase-Space Attractor (Takens' Delay Embedding)
@@ -507,23 +534,34 @@ export default function PhysicalJarViewer({
       };
     });
 
-    // When DATA TRACK is ON:
-    // Detect genuine intentional physical movement vs ambient resting noise.
-    // When the jar is sitting still on the bench, ambient micro-fluctuations are latched steady (zero wiggling).
-    // When you actually turn/rotate the physical jar, the dielectric shift exceeds 10° and smoothly rotates the on-screen jar & shimmer boundary!
+    // Dynamic Physical Motion Sensor & Dielectric Orientation Tracker:
+    // When the physical jar on the bench is turned, tilted, or disturbed:
+    // Voltage derivative (|dV/dt|), mechanical vibration/jitter surge, and D4 boundary capacitance shift.
+    const absDV = Math.abs(dV);
+    const motionScore = Math.min(1.0, absDV * 45.0 + Math.max(0, jitterVal - 0.012) * 28.0 + (stdV > 0.03 ? (stdV - 0.03) * 15.0 : 0));
+    
+    // Sensitivity threshold: ultra (0.8°), balanced (1.8°), filtered (3.5°)
+    const deadbandThreshold = motionSensitivity === 'ultra' ? 0.8 : motionSensitivity === 'steady' ? 3.5 : 1.8;
     const targetAngle = ((rawDataAngle - dataTareOffset) % 360 + 360) % 360;
     let diff = ((targetAngle - currentEstimatedHeadingRef.current + 540) % 360) - 180;
 
-    if (Math.abs(diff) >= 10.0) {
-      // Deliberate physical motion detected: smoothly follow to new physical azimuth
-      const alpha = 0.14;
+    const isMoving = Math.abs(diff) >= deadbandThreshold || motionScore > 0.18;
+
+    if (isMoving) {
+      lastMotionTimeRef.current = now;
+      setIsMotionSensed(true);
+      const intensity = Math.min(1.0, Math.max(0.25, motionScore * 1.5 + Math.abs(diff) / 50.0));
+      setMotionIntensity(intensity);
+
+      // Continuous smooth convergence towards physical targetAngle
+      const alpha = Math.min(0.35, 0.12 + motionScore * 0.22);
       const newHeading = ((currentEstimatedHeadingRef.current + diff * alpha) % 360 + 360) % 360;
       currentEstimatedHeadingRef.current = newHeading;
       const rounded = Math.round(newHeading);
 
-      if (Math.abs(rounded - jarHeadingRef.current) >= 2) {
+      if (Math.abs(rounded - jarHeadingRef.current) >= 1) {
         setJarHeading(rounded);
-        if (socket && now - lastSocketEmitTimeRef.current > 1200) {
+        if (socket && now - lastSocketEmitTimeRef.current > 180) {
           lastSocketEmitTimeRef.current = now;
           socket.emit('hardware:jar_rotation', {
             jarHeading: rounded,
@@ -531,10 +569,19 @@ export default function PhysicalJarViewer({
             isCoupled: false,
             source: 'data_solver'
           });
+          socket.emit('hardware:jar_motion', {
+            intensity,
+            dV: absDV,
+            dTheta: diff,
+            source: 'data_solver'
+          });
         }
       }
+    } else if (now - lastMotionTimeRef.current > 1400) {
+      setIsMotionSensed(false);
+      setMotionIntensity(prev => Math.max(0, prev * 0.88));
     }
-  }, [vNodal, jitterVal, phaseAngleDeg, dataRegistrationActive, dataTareOffset, socket]);
+  }, [vNodal, jitterVal, phaseAngleDeg, dataRegistrationActive, dataTareOffset, motionSensitivity, socket]);
 
   // Helper to draw physical SQUARE glass jar boundary, exterior induction coil, and True North compass reticle
   const drawGlassJarBoundary = (
@@ -1685,14 +1732,15 @@ export default function PhysicalJarViewer({
 
         // 5. RADAR RETICLE HUD & ELEVATION ANNOTATIONS
         ctx.font = 'bold 8.5px monospace';
-        ctx.fillStyle = '#00ffcc';
+        const { isMotionSensed: curMotionSensed } = latestParamsRef.current;
+        ctx.fillStyle = curMotionSensed ? '#f59e0b' : '#00ffcc';
         ctx.textAlign = 'left';
-        ctx.fillText('● 3D MICRO-RADAR DIELECTRIC SHIMMER SCAN', 16, 22);
+        ctx.fillText(curMotionSensed ? `⚡ 3D MICRO-RADAR: SENSING JAR MOTION (${curJarHeading}°)` : '● 3D MICRO-RADAR DIELECTRIC SHIMMER SCAN', 16, 22);
 
         ctx.font = '7.5px monospace';
         ctx.fillStyle = '#94a3b8';
         ctx.fillText(`CONTAINER: SQUARE (82×82 mm) • AZIMUTH: ${curJarHeading}° • COIL: 000° (ROUND SOLENOID)`, 16, 36);
-        ctx.fillText(`ECHO GAIN: ${curGain.toFixed(2)}x • SHIMMER FREQ: ${(curFreq / 1000).toFixed(1)} kHz • V_NODAL: ${curVNodal.toFixed(4)}V`, 16, 48);
+        ctx.fillText(`ECHO GAIN: ${curGain.toFixed(2)}x • SHIMMER FREQ: ${(curFreq / 1000).toFixed(1)} kHz • V_NODAL: ${curVNodal.toFixed(4)}V • SENSOR: ${curMotionSensed ? 'DYNAMIC SENSING' : 'STEADY LOCK'}`, 16, 48);
 
         // Compass orientation badge on floor
         const [nPtX, nPtY] = project3D(0, -gridRadius - 16, -110);
@@ -2232,7 +2280,17 @@ export default function PhysicalJarViewer({
                 JAR (SQUARE VESSEL):
               </span>
               <div className="flex items-center gap-1.5">
-                <span className="text-emerald-400 font-bold text-[7.5px] uppercase">STEADY BENCH LOCK</span>
+                {isMotionSensed ? (
+                  <span className="text-amber-400 font-bold text-[7.5px] uppercase animate-pulse flex items-center gap-1">
+                    <Activity size={9} className="animate-spin text-amber-400" />
+                    ⚡ SENSING MOTION
+                  </span>
+                ) : (
+                  <span className="text-emerald-400 font-bold text-[7.5px] uppercase flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                    STEADY BENCH
+                  </span>
+                )}
                 <span className="text-white font-black font-mono">{jarHeading}°</span>
               </div>
             </div>
@@ -2252,6 +2310,45 @@ export default function PhysicalJarViewer({
                 className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
                 title="Drag to smoothly rotate physical jar heading in bench space"
               />
+            </div>
+
+            {/* Live Motion Activity Meter */}
+            <div className="space-y-0.5 pt-0.5">
+              <div className="flex items-center justify-between text-[7px] text-zinc-400">
+                <span className="flex items-center gap-1">
+                  <Activity size={8} className={isMotionSensed ? 'text-amber-400 animate-pulse' : 'text-zinc-600'} />
+                  <span>DIELECTRIC MOTION SENSOR:</span>
+                </span>
+                <span className={`font-mono font-bold ${isMotionSensed ? 'text-amber-300' : 'text-zinc-500'}`}>
+                  {isMotionSensed ? `${Math.round(motionIntensity * 100)}% TRANSIENT` : 'BENCH LOCKED (0%)'}
+                </span>
+              </div>
+              <div className="w-full bg-zinc-900 h-1.5 rounded overflow-hidden border border-white/5 relative">
+                <div 
+                  className={`h-full transition-all duration-150 ${isMotionSensed ? 'bg-gradient-to-r from-emerald-500 via-amber-400 to-cyan-400 shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 'bg-emerald-500/40'}`} 
+                  style={{ width: `${Math.max(4, Math.round(motionIntensity * 100))}%` }} 
+                />
+              </div>
+            </div>
+
+            {/* Sensitivity Presets */}
+            <div className="flex items-center justify-between text-[7.5px] pt-0.5 text-zinc-400">
+              <span className="text-[7px]">SENSITIVITY:</span>
+              <div className="flex gap-1">
+                {(['ultra', 'balanced', 'steady'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setMotionSensitivity(mode)}
+                    className={`px-1.5 py-0.5 rounded text-[7px] font-mono font-bold uppercase transition-all cursor-pointer ${
+                      motionSensitivity === mode
+                        ? 'bg-amber-500/30 text-amber-200 border border-amber-400/50'
+                        : 'bg-zinc-900 text-zinc-500 border border-white/5 hover:text-zinc-300'
+                    }`}
+                  >
+                    {mode === 'ultra' ? 'ULTRA 0.8°' : mode === 'balanced' ? 'BALANCED' : 'FILTERED'}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Quick Cardinal Snaps */}
@@ -2362,6 +2459,10 @@ export default function PhysicalJarViewer({
               <span className="text-cyan-300 font-bold font-mono">{jarHeading}° (Δθ: {deltaAngle}°)</span>
             </div>
             <div className="flex justify-between items-center text-zinc-400">
+              <span>DIELECTRIC COUPLING (M):</span>
+              <span className="text-emerald-300 font-bold font-mono">{mutualCouplingFactor}</span>
+            </div>
+            <div className="flex justify-between items-center text-zinc-400">
               <span>PHASE COVARIANCE (θ_pca):</span>
               <span className="text-purple-300 font-bold font-mono">{dataSolverMetrics.thetaPca}°</span>
             </div>
@@ -2375,7 +2476,7 @@ export default function PhysicalJarViewer({
             </div>
           </div>
 
-          {/* 4. Cardinal Alignment Presets */}
+          {/* 4. Cardinal Alignment Presets & Bench Nudge */}
           <div className="p-2 rounded bg-black/60 border border-white/10 flex flex-col justify-between">
             <span className="text-zinc-500 text-[8px] uppercase font-bold">CARDINAL BENCH PRESETS:</span>
             <div className="grid grid-cols-4 gap-1 pt-1">
@@ -2408,6 +2509,17 @@ export default function PhysicalJarViewer({
                 W (270°)
               </button>
             </div>
+
+            {/* Test Bench Nudge */}
+            <button
+              onClick={() => handleRotateJar(jarHeading + 30)}
+              className="mt-1.5 py-1 rounded bg-gradient-to-r from-amber-500/20 to-cyan-500/20 hover:from-amber-500/30 hover:to-cyan-500/30 border border-amber-400/40 text-amber-200 font-bold text-[7.5px] uppercase flex items-center justify-center gap-1 cursor-pointer transition-all shadow-[0_0_8px_rgba(245,158,11,0.2)]"
+              title="Simulate bench vibration and 30° physical turn"
+            >
+              <Sparkles size={10} className="text-amber-400" />
+              <span>TEST BENCH NUDGE (+30°)</span>
+            </button>
+
             <div className="flex justify-between items-center pt-1 text-[7.5px] text-zinc-400">
               <span>FREEDOM DEGREE:</span>
               <span className="text-emerald-400 font-bold">
@@ -2444,6 +2556,18 @@ export default function PhysicalJarViewer({
           </div>
         )}
 
+        {/* Floating Real-time Motion Sensing Indicator Pill */}
+        {isMotionSensed && !isDraggingJar && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/90 border border-amber-400/90 px-3.5 py-1.5 rounded-full text-[10px] font-mono text-amber-300 font-black shadow-[0_0_20px_rgba(245,158,11,0.6)] flex items-center gap-2 pointer-events-none animate-pulse">
+            <Activity size={13} className="animate-spin text-amber-400" />
+            <span>SENSING PHYSICAL JAR MOTION: {jarHeading}°</span>
+            <span className="text-zinc-500">|</span>
+            <span className="text-cyan-300">COUPLING M: {mutualCouplingFactor}</span>
+            <span className="text-zinc-500">|</span>
+            <span className="text-emerald-400">{Math.round(motionIntensity * 100)}%</span>
+          </div>
+        )}
+
         {/* View Mode 0: 3D Micro-Radar Shimmer & Vessel Geometry Canvas */}
         {viewMode === 'radar3d' && (
           <div className="relative w-full h-full flex items-center justify-center">
@@ -2451,7 +2575,7 @@ export default function PhysicalJarViewer({
               ref={radar3dCanvasRef}
               width={640}
               height={640}
-              className="w-full h-full object-contain max-h-[620px] select-none"
+              className="w-full h-full object-contain max-h-[620px] select-none pointer-events-none"
             />
             {/* Interactive 3D Orbit & Pitch Controls Overlay */}
             <div className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-cyan-500/40 text-[8.5px] font-mono pointer-events-auto">
@@ -2490,7 +2614,7 @@ export default function PhysicalJarViewer({
             ref={liveCanvasRef}
             width={580}
             height={580}
-            className="w-full h-full object-contain max-h-[620px] select-none"
+            className="w-full h-full object-contain max-h-[620px] select-none pointer-events-none"
           />
         )}
 
@@ -2500,7 +2624,7 @@ export default function PhysicalJarViewer({
             ref={attractorCanvasRef}
             width={580}
             height={580}
-            className="w-full h-full object-contain max-h-[620px] select-none"
+            className="w-full h-full object-contain max-h-[620px] select-none pointer-events-none"
           />
         )}
 
