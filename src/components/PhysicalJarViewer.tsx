@@ -49,6 +49,7 @@ interface PhysicalJarViewerProps {
   socket?: any;
   onOpenAmbientEar?: () => void;
   onOpenPhaseLab?: () => void;
+  onOpenJarToys?: () => void;
 }
 
 export default function PhysicalJarViewer({
@@ -56,7 +57,8 @@ export default function PhysicalJarViewer({
   carrierBias = 50,
   socket,
   onOpenAmbientEar,
-  onOpenPhaseLab
+  onOpenPhaseLab,
+  onOpenJarToys
 }: PhysicalJarViewerProps) {
   const [viewMode, setViewMode] = useState<'tomography' | 'attractor' | 'live_raster' | 'photo' | 'camera' | 'radar3d'>('radar3d');
   const [tomographySubMode, setTomographySubMode] = useState<'glass_edge' | 'core_detail'>('glass_edge');
@@ -90,7 +92,11 @@ export default function PhysicalJarViewer({
   const [dataRegistrationActive, setDataRegistrationActive] = useState<boolean>(true);
   const [dataTareOffset, setDataTareOffset] = useState<number>(0);
   const currentEstimatedHeadingRef = useRef<number>(0);
+  const smoothedHeadingRef = useRef<number>(0);
   const lastSolvedAngleRef = useRef<number>(0);
+  const vBaselineRef = useRef<number | null>(null);
+  const motionEnvelopeRef = useRef<number>(0);
+  const stableHoldCountRef = useRef<number>(0);
   const [isMotionSensed, setIsMotionSensed] = useState<boolean>(false);
   const [motionIntensity, setMotionIntensity] = useState<number>(0); // 0 to 1
   const [motionSensitivity, setMotionSensitivity] = useState<'ultra' | 'balanced' | 'steady'>('balanced');
@@ -152,9 +158,11 @@ export default function PhysicalJarViewer({
   const handleRotateJar = (newAngle: number) => {
     const normalized = ((Math.round(newAngle) % 360) + 360) % 360;
     currentEstimatedHeadingRef.current = normalized;
+    smoothedHeadingRef.current = normalized;
     setJarHeading(normalized);
     setIsMotionSensed(true);
     setMotionIntensity(0.85);
+    motionEnvelopeRef.current = 0.50;
     lastMotionTimeRef.current = Date.now();
     if (socket) {
       socket.emit('hardware:jar_rotation', {
@@ -175,6 +183,7 @@ export default function PhysicalJarViewer({
     const currentRaw = lastSolvedAngleRef.current;
     setDataTareOffset(currentRaw);
     currentEstimatedHeadingRef.current = 0;
+    smoothedHeadingRef.current = 0;
     setJarHeading(0);
     if (socket) {
       socket.emit('hardware:jar_rotation', {
@@ -237,8 +246,10 @@ export default function PhysicalJarViewer({
         if (val !== jarHeadingRef.current) {
           setJarHeading(val);
           currentEstimatedHeadingRef.current = val;
+          smoothedHeadingRef.current = val;
           setIsMotionSensed(true);
           setMotionIntensity(0.8);
+          motionEnvelopeRef.current = 0.50;
           lastMotionTimeRef.current = Date.now();
         }
       }
@@ -446,16 +457,15 @@ export default function PhysicalJarViewer({
     }
   }, [vNodal, jitterVal]);
 
-  // DATA-DRIVEN REAL-TIME PHYSICAL JAR ORIENTATION SOLVER
-  // Extracts the physical square jar's spatial orientation directly from real telemetry data:
-  // Combines phase-space covariance orientation (Takens' attractor ellipse), 4-fold dihedral
-  // square geometry moments (D4 boundary capacitance), and substrate instantaneous potential.
-  // When the user rotates their actual physical jar on the bench, the data changes and orients the on-screen jar.
+  // DATA-DRIVEN REAL-TIME PHYSICAL JAR ORIENTATION & MOTION SOLVER
+  // Extracts physical movement and square jar spatial orientation directly from real telemetry data:
+  // Combines running baseline dielectric variance, Takens' attractor phase covariance, 
+  // 4-fold dihedral square geometry moments (D4 boundary capacitance), and fluid slosh transient energy.
   useEffect(() => {
     if (!dataRegistrationActive) return;
 
     const now = Date.now();
-    if (now - lastSolverRunTimeRef.current < 45) return;
+    if (now - lastSolverRunTimeRef.current < 40) return;
     lastSolverRunTimeRef.current = now;
 
     const hist = voltageHistoryRef.current;
@@ -468,8 +478,20 @@ export default function PhysicalJarViewer({
 
     let varV = 0;
     for (let i = 0; i < N; i++) varV += (hist[i] - meanV) ** 2;
-    const stdV = Math.sqrt(varV / N) || 0.02;
+    const stdV = Math.sqrt(varV / N) || 0.015;
 
+    // Running baseline voltage for DC dielectric drift compensation
+    if (vBaselineRef.current === null) {
+      vBaselineRef.current = meanV;
+    } else {
+      vBaselineRef.current = vBaselineRef.current * 0.985 + meanV * 0.015;
+    }
+
+    const latestV = hist[N - 1] ?? vNodal;
+    const prevV = hist[N - 2] ?? latestV;
+    const dV = latestV - prevV;
+
+    // Delay embedding (tau = 4) for phase attractor & 4-fold dihedral square symmetry
     const tau = 4;
     let covXY = 0;
     let varX = 0;
@@ -484,43 +506,64 @@ export default function PhysicalJarViewer({
       varX += x * x;
       varY += y * y;
 
-      const normX = x / (stdV * 2.5 || 0.1);
-      const normY = y / (stdV * 2.5 || 0.1);
+      const normX = x / (stdV * 2.5 || 0.05);
+      const normY = y / (stdV * 2.5 || 0.05);
       const rSq = normX * normX + normY * normY;
       const phi = Math.atan2(normY, normX);
       s4 += rSq * rSq * Math.sin(4 * phi);
       c4 += rSq * rSq * Math.cos(4 * phi);
     }
 
+    // PCA orientation angle of phase attractor ellipse [0, 180)
     const denom = varX - varY;
     const thetaPcaRad = 0.5 * Math.atan2(2 * covXY, denom || 0.0001);
-    const thetaPcaDeg = ((thetaPcaRad * 180 / Math.PI) % 360 + 360) % 360;
+    const thetaPcaDeg = ((thetaPcaRad * 180 / Math.PI) % 180 + 180) % 180;
 
+    // D4 Dihedral 4-fold symmetry angle [0, 90) representing square jar boundary
     const theta4Rad = 0.25 * Math.atan2(s4, c4 || 0.0001);
     const theta4Deg = ((theta4Rad * 180 / Math.PI) % 90 + 90) % 90;
 
-    const latestV = hist[N - 1] ?? vNodal;
-    const prevV = hist[N - 2] ?? latestV;
-    const dV = (latestV - prevV);
-    const vCenterDiff = latestV - 1.65;
-    const thetaInstRad = Math.atan2(dV * 40 + jitterVal * 10, vCenterDiff || 0.01);
-    const thetaInstDeg = ((thetaInstRad * 180 / Math.PI) % 360 + 360) % 360;
+    // Clean physical motion detection:
+    // When the physical jar is moved on the bench, dielectric liquid shifts and vibration induces:
+    // 1. Transient voltage derivative |dV|
+    // 2. Deviation from long-term baseline |vNodal - baseline|
+    // 3. Jitter surge above quiescent ADC floor (~0.012V)
+    // 4. Spread in local standard deviation stdV
+    const absDV = Math.abs(dV);
+    const vDev = Math.abs(latestV - vBaselineRef.current);
+    const excessJitter = Math.max(0, jitterVal - 0.012);
+    const rawDisturbance = (absDV * 35.0) + (vDev * 18.0) + (excessJitter * 45.0) + (stdV > 0.025 ? (stdV - 0.025) * 22.0 : 0);
 
-    // Composite raw angle from real substrate data
-    const rawDataAngle = ((thetaPcaDeg * 1.5 + phaseAngleDeg * 1.6 + thetaInstDeg * 0.6 + theta4Deg * 2.0) % 360 + 360) % 360;
+    // Fast-attack, smooth-decay leaky integrator envelope
+    if (rawDisturbance > motionEnvelopeRef.current) {
+      motionEnvelopeRef.current = motionEnvelopeRef.current * 0.35 + rawDisturbance * 0.65;
+    } else {
+      motionEnvelopeRef.current = motionEnvelopeRef.current * 0.90 + rawDisturbance * 0.10;
+    }
+
+    // Motion sensitivity thresholds:
+    // 'ultra': 0.06 - sensitive to lightest bench tap or subtle tilt
+    // 'balanced': 0.12 - responsive to real physical move, ignores baseline noise
+    // 'steady': 0.22 - requires distinct deliberate movement
+    const triggerThreshold = motionSensitivity === 'ultra' ? 0.06 : motionSensitivity === 'steady' ? 0.22 : 0.12;
+    const isCurrentlyDisturbed = motionEnvelopeRef.current >= triggerThreshold;
+
+    // Smooth composite physical angle (strictly decoupled from the 28Hz electronic phase oscillation)
+    // For a square jar with 4-fold symmetry:
+    // Base orientation is anchored to the closest quadrant (0°, 90°, 180°, 270°) + D4 phase offset
+    const currentQuad = Math.round(smoothedHeadingRef.current / 90) * 90;
+    const rawDataAngle = ((currentQuad + theta4Deg - 45 + (thetaPcaDeg > 90 ? 90 : 0) - dataTareOffset) % 360 + 360) % 360;
     lastSolvedAngleRef.current = rawDataAngle;
 
     const newPca = Math.round(thetaPcaDeg);
     const newT4 = Math.round(theta4Deg);
-    const newInst = Math.round(thetaInstDeg);
     const newRaw = Math.round(rawDataAngle);
 
     setDataSolverMetrics(prev => {
       if (
-        prev.thetaPca === newPca &&
-        prev.theta4 === newT4 &&
-        prev.thetaInst === newInst &&
-        prev.rawAngle === newRaw &&
+        Math.abs(prev.thetaPca - newPca) < 2 &&
+        Math.abs(prev.theta4 - newT4) < 2 &&
+        Math.abs(prev.rawAngle - newRaw) < 2 &&
         prev.active === true
       ) {
         return prev;
@@ -528,40 +571,33 @@ export default function PhysicalJarViewer({
       return {
         thetaPca: newPca,
         theta4: newT4,
-        thetaInst: newInst,
+        thetaInst: Math.round(motionEnvelopeRef.current * 100),
         rawAngle: newRaw,
         active: true
       };
     });
 
-    // Dynamic Physical Motion Sensor & Dielectric Orientation Tracker:
-    // When the physical jar on the bench is turned, tilted, or disturbed:
-    // Voltage derivative (|dV/dt|), mechanical vibration/jitter surge, and D4 boundary capacitance shift.
-    const absDV = Math.abs(dV);
-    const motionScore = Math.min(1.0, absDV * 45.0 + Math.max(0, jitterVal - 0.012) * 28.0 + (stdV > 0.03 ? (stdV - 0.03) * 15.0 : 0));
-    
-    // Sensitivity threshold: ultra (0.8°), balanced (1.8°), filtered (3.5°)
-    const deadbandThreshold = motionSensitivity === 'ultra' ? 0.8 : motionSensitivity === 'steady' ? 3.5 : 1.8;
-    const targetAngle = ((rawDataAngle - dataTareOffset) % 360 + 360) % 360;
-    let diff = ((targetAngle - currentEstimatedHeadingRef.current + 540) % 360) - 180;
-
-    const isMoving = Math.abs(diff) >= deadbandThreshold || motionScore > 0.18;
-
-    if (isMoving) {
+    if (isCurrentlyDisturbed) {
       lastMotionTimeRef.current = now;
-      setIsMotionSensed(true);
-      const intensity = Math.min(1.0, Math.max(0.25, motionScore * 1.5 + Math.abs(diff) / 50.0));
-      setMotionIntensity(intensity);
+      setIsMotionSensed(prev => (prev ? prev : true));
+      stableHoldCountRef.current = 0;
 
-      // Continuous smooth convergence towards physical targetAngle
-      const alpha = Math.min(0.35, 0.12 + motionScore * 0.22);
-      const newHeading = ((currentEstimatedHeadingRef.current + diff * alpha) % 360 + 360) % 360;
+      const normIntensity = Math.min(1.0, Math.max(0.20, motionEnvelopeRef.current / (triggerThreshold * 2.5)));
+      setMotionIntensity(prev => (Math.abs(prev - normIntensity) < 0.04 ? prev : normIntensity));
+
+      // When physical jar moves, converge smoothly towards physical target angle
+      let diff = ((rawDataAngle - smoothedHeadingRef.current + 540) % 360) - 180;
+      
+      // Dynamic convergence rate: responsive when moving fast, calm when gentle
+      const smoothAlpha = Math.min(0.28, 0.08 + normIntensity * 0.20);
+      const newHeading = ((smoothedHeadingRef.current + diff * smoothAlpha) % 360 + 360) % 360;
+      smoothedHeadingRef.current = newHeading;
       currentEstimatedHeadingRef.current = newHeading;
       const rounded = Math.round(newHeading);
 
       if (Math.abs(rounded - jarHeadingRef.current) >= 1) {
         setJarHeading(rounded);
-        if (socket && now - lastSocketEmitTimeRef.current > 180) {
+        if (socket && now - lastSocketEmitTimeRef.current > 150) {
           lastSocketEmitTimeRef.current = now;
           socket.emit('hardware:jar_rotation', {
             jarHeading: rounded,
@@ -570,18 +606,26 @@ export default function PhysicalJarViewer({
             source: 'data_solver'
           });
           socket.emit('hardware:jar_motion', {
-            intensity,
+            intensity: normIntensity,
             dV: absDV,
             dTheta: diff,
             source: 'data_solver'
           });
         }
       }
-    } else if (now - lastMotionTimeRef.current > 1400) {
-      setIsMotionSensed(false);
-      setMotionIntensity(prev => Math.max(0, prev * 0.88));
+    } else {
+      // Jar is sitting still on the bench:
+      // LOCK HEADING ROCK-SOLID - absolutely zero phantom jitter or drift!
+      stableHoldCountRef.current += 1;
+      if (now - lastMotionTimeRef.current > 1100) {
+        setIsMotionSensed(prev => (prev ? false : prev));
+        setMotionIntensity(prev => {
+          if (prev <= 0.01) return 0;
+          return prev * 0.85;
+        });
+      }
     }
-  }, [vNodal, jitterVal, phaseAngleDeg, dataRegistrationActive, dataTareOffset, motionSensitivity, socket]);
+  }, [vNodal, jitterVal, dataRegistrationActive, dataTareOffset, motionSensitivity, socket]);
 
   // Helper to draw physical SQUARE glass jar boundary, exterior induction coil, and True North compass reticle
   const drawGlassJarBoundary = (
@@ -2267,6 +2311,18 @@ export default function PhysicalJarViewer({
             >
               COMPASS ROSE {showCompassOverlay ? 'ON' : 'OFF'}
             </button>
+
+            {/* Launch Jar Toys & Experiments */}
+            {onOpenJarToys && (
+              <button
+                onClick={onOpenJarToys}
+                className="px-2.5 py-1 rounded border border-amber-400/70 bg-gradient-to-r from-amber-500/30 via-emerald-500/20 to-cyan-500/30 hover:from-amber-500/50 hover:to-cyan-500/50 text-amber-200 text-[8px] font-black uppercase transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+                title="Launch Interactive Physical Jar Toys: Hydrodynamic Slosh Tank, Marble Labyrinth, Nodal Theremin Synth, Cymatics Table"
+              >
+                <Sparkles size={11} className="text-amber-400 animate-bounce" />
+                <span>JAR TOYS &amp; EXPERIMENTS</span>
+              </button>
+            )}
           </div>
         </div>
 

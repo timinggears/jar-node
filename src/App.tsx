@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion } from 'motion/react';
-import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check, Headphones, Compass, ChevronDown } from 'lucide-react';
+import { Terminal, Cpu, Zap, Activity, Info, AlertTriangle, ShieldCheck, Github, GitBranch, Radio, Unplug, HardDrive, Folder, RefreshCw, MapPin, Layout, Settings, Cloud, Brain, MessageSquareCode, Database, ExternalLink, Box, Binary, Network, Lock, Waves, Share2, Copy, Check, Headphones, Compass, ChevronDown, Sparkles } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { io } from 'socket.io-client';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -34,6 +34,7 @@ import PhaseDynamicsLab from './components/PhaseDynamicsLab';
 import QiskitQuantumLab from './components/QiskitQuantumLab';
 import AmbientSignalMesh from './components/AmbientSignalMesh';
 import PhysicalJarViewer from './components/PhysicalJarViewer';
+import JarToysPlayground from './components/JarToysPlayground';
 import { SystemStats, LogEntry } from './types';
 
 type MiningPhase = 'idle' | 'mining' | 'success' | 'error';
@@ -57,6 +58,7 @@ const PhaseDynamicsLabMemo = memo(PhaseDynamicsLab);
 const QiskitQuantumLabMemo = memo(QiskitQuantumLab);
 const AmbientSignalMeshMemo = memo(AmbientSignalMesh);
 const PhysicalJarViewerMemo = memo(PhysicalJarViewer);
+const JarToysPlaygroundMemo = memo(JarToysPlayground);
 
 export default function App() {
   const [stats, setStats] = useState<SystemStats>({
@@ -350,6 +352,7 @@ export default function App() {
   const ignoreServerStateUntilRef = useRef<number>(0);
   const lastConnectLogTimeRef = useRef(0);
   const lastDisconnectLogTimeRef = useRef(0);
+  const lastJarMotionTimestampRef = useRef(0);
 
   useEffect(() => {
     if (socketRef.current) {
@@ -1064,22 +1067,52 @@ export default function App() {
     const onJarRotation = (data: any) => {
       if (typeof data?.jarHeading === 'number') {
         const val = ((Math.round(data.jarHeading) % 360) + 360) % 360;
-        setStats(prev => ({
-          ...prev,
-          jarHeading: val,
-          jarMotion: true,
-          jarMotionIntensity: 0.85
-        }));
+        lastJarMotionTimestampRef.current = Date.now();
+        setStats(prev => {
+          if (prev.jarHeading === val && prev.jarMotion === true && prev.jarMotionIntensity === 0.85) {
+            return prev;
+          }
+          return {
+            ...prev,
+            jarHeading: val,
+            jarMotion: true,
+            jarMotionIntensity: 0.85
+          };
+        });
       }
     };
 
     const onJarMotion = (data: any) => {
-      setStats(prev => ({
-        ...prev,
-        jarMotion: true,
-        jarMotionIntensity: Number(data?.intensity) || 0.75
-      }));
+      const isMotion = data?.motionActive !== false && (Number(data?.intensity) || 0) > 0.05;
+      const intensity = Number(data?.intensity) || 0;
+      if (isMotion) {
+        lastJarMotionTimestampRef.current = Date.now();
+      }
+      setStats(prev => {
+        if (prev.jarMotion === isMotion && Math.abs((prev.jarMotionIntensity || 0) - intensity) < 0.04) {
+          return prev;
+        }
+        return {
+          ...prev,
+          jarMotion: isMotion,
+          jarMotionIntensity: intensity
+        };
+      });
     };
+
+    const motionDecayInterval = setInterval(() => {
+      const now = Date.now();
+      if (now - lastJarMotionTimestampRef.current > 1200) {
+        setStats(prev => {
+          if (!prev.jarMotion && (prev.jarMotionIntensity || 0) <= 0.01) return prev;
+          return {
+            ...prev,
+            jarMotion: false,
+            jarMotionIntensity: Math.max(0, (prev.jarMotionIntensity || 0) * 0.75)
+          };
+        });
+      }
+    }, 200);
 
     socket.on('hardware:jar_rotation', onJarRotation);
     socket.on('hardware:jar_motion', onJarMotion);
@@ -1096,6 +1129,7 @@ export default function App() {
 
     return () => {
       clearInterval(bridgeInterval);
+      clearInterval(motionDecayInterval);
       socket.off('hardware:jar_rotation', onJarRotation);
       socket.off('hardware:jar_motion', onJarMotion);
       socket.disconnect();
@@ -1416,6 +1450,36 @@ export default function App() {
     setActiveWindow('phase_lab');
   }, []);
 
+  const handleOpenJarChamber = useCallback(() => {
+    setOpenWindows(prev => prev.includes('jar_chamber') ? prev : [...prev, 'jar_chamber']);
+    setActiveWindow('jar_chamber');
+  }, []);
+
+  const handleOpenJarToys = useCallback(() => {
+    setOpenWindows(prev => prev.includes('jar_toys') ? prev : [...prev, 'jar_toys']);
+    setActiveWindow('jar_toys');
+  }, []);
+
+  const handleOpenQuantumCipher = useCallback(() => {
+    setOpenWindows(prev => prev.includes('quantum_cipher') ? prev : [...prev, 'quantum_cipher']);
+    setActiveWindow('quantum_cipher');
+  }, []);
+
+  const handleOpenNodeMesh = useCallback(() => {
+    setOpenWindows(prev => prev.includes('node_mesh') ? prev : [...prev, 'node_mesh']);
+    setActiveWindow('node_mesh');
+  }, []);
+
+  const handleOpenQiskitLab = useCallback(() => {
+    setOpenWindows(prev => prev.includes('qiskit_lab') ? prev : [...prev, 'qiskit_lab']);
+    setActiveWindow('qiskit_lab');
+  }, []);
+
+  const handleOpenMemTest = useCallback(() => {
+    setOpenWindows(prev => prev.includes('memtest') ? prev : [...prev, 'memtest']);
+    setActiveWindow('memtest');
+  }, []);
+
   return (
     <div className={`h-screen text-[#e0e0e0] font-mono flex flex-col overflow-hidden selection:bg-[#00ffcc] selection:text-black transition-colors duration-700 relative ${isOverdrive ? 'bg-[#0a0000]' : 'bg-[#050505]'}`}>
       
@@ -1512,7 +1576,13 @@ export default function App() {
         </motion.div>
       )}
 
-      <PetBayMemo miningState={miningState} isOverdrive={isOverdrive} bias={carrierBias} />
+      <PetBayMemo 
+        miningState={miningState} 
+        isOverdrive={isOverdrive} 
+        bias={carrierBias} 
+        jarMotion={stats.jarMotion} 
+        jarHeading={stats.jarHeading} 
+      />
       
       {/* LIQUID GPU: JAR-rendered substrate projection */}
       <div className="fixed inset-0 pointer-events-none z-0">
@@ -1740,13 +1810,8 @@ export default function App() {
             <div className="w-full min-h-[440px] max-h-[640px] flex flex-col">
               <SubstrateIOBoxMemo 
                 onAddLog={addLog} 
-                onOpenMemTest={() => toggleWindow('memtest')}
-                onOpenQuantumCipher={() => {
-                  if (!openWindows.includes('quantum_cipher')) {
-                    setOpenWindows(prev => [...prev, 'quantum_cipher']);
-                  }
-                  setActiveWindow('quantum_cipher');
-                }}
+                onOpenMemTest={handleOpenMemTest}
+                onOpenQuantumCipher={handleOpenQuantumCipher}
               />
             </div>
           </DesktopWindow>
@@ -1872,18 +1937,8 @@ export default function App() {
           >
             <NodeMeshAttestationMemo
               onLog={addLog}
-              onOpenCipherLab={() => {
-                if (!openWindows.includes('quantum_cipher')) {
-                  setOpenWindows(prev => [...prev, 'quantum_cipher']);
-                }
-                setActiveWindow('quantum_cipher');
-              }}
-              onOpenAmbientMesh={() => {
-                if (!openWindows.includes('ambient_mesh')) {
-                  setOpenWindows(prev => [...prev, 'ambient_mesh']);
-                }
-                setActiveWindow('ambient_mesh');
-              }}
+              onOpenCipherLab={handleOpenQuantumCipher}
+              onOpenAmbientMesh={handleOpenAmbientEar}
             />
           </DesktopWindow>
         )}
@@ -1905,18 +1960,8 @@ export default function App() {
               stats={stats}
               carrierBias={carrierBias}
               onLog={addLog}
-              onOpenPhaseLab={() => {
-                if (!openWindows.includes('phase_lab')) {
-                  setOpenWindows(prev => [...prev, 'phase_lab']);
-                }
-                setActiveWindow('phase_lab');
-              }}
-              onOpenJarChamber={() => {
-                if (!openWindows.includes('jar_chamber')) {
-                  setOpenWindows(prev => [...prev, 'jar_chamber']);
-                }
-                setActiveWindow('jar_chamber');
-              }}
+              onOpenPhaseLab={handleOpenPhaseLab}
+              onOpenJarChamber={handleOpenJarChamber}
             />
           </DesktopWindow>
         )}
@@ -1940,6 +1985,37 @@ export default function App() {
               socket={socketRef.current}
               onOpenAmbientEar={handleOpenAmbientEar}
               onOpenPhaseLab={handleOpenPhaseLab}
+              onOpenJarToys={handleOpenJarToys}
+            />
+          </DesktopWindow>
+        )}
+
+        {openWindows.includes('jar_toys') && (
+          <DesktopWindow 
+            key="jar_toys"
+            id="jar_toys" 
+            title="JAR_TOYS // HYDRODYNAMIC SLOSH • DIELECTRIC LABYRINTH • NODAL THEREMIN • CYMATICS" 
+            icon={<Sparkles size={16} className="text-amber-400 animate-pulse" />}
+            onClose={() => closeWindow('jar_toys')}
+            onFocus={() => setActiveWindow('jar_toys')}
+            isActive={activeWindow === 'jar_toys'}
+            initialPos={{ x: 150, y: 55 }}
+            width="w-[1020px] max-w-[98vw]"
+            height="h-[730px] max-h-[94vh]"
+          >
+            <JarToysPlaygroundMemo
+              stats={stats}
+              jarHeading={stats.jarHeading ?? 0}
+              isMotionSensed={Boolean(stats.jarMotion)}
+              motionIntensity={stats.jarMotionIntensity ?? 0}
+              onRotateJar={(angle) => {
+                socketRef.current?.emit('hardware:jar_rotation', {
+                  jarHeading: angle,
+                  coilHeading: 0,
+                  source: 'toy_dial'
+                });
+              }}
+              socket={socketRef.current}
             />
           </DesktopWindow>
         )}
@@ -1962,18 +2038,8 @@ export default function App() {
               carrierBias={carrierBias}
               onLog={addLog}
               onTuneBias={handleCarrierBiasChange}
-              onOpenAttestation={() => {
-                if (!openWindows.includes('node_mesh')) {
-                  setOpenWindows(prev => [...prev, 'node_mesh']);
-                }
-                setActiveWindow('node_mesh');
-              }}
-              onOpenQiskitLab={() => {
-                if (!openWindows.includes('qiskit_lab')) {
-                  setOpenWindows(prev => [...prev, 'qiskit_lab']);
-                }
-                setActiveWindow('qiskit_lab');
-              }}
+              onOpenAttestation={handleOpenNodeMesh}
+              onOpenQiskitLab={handleOpenQiskitLab}
             />
           </DesktopWindow>
         )}
@@ -1998,12 +2064,7 @@ export default function App() {
               initialTab={qiskitInitialTab}
               closedQuantumFeedback={quantumFeedback.enabled}
               onLog={addLog}
-              onOpenPhaseLab={() => {
-                if (!openWindows.includes('phase_lab')) {
-                  setOpenWindows(prev => [...prev, 'phase_lab']);
-                }
-                setActiveWindow('phase_lab');
-              }}
+              onOpenPhaseLab={handleOpenPhaseLab}
               onWritebackToJar={(fb) => {
                 setQuantumFeedback({
                   enabled: true,
@@ -2142,6 +2203,23 @@ export default function App() {
             <span>JAR CHAMBER</span>
           </button>
 
+          {/* Primary Suite 2: Interactive Jar Toys Playground */}
+          <button 
+            onClick={() => toggleWindow('jar_toys')}
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-all text-[8px] tracking-wide cursor-pointer font-bold border shrink-0 ${
+              openWindows.includes('jar_toys')
+                ? 'bg-amber-500/25 text-amber-300 border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.35)]'
+                : 'bg-black/60 text-zinc-400 hover:text-white border-white/10'
+            }`}
+            title="Open Interactive Jar Toys: Hydrodynamic Slosh Tank, Marble Labyrinth, Nodal Theremin Synth, Cymatics Table"
+          >
+            <Sparkles size={9} className={`text-amber-400 ${stats.jarMotion ? 'animate-bounce' : ''}`} />
+            <span>JAR TOYS</span>
+            {stats.jarMotion && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping ml-0.5" />
+            )}
+          </button>
+
           {/* Primary Suite 2: Ambient Signal Ear */}
           <button 
             onClick={() => toggleWindow('ambient_mesh')}
@@ -2208,6 +2286,13 @@ export default function App() {
                 className="absolute top-7 left-0 w-52 bg-[#0c120f]/95 backdrop-blur-xl border border-white/15 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 z-[250] text-[8.5px]"
                 onMouseLeave={() => setShowMoreLabs(false)}
               >
+                <button
+                  onClick={() => { toggleWindow('jar_toys'); setShowMoreLabs(false); }}
+                  className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-amber-300 cursor-pointer"
+                >
+                  <Sparkles size={11} className="text-amber-400" />
+                  <span>Jar Toys &amp; Sound Lab</span>
+                </button>
                 <button
                   onClick={() => { toggleWindow('node_mesh'); setShowMoreLabs(false); }}
                   className="flex items-center gap-2 p-1.5 rounded hover:bg-white/10 text-left text-zinc-300 hover:text-cyan-300 cursor-pointer"

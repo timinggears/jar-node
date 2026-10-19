@@ -622,9 +622,15 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
     });
   }
 
-  // Fallback periodic flush
+  // Fallback periodic flush & motion decay
   const telemetryEmitInterval = setInterval(() => {
     emitPendingTelemetry();
+    const now = Date.now();
+    if (systemState.jarMotionActive && now - systemState.lastJarMotionTime > 1200) {
+      systemState.jarMotionActive = false;
+      systemState.jarMotionIntensity = 0.0;
+      io.emit('hardware:jar_motion', { intensity: 0, motionActive: false, source: 'server_decay' });
+    }
   }, MIN_SEND_INTERVAL);
 
   // Autonomous Quantum Phase-Locked Loop (Q-PLL) PID Controller

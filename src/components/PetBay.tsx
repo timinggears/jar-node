@@ -10,11 +10,19 @@ interface PetBayProps {
   miningState: 'idle' | 'mining' | 'success' | 'error';
   isOverdrive: boolean;
   bias: number;
+  jarMotion?: boolean;
+  jarHeading?: number;
 }
 
-export default function PetBay({ miningState, isOverdrive, bias }: PetBayProps) {
+export default function PetBay({ miningState, isOverdrive, bias, jarMotion, jarHeading }: PetBayProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [currentThought, setCurrentThought] = useState("Sovereign core idle. Substrate nominal.");
+
+  useEffect(() => {
+    if (jarMotion) {
+      setCurrentThought(`⚡ JAR MOTION DETECTED! Azimuth ${jarHeading ?? 0}° • Substrate fluid excited!`);
+    }
+  }, [jarMotion, jarHeading]);
 
   useEffect(() => {
     const handleLog = (e: any) => {
