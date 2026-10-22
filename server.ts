@@ -1051,6 +1051,24 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
       }
     });
 
+    socket.on('hardware:stick', () => {
+      io.emit('hardware:command', 'STICK');
+      if (hardwarePort && hardwarePort.isOpen) {
+        hardwarePort.write('STICK\n');
+      }
+      io.emit('hardware:stick_status', { isStuck: true });
+      io.emit('log', 'STICK: State frozen on single coil.');
+    });
+
+    socket.on('hardware:release', () => {
+      io.emit('hardware:command', 'RELEASE');
+      if (hardwarePort && hardwarePort.isOpen) {
+        hardwarePort.write('RELEASE\n');
+      }
+      io.emit('hardware:stick_status', { isStuck: false });
+      io.emit('log', 'RELEASE: Dual/normal modulation resumed on single coil.');
+    });
+
     socket.on('hardware:jar_rotation', (data: { jarHeading?: number, coilHeading?: number, isCoupled?: boolean, source?: string }) => {
       const heading = typeof data?.jarHeading === 'number' ? ((Math.round(data.jarHeading) % 360) + 360) % 360 : 0;
       systemState.jarHeading = heading;
@@ -1314,6 +1332,12 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
           if (line.startsWith('!S|')) {
             const normalized = normalizeTelemetryLine(line);
             queueTelemetryEmission(normalized);
+          } else if (line.startsWith('OK:STICK_ACTIVE')) {
+            io.emit('hardware:stick_status', { isStuck: true });
+            io.emit('log', 'PICO_ACK: STICK_ACTIVE - Coil frequency & duty cycle frozen in place.');
+          } else if (line.startsWith('OK:RELEASED')) {
+            io.emit('hardware:stick_status', { isStuck: false });
+            io.emit('log', 'PICO_ACK: RELEASED - Coil dynamic modulation resumed.');
           } else if (line.startsWith('!ORI|') || line.startsWith('JAR_ROT:') || line.startsWith('JAR_AZIMUTH:')) {
             let jar = 0;
             let coil = 0;
@@ -1600,11 +1624,12 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
           "--http-enabled",
           "--http-port", "6000",
           "--no-hugepages",
-          "--randomx-mode", "light"
+          "--randomx-mode", "light",
+          "-t", "2"
         ];
       }
 
-      io.emit('log', `SYSTEM: Spawning ${isMock ? 'Mock' : 'Real'} XMRig process [${xmrigPath}]...`);
+      io.emit('log', `SYSTEM: Spawning Real XMRig binary [${xmrigPath}] into pool [${POOL_URL}]...`);
       
       xmrigProcess = spawn(xmrigPath, args);
 
@@ -1623,18 +1648,30 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
           const trimLine = rawLine.trim();
           if (!trimLine) continue;
           
-          // Stream raw outputs to UI log pane
-          io.emit('log', `MINER: ${trimLine}`);
+          // Strip ANSI color codes for clean logging and parsing
+          const cleanLine = trimLine.replace(/\x1b\[[0-9;]*m/g, '').trim();
+          if (!cleanLine) continue;
 
-          if (trimLine.toLowerCase().includes('speed')) {
-            // Speed can be logged with window durations like "speed 10s/60s/15m  125.40"
-            // Strip the window duration to reliably extract the actual numerical speed
-            const speedLine = trimLine.replace(/speed\s+\d+[smh]\/\d+[smh]\/\d+[smh]/i, 'speed');
+          // Stream clean outputs to UI log pane
+          io.emit('log', `MINER: ${cleanLine}`);
+
+          // Detect hashrate speed reports
+          if (cleanLine.toLowerCase().includes('speed')) {
+            const speedLine = cleanLine.replace(/speed\s+\d+[smh]\/\d+[smh]\/\d+[smh]/i, 'speed');
             const match = speedLine.match(/speed\s+(\d+\.?\d*)/i);
             if (match) {
               const h = parseFloat(match[1]);
               systemState.latestHashRate = h;
+              io.emit('mining_status', { type: 'telemetry', message: cleanLine, data: { hashrate: h } });
+              if (hardwarePort && hardwarePort.isOpen) {
+                hardwarePort.write(`HRATE:${h.toFixed(2)}\n`);
+              }
             }
+          } else if (cleanLine.toLowerCase().includes('accepted')) {
+            // Real share accepted by the pool!
+            io.emit('mining_status', { type: 'success', message: cleanLine });
+          } else if (cleanLine.toLowerCase().includes('new job')) {
+            io.emit('mining_status', { type: 'info', message: cleanLine });
           }
         }
       });

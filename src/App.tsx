@@ -223,6 +223,7 @@ export default function App() {
   }, []);
 
   const [quantumShift, setQuantumShift] = useState(50);
+  const [isStuck, setIsStuck] = useState(false);
 
   const statsRef = useRef(stats);
   statsRef.current = stats;
@@ -254,6 +255,22 @@ export default function App() {
     };
     setLogs(prev => [...prev, newLog].slice(-100));
   }, []);
+
+  const handleStick = useCallback(() => {
+    setIsStuck(true);
+    if (socketRef.current) {
+      socketRef.current.emit('hardware:stick');
+    }
+    addLog('[COIL_STICK]: Single-coil state frozen in place (Frequency & Duty cycle locked).', 'warning');
+  }, [addLog]);
+
+  const handleRelease = useCallback(() => {
+    setIsStuck(false);
+    if (socketRef.current) {
+      socketRef.current.emit('hardware:release');
+    }
+    addLog('[COIL_RELEASE]: Single-coil dynamic modulation resumed.', 'success');
+  }, [addLog]);
 
   // --- REMOTE CONSOLE PERFORMANCE & LOW-LAG MODE ---
   const [perfMode, setPerfMode] = useState<'low-lag' | 'balanced' | 'ultra'>(() => {
@@ -1064,7 +1081,14 @@ export default function App() {
         setStats(prev => ({ ...prev, phaseModel: d.phaseModel }));
       }
     }).catch(() => {});
+    socket.on('hardware:stick_status', (data: any) => {
+      if (typeof data?.isStuck === 'boolean') {
+        setIsStuck(data.isStuck);
+      }
+    });
+
     const onJarRotation = (data: any) => {
+      if (data?.source === 'data_solver') return;
       if (typeof data?.jarHeading === 'number') {
         const val = ((Math.round(data.jarHeading) % 360) + 360) % 360;
         lastJarMotionTimestampRef.current = Date.now();
@@ -1083,6 +1107,7 @@ export default function App() {
     };
 
     const onJarMotion = (data: any) => {
+      if (data?.source === 'data_solver') return;
       const isMotion = data?.motionActive !== false && (Number(data?.intensity) || 0) > 0.05;
       const intensity = Number(data?.intensity) || 0;
       if (isMotion) {
@@ -1396,6 +1421,12 @@ export default function App() {
         setIsMining(false);
         setMiningState('idle');
         addLog('SUBSTRATE_MINER: Deactivated.', 'warning');
+        break;
+      case 'stick':
+        handleStick();
+        break;
+      case 'release':
+        handleRelease();
         break;
       default:
         addLog(`ERROR: Invalid protocol: ${command}`, 'error');
@@ -1983,6 +2014,9 @@ export default function App() {
               stats={stats}
               carrierBias={carrierBias}
               socket={socketRef.current}
+              isStuck={isStuck}
+              onStick={handleStick}
+              onRelease={handleRelease}
               onOpenAmbientEar={handleOpenAmbientEar}
               onOpenPhaseLab={handleOpenPhaseLab}
               onOpenJarToys={handleOpenJarToys}

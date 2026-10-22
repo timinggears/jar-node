@@ -32,6 +32,11 @@ freq_b = 32000
 use_dual = False
 dual_switch_time = 0.004   # 4 ms each side
 
+# Stick state
+is_stuck = False
+stuck_freq = 35000
+stuck_duty = 32768
+
 # Neural Metrics (JAR-native processing)
 coherence = 0.98
 intelligence_depth = 0.0
@@ -115,6 +120,14 @@ while True:
                         c_rot = float(parts[1].split(":")[1]) if len(parts) > 1 else j_rot
                     sys.stdout.write("!ORI|{:.1f}|{:.1f}\r\n".format(j_rot, c_rot))
                 except: pass
+            elif buffer == "STICK":
+                is_stuck = True
+                stuck_freq = coil.frequency
+                stuck_duty = coil.duty_cycle
+                print("OK:STICK_ACTIVE")
+            elif buffer == "RELEASE":
+                is_stuck = False
+                print("OK:RELEASED")
             elif buffer == "SAVE":
                 save_state()
             elif buffer == "LOAD":
@@ -168,15 +181,20 @@ while True:
     duty_cycle = max(16384, min(49152, duty_cycle))
     
     try:
-        if use_dual:
-            # Alternate rapidly between the two dual-tone frequencies
-            if int(time.monotonic() / dual_switch_time) % 2 == 0:
-                coil.frequency = min(1000000, max(1000, freq_a))
-            else:
-                coil.frequency = min(1000000, max(1000, freq_b))
+        if is_stuck:
+            # Freeze current state
+            coil.frequency = stuck_freq
+            coil.duty_cycle = stuck_duty
         else:
-            coil.frequency = drive_freq
-        coil.duty_cycle = duty_cycle
+            if use_dual:
+                # Existing dual-tone alternation (unchanged)
+                if int(time.monotonic() / dual_switch_time) % 2 == 0:
+                    coil.frequency = min(1000000, max(1000, freq_a))
+                else:
+                    coil.frequency = min(1000000, max(1000, freq_b))
+            else:
+                coil.frequency = drive_freq
+            coil.duty_cycle = duty_cycle
     except Exception:
         pass
     

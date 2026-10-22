@@ -47,6 +47,9 @@ interface PhysicalJarViewerProps {
   stats: SystemStats;
   carrierBias?: number;
   socket?: any;
+  isStuck?: boolean;
+  onStick?: () => void;
+  onRelease?: () => void;
   onOpenAmbientEar?: () => void;
   onOpenPhaseLab?: () => void;
   onOpenJarToys?: () => void;
@@ -56,6 +59,9 @@ export default function PhysicalJarViewer({
   stats,
   carrierBias = 50,
   socket,
+  isStuck = false,
+  onStick,
+  onRelease,
   onOpenAmbientEar,
   onOpenPhaseLab,
   onOpenJarToys
@@ -125,6 +131,43 @@ export default function PhysicalJarViewer({
   const lastEmittedHeadingRef = useRef<number>(-999);
   const lastSocketEmitTimeRef = useRef<number>(0);
   const lastSolverRunTimeRef = useRef<number>(0);
+  const lastMetricsUpdateTimeRef = useRef<number>(0);
+
+  const [isStuckLocal, setIsStuckLocal] = useState<boolean>(isStuck);
+  useEffect(() => {
+    setIsStuckLocal(isStuck);
+  }, [isStuck]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onStickStatus = (data: { isStuck: boolean }) => {
+      if (typeof data?.isStuck === 'boolean') {
+        setIsStuckLocal(data.isStuck);
+      }
+    };
+    socket.on('hardware:stick_status', onStickStatus);
+    return () => {
+      socket.off('hardware:stick_status', onStickStatus);
+    };
+  }, [socket]);
+
+  const handleStick = () => {
+    setIsStuckLocal(true);
+    if (onStick) {
+      onStick();
+    } else if (socket) {
+      socket.emit('hardware:stick');
+    }
+  };
+
+  const handleRelease = () => {
+    setIsStuckLocal(false);
+    if (onRelease) {
+      onRelease();
+    } else if (socket) {
+      socket.emit('hardware:release');
+    }
+  };
 
   // High-resolution images generated directly from real telemetry (Square glass jar apparatus)
   // 1. Zoomed out wide-angle tomographic scan showing complete SQUARE edge of the glass jar & bench:
@@ -559,23 +602,28 @@ export default function PhysicalJarViewer({
     const newT4 = Math.round(theta4Deg);
     const newRaw = Math.round(rawDataAngle);
 
-    setDataSolverMetrics(prev => {
-      if (
-        Math.abs(prev.thetaPca - newPca) < 2 &&
-        Math.abs(prev.theta4 - newT4) < 2 &&
-        Math.abs(prev.rawAngle - newRaw) < 2 &&
-        prev.active === true
-      ) {
-        return prev;
-      }
-      return {
-        thetaPca: newPca,
-        theta4: newT4,
-        thetaInst: Math.round(motionEnvelopeRef.current * 100),
-        rawAngle: newRaw,
-        active: true
-      };
-    });
+    const newInst = Math.round(motionEnvelopeRef.current * 100);
+    if (now - lastMetricsUpdateTimeRef.current > 250) {
+      lastMetricsUpdateTimeRef.current = now;
+      setDataSolverMetrics(prev => {
+        if (
+          Math.abs(prev.thetaPca - newPca) < 2 &&
+          Math.abs(prev.theta4 - newT4) < 2 &&
+          Math.abs(prev.rawAngle - newRaw) < 2 &&
+          Math.abs(prev.thetaInst - newInst) < 4 &&
+          prev.active === true
+        ) {
+          return prev;
+        }
+        return {
+          thetaPca: newPca,
+          theta4: newT4,
+          thetaInst: newInst,
+          rawAngle: newRaw,
+          active: true
+        };
+      });
+    }
 
     if (isCurrentlyDisturbed) {
       lastMotionTimeRef.current = now;
@@ -620,8 +668,8 @@ export default function PhysicalJarViewer({
       if (now - lastMotionTimeRef.current > 1100) {
         setIsMotionSensed(prev => (prev ? false : prev));
         setMotionIntensity(prev => {
-          if (prev <= 0.01) return 0;
-          return prev * 0.85;
+          if (prev <= 0.02) return 0;
+          return prev * 0.85 <= 0.02 ? 0 : prev * 0.85;
         });
       }
     }
@@ -1995,6 +2043,35 @@ export default function PhysicalJarViewer({
           >
             HUD {showHudOverlays ? 'ON' : 'OFF'}
           </button>
+
+          {/* STICK / RELEASE State Lock Control */}
+          <div className="flex items-center gap-1.5 bg-black/90 px-2 py-1 rounded-lg border border-amber-500/40 text-[9px]">
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${isStuckLocal ? 'bg-amber-400 shadow-[0_0_8px_#f59e0b] animate-pulse' : 'bg-emerald-400 shadow-[0_0_8px_#10b981]'}`} />
+              <span className={`font-mono font-bold text-[8.5px] uppercase ${isStuckLocal ? 'text-amber-300' : 'text-emerald-400'}`}>
+                {isStuckLocal ? 'STICK ACTIVE (FROZEN)' : 'COIL DYNAMIC'}
+              </span>
+            </div>
+            {isStuckLocal ? (
+              <button
+                onClick={handleRelease}
+                className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-[8.5px] flex items-center gap-1 transition-all cursor-pointer shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                title="Release frozen state and resume dynamic alternation / Super Spin"
+              >
+                <Unlock size={11} />
+                <span>RELEASE</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleStick}
+                className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-amber-950/80 border border-amber-500/50 hover:border-amber-400 text-amber-200 font-bold uppercase text-[8.5px] flex items-center gap-1 transition-all cursor-pointer"
+                title="Freeze current frequency & duty cycle into frozen state (STICK)"
+              >
+                <Lock size={11} />
+                <span>STICK</span>
+              </button>
+            )}
+          </div>
 
           <button
             onClick={handleExportImage}

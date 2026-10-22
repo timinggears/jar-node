@@ -121,9 +121,12 @@ while True:
 - `BIAS:X.X` - Sets fundamental resonance bias (0-100).
 - `OVERDRIVE:X` - Toggles tachyonic overdrive (0 or 1).
 - `HRATE:X.X` - Streams real-time hashrate for resonance modulation.
+- `STICK` - Freezes current frequency and duty cycle on the single coil (`OK:STICK_ACTIVE`).
+- `RELEASE` - Unfreezes the coil and resumes dynamic alternation / Super Spin (`OK:RELEASED`).
 
 ### Downlink (Pi -> Server)
 - Header: `!S` (Sovereign Signal)
 - Packet: `!S|SEED|JITTER|V_NODAL|PARITY|VIRT_FREQ|HASHRATE`
+- Status ACK: `OK:STICK_ACTIVE` / `OK:RELEASED`
 - Frequency: Reported in GHz (scale: 1 unit = 1 GHz).
 - Hashrate: KH/s throughput from substrate extraction.
