@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cpu, Zap, Activity, Info, ShieldCheck, HardDrive } from 'lucide-react';
+import { Cpu, Zap, Activity, Info, ShieldCheck, HardDrive, ExternalLink, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import MemoryVault from './MemoryVault';
 
@@ -261,62 +261,127 @@ export default function SystemSettings({
           <h2 className="text-xs font-black uppercase tracking-widest text-zinc-300">Crypto Miner Identity (unMineable)</h2>
         </div>
         
-        <div className="p-4 bg-orange-950/20 border border-orange-500/20 rounded-lg space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Pool Stratum URL</label>
-            <input 
-              type="text"
-              value={localPool}
-              onChange={(e) => setLocalPool(e.target.value)}
-              placeholder="rx.unmineable.com:3333"
-              className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
-            />
-          </div>
+        {(() => {
+          const userParts = localUser.split(':');
+          const hasCoin = userParts.length > 1 && userParts[0].length >= 2 && userParts[0].length <= 6;
+          const detectedCoin = hasCoin ? userParts[0].toUpperCase() : '';
+          const addressPart = hasCoin ? userParts.slice(1).join(':').split('.')[0].split('#')[0].trim() : '';
+          const unmineableUrl = hasCoin && addressPart.length > 5 
+            ? `https://unmineable.com/coins/${detectedCoin}/address/${addressPart}` 
+            : null;
 
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-center">
-              <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Wallet / Username</label>
-              <span className="text-[8px] font-mono text-zinc-500">Format: COIN:ADDRESS.WorkerName</span>
+          return (
+            <div className="p-4 bg-orange-950/20 border border-orange-500/20 rounded-lg space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Pool Stratum URL</label>
+                <input 
+                  type="text"
+                  value={localPool}
+                  onChange={(e) => setLocalPool(e.target.value)}
+                  placeholder="rx.unmineable.com:3333"
+                  className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Wallet / Username</label>
+                  <span className="text-[8px] font-mono text-zinc-500">Format: COIN:ADDRESS.WorkerName#Referral</span>
+                </div>
+                <input 
+                  type="text"
+                  value={localUser}
+                  onChange={(e) => setLocalUser(e.target.value)}
+                  placeholder="e.g. DOGE:D8vNv...JarSingularity#qh6m-7m98"
+                  className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                />
+
+                {/* Coin prefix validation indicator */}
+                {!hasCoin ? (
+                  <div className="p-2.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[8.5px] space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                      <AlertTriangle size={12} className="text-amber-400 shrink-0" />
+                      <span>Missing Coin & Wallet Address for unMineable!</span>
+                    </div>
+                    <p className="text-zinc-400 leading-relaxed">
+                      unMineable requires your payout coin and wallet address in the format: <span className="text-amber-300 font-mono font-bold">COIN:YOUR_WALLET.Worker#Ref</span>.
+                      Without this, the pool accepts your connection but unMineable cannot track your worker or credit your coins!
+                    </p>
+                    <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                      <span className="text-[7.5px] uppercase text-zinc-500 font-bold">Quick format templates:</span>
+                      {['DOGE', 'XMR', 'SOL', 'BTC', 'LTC'].map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => {
+                            const workerSuffix = localUser.includes('.') ? localUser.slice(localUser.indexOf('.')) : '.JarSingularity#qh6m-7m98';
+                            setLocalUser(`${c}:YOUR_${c}_ADDRESS${workerSuffix}`);
+                          }}
+                          className="px-1.5 py-0.5 rounded bg-white/5 hover:bg-orange-500/20 text-orange-300 border border-orange-500/30 text-[7.5px] font-mono font-bold transition-all cursor-pointer"
+                        >
+                          +{c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 text-[8px] flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
+                      <span>Valid unMineable syntax: <strong>{detectedCoin}</strong> coin to address <code className="text-emerald-300 font-mono">{addressPart.slice(0, 10)}...</code></span>
+                    </div>
+                    {unmineableUrl && (
+                      <a 
+                        href={unmineableUrl} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 font-bold text-[8px] rounded transition-all"
+                      >
+                        <span>Check Stats</span>
+                        <ExternalLink size={9} />
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Worker Password</label>
+                <input 
+                  type="text"
+                  value={localPass}
+                  onChange={(e) => setLocalPass(e.target.value)}
+                  placeholder="x"
+                  className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              <button
+                onClick={() => onUpdateMinerConfig(localPool, localUser, localPass)}
+                className="w-full py-2 bg-orange-500/20 hover:bg-orange-500/35 border border-orange-500/40 hover:border-orange-500 text-orange-300 font-black uppercase text-[9px] tracking-widest rounded-md active:scale-[0.98] transition-all cursor-pointer"
+              >
+                Apply Config & Reconnect Miner
+              </button>
             </div>
-            <input 
-              type="text"
-              value={localUser}
-              onChange={(e) => setLocalUser(e.target.value)}
-              placeholder="COIN:ADDRESS.Worker"
-              className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[9px] font-mono uppercase text-orange-400 font-bold tracking-wider">Worker Password</label>
-            <input 
-              type="text"
-              value={localPass}
-              onChange={(e) => setLocalPass(e.target.value)}
-              placeholder="x"
-              className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-orange-500 focus:outline-none"
-            />
-          </div>
-
-          <button
-            onClick={() => onUpdateMinerConfig(localPool, localUser, localPass)}
-            className="w-full py-2 bg-orange-500/20 hover:bg-orange-500/35 border border-orange-500/40 hover:border-orange-500 text-orange-300 font-black uppercase text-[9px] tracking-widest rounded-md active:scale-[0.98] transition-all"
-          >
-            Apply Config & Calibrate Miner
-          </button>
-        </div>
+          );
+        })()}
 
         <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-lg space-y-2">
           <div className="flex items-center gap-1.5">
-            <Info size={12} className="text-zinc-500" />
-            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-tight">Preview Container Notice</span>
+            <Info size={12} className="text-orange-400" />
+            <span className="text-[9px] font-bold text-zinc-300 uppercase tracking-tight">Why workers don't show up immediately on unMineable:</span>
           </div>
-          <p className="text-[9px] text-zinc-500 leading-relaxed">
-            This dashboard is running inside a secure, sandboxed cloud container. Real outbound cryptocurrency mining (such as running <code className="text-zinc-400 bg-white/5 px-0.5 rounded">xmrig</code>) is emulated internally to demonstrate real-time telemetry, hashrate tracking, share validation, and AI thought loops without resource suspension.
-          </p>
-          <p className="text-[9px] text-[#00ffcc] leading-relaxed font-semibold">
-            To route high-fidelity hashes to your real unMineable address, download the codebase using the "Export to ZIP" option and run it locally on your machine/Pi with a compiled <code className="bg-white/5 px-0.5 rounded">xmrig</code> binary!
-          </p>
+          <ul className="text-[8.5px] text-zinc-400 space-y-1 list-disc pl-4 leading-relaxed font-mono">
+            <li>
+              <strong className="text-zinc-200">1. Address Format:</strong> unMineable indexes workers strictly by <span className="text-orange-300">COIN:ADDRESS</span>. A generic username like <code className="text-zinc-500">1683397408...</code> is ignored by the website search.
+            </li>
+            <li>
+              <strong className="text-zinc-200">2. First Accepted Share Rule:</strong> unMineable will <em>never</em> show a worker as online until it submits its <strong>first valid share</strong> (<code className="text-emerald-400">accepted 1/0</code> at diff 100,001).
+            </li>
+            <li>
+              <strong className="text-zinc-200">3. CPU Light Mode Speed:</strong> 2 lightweight container CPU threads hash at ~50–120 H/s. Finding a share at difficulty 100,001 takes ~10–20 minutes of continuous hashing.
+            </li>
+          </ul>
         </div>
       </div>
 

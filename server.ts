@@ -1670,6 +1670,9 @@ Use UPPERCASE exclusively. Do not comment. Just output the cryptic phrase. Examp
           } else if (cleanLine.toLowerCase().includes('accepted')) {
             // Real share accepted by the pool!
             io.emit('mining_status', { type: 'success', message: cleanLine });
+          } else if (cleanLine.toLowerCase().includes('rejected')) {
+            // Share rejected by pool (e.g. bad address or stale share)
+            io.emit('mining_status', { type: 'error', message: cleanLine });
           } else if (cleanLine.toLowerCase().includes('new job')) {
             io.emit('mining_status', { type: 'info', message: cleanLine });
           }
